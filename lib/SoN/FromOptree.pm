@@ -19484,7 +19484,11 @@ class SoN::FromOptree 0.01 {
           . " a list is not yet lowered -- its value merges only the last"
           . " element\n"
             if defined $region->eval_want && _leaves_a_list(_last_kid($op->other));
-        if (@ev_exits || $body_sim->stack_depth > $sim->stack_depth) {
+        # (IN LIST OR THE CALLER'S CONTEXT a die gives the empty list, not
+        # undef: the value is a Phi at the join, even of one way in, where a
+        # consumer reads the context the Region names)
+        my $listy = ( ( $op->flags & 3 ) == 3 || ( $op->flags & 3 ) == 0 ) && $catch;
+        if (@ev_exits || $body_sim->stack_depth > $sim->stack_depth || $listy) {
             # ONE VALUE PER WAY IN: the body's last (undef if it left none),
             # then each return's, then the catch's (undef).
             my @vals = ( ( $body_in ? ( $body_sim->stack_depth > $sim->stack_depth ? $body_sim->pop_node : $undef ) : () ),
@@ -19512,8 +19516,10 @@ class SoN::FromOptree 0.01 {
                 $stamp = SoN::IR::Stamp::join($stamp, $_->stamp) for @vals;
             }
 
-            # (one way in: its value, no Phi)
-            $sim->push_node( @vals == 1 ? $vals[0] : $factory->make_unique('Phi',
+            # (a Phi even of one way in: the eval's value is where its join
+            # is -- a consumer reads the context the Region names there, and
+            # the deparser spells the eval's value by it)
+            $sim->push_node( $factory->make_unique('Phi',
                 inputs => [@vals], region => $region,
                 (defined $stamp ? (stamp => $stamp) : ())));
         }

@@ -31,10 +31,12 @@ sub translate ($src) {
 # and/or merge sites: "a merge Phi over a loop-carried accumulator becomes that
 # slot's back-edge, and _patch_loop_phi rejects an UNSTAMPED back-edge").
 subtest 'an eval Phi is stamped from its arms' => sub {
-    my ($g, $err) = translate('my $r = eval { 42 }; print "$r\n";');
+    # (a body that may die: one that cannot has one way into its join, the
+    # body's end, and no Phi -- wire v2's `eval` profile)
+    my ($g, $err) = translate('my $r = eval { die "x\n" if @ARGV; 42 }; print "$r\n";');
     ok defined $g, 'it translates' or diag($err), return;
 
-    my ($phi) = grep { $_->{op} eq 'Phi' } $g->{nodes}->@*;
+    my ($phi) = grep { $_->{op} eq 'Phi' && !( $_->{fields} // {} )->{memory} } $g->{nodes}->@*;
     ok defined $phi, 'the eval built a Phi' or return;
 
     # join(Int, Undef) is Scalar: the value is an Int when the body returned
