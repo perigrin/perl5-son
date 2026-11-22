@@ -10,7 +10,6 @@ use File::Path qw(make_path);
 use File::Basename qw(basename);
 use Getopt::Long;
 use PvmCorpus qw(read_cases);
-use WireRatchet qw(graph_line);
 use SoN::Verify;
 
 # usage: wire-verify.pl [--corpus] [--probes] [--chalk DIR] [--list] [--tsv]
@@ -21,13 +20,11 @@ use SoN::Verify;
 #   --list        every violation, after the counts.
 #   --tsv         only `source<TAB>rule<TAB>count` lines -- the format of
 #                 t/data/wire-verify-baseline.tsv, which t/wire-verify-ratchet.t
-#                 holds these numbers to. Rules are sorted; `#wires` and
-#                 `#graphs` are the denominators, `#dropped` the cases with no
-#                 wire, `allowed:*` the floating Assigns that are records or
-#                 parameter binds. chalk's lib also gets one line per graph,
-#                 `source<TAB>@GRAPH<TAB>rule=n,...` (tools/lib/WireRatchet.pm),
-#                 the most any one wire counted for it; a file's own graph,
-#                 main::__PROGRAM__, is named by its wire (`Mod::Name:main::...`).
+#                 holds `#wires` and `#graphs` to. Rules are sorted; `#wires`
+#                 and `#graphs` are the denominators, `#dropped` the cases with
+#                 no wire, `allowed:*` the floating Assigns that are records or
+#                 parameter binds. Then one line per violation,
+#                 `source<TAB>!<TAB>CASE:GRAPH#NODE<TAB>OP<TAB>RULE<TAB>DETAIL`.
 #   A DROPPED WIRE (the compile timed out, was killed, or wrote no JSON) is named
 #   on stderr, counted as #dropped, and not cached: the next run compiles it.
 #   --wires DIR   keep each wire as DIR/SOURCE/NAME.json and reuse one that is
@@ -91,13 +88,12 @@ sub compile_ahead ( $source, @cases ) {
     waitpid $_, 0 for keys %kids;
 }
 
-my ( %count, @violations, @sources, %graph );
+my ( %count, @violations, @sources );
 
 sub run ( $source, @cases ) {    # each case: [name, file, cwd]
     push @sources, $source;
     $count{$source}{$_} = 0 for '#cases', '#wires', '#graphs', '#dropped';
     compile_ahead( $source, @cases ) if $jobs > 1;
-    my $per_graph = $source =~ /^chalk/;
     for my $c (@cases) {
         $count{$source}{'#cases'}++;
         my $w = wire( $source, @$c );
@@ -110,18 +106,9 @@ sub run ( $source, @cases ) {    # each case: [name, file, cwd]
         my $r = SoN::Verify::verify($w);
         $count{$source}{'#graphs'} += $r->{graphs};
         $count{$source}{"allowed:$_"} += $r->{allowed}{$_} for keys $r->{allowed}->%*;
-        my $key = sub ($g) { $g eq 'main::__PROGRAM__' ? "$c->[0]:$g" : $g };
-        my %here = map { $key->($_) => {} } keys( ( $w->{methods} // {} )->%* );
         for my $v ( $r->{violations}->@* ) {
             $count{$source}{ $v->{rule} }++;
-            $here{ $key->( $v->{graph} ) }{ $v->{rule} }++;
             push @violations, [ $source, "$c->[0]:$v->{graph}#$v->{node}", @$v{qw(op rule detail)} ];
-        }
-        next unless $per_graph;
-        # A graph is in every wire that loads its module: hold the most one wire counts.
-        for my $g ( keys %here ) {
-            my $h = $graph{$source}{$g} //= {};
-            $h->{$_} = $here{$g}{$_} for grep { $here{$g}{$_} > ( $h->{$_} // 0 ) } keys $here{$g}->%*;
         }
     }
 }
@@ -154,7 +141,7 @@ my %rules = map { $_ => 1 } map { keys %$_ } values %count;
 my @rules = sort keys %rules;
 if ($tsv) {
     for my $s (@sources) { say join "\t", $s, $_, $count{$s}{$_} // 0 for @rules }
-    for my $s (@sources) { say graph_line( $s, $_, $graph{$s}{$_} ) for sort keys( ( $graph{$s} // {} )->%* ) }
+    say join "\t", $_->[0], '!', $_->@[ 1 .. 4 ] for @violations;
     exit 0;
 }
 printf "%-44s" . ( ' %8s' x @sources ) . "\n", 'rule', @sources;

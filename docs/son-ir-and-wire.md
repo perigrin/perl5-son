@@ -25,9 +25,9 @@ Repos:
   document per compiled file, written to stdout by
   `perl -MO=SoN,json file.pl`. The top-level keys are:
   - `version`: 2 (wire v2, `docs/plans/2026-11-20-wire-v2.md`); chalk's loader
-    refuses any other by name;
-  - `profile`: the parts of v2 the wire obeys, `["mem", "eval"]` (the
-    migration's; `loop` follows);
+    refuses any other by name. There is no `profile` (it named the parts of
+    v2 a wire obeyed while the migration ran, and went in stage 10: every
+    part is v2); chalk's loader and `SoN::Verify` refuse a wire that has one;
   - `source`: always null;
   - `methods`: one graph per sub;
   - optionally `classes`, `data_section` and `phase_blocks`;
@@ -37,15 +37,15 @@ Repos:
   id is its index in that array. A node is
   `{id, op, inputs:[idx…], fields?:{…}, stamp?, control_in?, mem_in?, mem_out?, head?}`.
   `inputs` are values; `mem_in` names the memory version a node reads or
-  follows, `mem_out` says it is one. The only forward reference the loader
-  allows is a loop Phi's back edge.
+  follows, `mem_out` says it is one. The only forward references the loader
+  allows are a loop Phi's back input and a Loop's (`inputs[1]`).
 - **A non-perl producer only has to emit this JSON.** Chalk's loader never
   sees perl internals. It does enforce a set of invariants (§3.2):
   ordering, required sigils, op names it knows, stamps that are lattice
-  names, the memory invariant (L1-L6: every memory edge names a version
+  names, the memory invariant (L1-L9: every memory edge names a version
   listed before it, every version reached from a Return or Unwind, every
-  Assign a record or on both chains), and a `main::__PROGRAM__` graph with a
-  Return.
+  Assign a record or on both chains, inputs values only), and a
+  `main::__PROGRAM__` graph with a Return.
 - **Chalk already has an Earley front end** that builds this same IR
   directly (`lib/Chalk/Bootstrap/Earley.pm`,
   `lib/Chalk/Bootstrap/Perl/Actions.pm`). Chalk's Phase 4 brief calls it
@@ -189,21 +189,26 @@ There are no basic blocks. Control is carried by CFG nodes and by a
   > back edges rather than a predecessor list, so absent reads as "not
   > recorded".
 
-- **Loops.**
-  - A Loop's inputs are `[entry_ctrl]`.
-  - `Proj index 0` is the loop body. `Proj index 1` is the exit, which
-    feeds a Region whose `head` is the Loop.
-  - The loop condition is a value node whose `control_in` is the Loop.
-  - Loop Phis are `Phi{region: Loop}` with inputs `[init, backedge]`. The
-    back edge is a forward reference.
+- **Loops** (wire v2 stage 9; the plan's 3.6;
+  docs/memory/a-loop-goes-round-by-an-edge.md).
+  - A Loop's inputs are `[entry, back]`: the control the loop is entered
+    from, and the control a pass ends at (the body's end, the latch Region
+    of the `next`s). A loop no path goes round (a pass that always returns)
+    has one input. A Loop has no `control_in`, and no Proj takes it.
+  - Its test is an `If [C, cond]` on the control the pass has reached -- the
+    Loop, or the last effect the condition pins (`while (my $n = shift
+    @w)`: the shift). The If's `Proj 0` is the body; its `Proj 1` is the way
+    out, into a Region whose `head` is the Loop.
+  - Loop Phis are `Phi{region: Loop}` with one input per input of the Loop:
+    `[init, back]`. The back input, and the Loop's own, are forward
+    references. A Phi whose inputs but itself are all one node is not
+    written (Braun's construction, stage 9b: it is forwarded to its init).
+  - The loop is walked once (stage 9b): no scout, no second walk of a body.
 
-  `docs/plans/2026-09-28-loop-control-is-an-edge.md`:
-
-  > THERE IS NO CONTROL BACK EDGE. `Loop::set_backedge_ctrl` is never
-  > called; the Loop's inputs are `[entry]` and the back edge exists only on
-  > Phis.
-
-  As built: *"`next LABEL` is an edge sim, merged into the named loop's
+  Before stage 9 there was no control back edge
+  (`docs/plans/2026-09-28-loop-control-is-an-edge.md`): the Loop was
+  `[entry]` with a `Proj 0`/`Proj 1` of its own and the condition pinned to
+  it. As built: *"`next LABEL` is an edge sim, merged into the named loop's
   body state at its latch … The merge Region's head is the Loop; that is
   how the renderer tells a latch from an if's merge. No new wire field."*
 
@@ -236,7 +241,7 @@ There are no basic blocks. Control is carried by CFG nodes and by a
   `eval_entry` and the Region itself."* Each die in the body is an Unwind
   with the same `eval_id`. A Call or a may-die Divide/Modulo in the body
   carries `eval_id` too.
-- **The exceptional edge** (`eval` profile, 2026-11-22; the plan's 3.5).
+- **The exceptional edge** (wire v2 stage 8, 2026-11-22; the plan's 3.5).
   Each node in an eval's body that may die -- an Unwind, a sub call, a
   may-fault Divide/Modulo, a read pinned because it may die -- has its way
   out: an `Exc` (a control node, `inputs: [T]`, its value the exception in
@@ -518,8 +523,8 @@ sorts each case into ROUNDTRIP, DIFFERS, LLI_FAIL, GAP, LOAD_FAIL or NOJSON
   wire=1: the wire is version 2 (wire v1 is gone)`). Chalk's loader refuses a
   wire of any other version by name (`GAP: wire version 1 is not one chalk
   reads`), and holds a B::SoN wire to the memory invariant before it makes a
-  graph. `profile` says which parts of v2 the wire obeys (`mem` and `eval` today);
-  the loader refuses a part it does not read yet. Compatibility is still
+  graph. A wire with a `profile` key (the migration's, gone in stage 10) is
+  refused by name (``GAP: wire v2 `profile` [...]: ...``). Compatibility is still
   kept by pinning a chalk commit (`tools/corpus-llvm-roundtrip.pl`,
   `$COMMIT`). Optional fields are emitted only when set. Adding a field is
   the safe direction (an unknown field is ignorable); adding a KIND is not,
@@ -538,7 +543,7 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
     }
-    my $data = { version => 2, profile => ['mem'], source => undef, methods => \%methods };
+    my $data = { version => 2, source => undef, methods => \%methods };
     # The declarative class section (4c): name, parent, fields, method-refs.
     # Chalk's loader replays it through the MOP declare_*/seal API.
     $data->{classes} = _json_booleans($classes) if defined $classes && %$classes;
@@ -562,8 +567,7 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 
 ```
 {
-  "version": 2,                       # checked: chalk reads v2 only
-  "profile": ["mem", "eval"],         # the parts of v2 this wire obeys
+  "version": 2,                       # checked: chalk reads v2 only (and no `profile`)
   "source": null,
   "methods": {                         # graph name -> graph
      "main::__PROGRAM__": GRAPH,       # the file's top level (the entry graph)
@@ -796,8 +800,8 @@ excerpt:
   > copy (the repos are divorced); the gate keeps them honest.
 
   A node's predecessors are its inputs, a Phi's `region`, and `control_in`.
-  A **loop Phi's back edge is left out**, which is why it is the only
-  forward reference.
+  A **loop Phi's back input and a Loop's are left out**, which is why they
+  are the only forward references.
 
   **The two copies have drifted.** This repo's copy expands array-valued
   inputs (Unwind's argument list) and silences recursion warnings; chalk's
@@ -812,8 +816,9 @@ These come from `lib/Chalk/IR/Serialize/JSON.pm` (`_deserialize_graph`,
    `version` must be 2 (a GAP names another); `source` is ignored.
 2. **Nodes are addressed by array position.** `id` must equal the node's
    position.
-3. **No forward references except a loop Phi's back edge** (a `mem_in` too
-   names a node listed before it: since stage 6, when v1's upgrade went):
+3. **No forward references except a loop Phi's back input and a Loop's**
+   (`inputs[1]`, L8; a `mem_in` and a `control_in` too name a node listed
+   before it):
 
    > The one sanctioned forward edge is a loop Phi's backedge (inputs[1]),
    > deferred and patched below. Any OTHER forward index is a producer
@@ -842,16 +847,20 @@ These come from `lib/Chalk/IR/Serialize/JSON.pm` (`_deserialize_graph`,
    - a builtin Call or ArrayLiteral stamped `List` becomes `Array`;
    - Print becomes Boolean.
 7. **Memory is named** (§1.5): `mem_in`, `mem_out`, and `memory: true` on a
-   memory Phi. A B::SoN wire (one with `dowarn`) is held to the memory
-   invariant, `Chalk::IR::Serialize::WireInvariant`: L1 every `mem_in` names
-   a version; L2 a version is on the control chain and follows one; L3 every
-   Return and Unwind names its memory; L4 every version is reached backwards
-   from a Return or Unwind (or a loop with no exit); L5 an Assign is a
-   `record` or has all three edges, as a sub Call does (but an :lvalue call,
-   the place an Assign stores through); L6 a Phi's inputs pair with its
-   Region's ways in (a trap's value Phi keeps one more on a wire without
-   the `eval` profile); L7 (`eval`) every way into a catch Region leads back
-   to an Exc.
+   memory Phi. A B::SoN wire (one with `dowarn`; chalk's own `to_json`
+   graphs thread no memory and are not held) is held to the memory
+   invariant, `Chalk::IR::Serialize::WireInvariant`, every rule on every
+   wire: L1 every `mem_in` names a version; L2 a version is on the control
+   chain and follows one; L3 every Return and Unwind names its memory; L4
+   every version is reached backwards from a Return or Unwind (or a loop
+   with no exit); L5 an Assign is a `record` or has all three edges, as a
+   sub Call does (but an :lvalue call, the place an Assign stores through),
+   and an EntryWrite, CellWrite, Delete, ElemRestore or MakeCell is a
+   version; L6 a Phi's inputs pair with its Region's or Loop's ways in; L7
+   every way into a catch Region leads back to an Exc; L8 a Loop has one or
+   two inputs, and the only forward references are a loop Phi's back input
+   and a Loop's; L9 inputs hold values only (no MemStart or memory Phi). That
+   every read names a version is `SoN::Verify`'s V6 (in both suites).
 8. **The control chain:**
    - Statement effects need `control_in`.
    - Each Return's `control_in` chain decides which nodes belong to the

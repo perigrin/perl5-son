@@ -25,10 +25,10 @@ sub graph ( $w, $name = 'main::__PROGRAM__' ) {
 }
 sub op_of ( $by, $id ) { defined $id && $by->{$id} ? $by->{$id}{op} : 'none' }
 
-subtest 'the top level says version 2 and its profile; wire v1 is gone' => sub {
+subtest 'the top level says version 2 and no profile; wire v1 is gone' => sub {
     my $w = wire('print 1;');
     is $w->{version}, 2, 'version 2 (the default, and the only one)';
-    is $w->{profile}, [ 'mem', 'eval', 'loop' ], 'profile: mem, eval, loop';
+    ok !exists $w->{profile}, 'no profile: every part of v2 is v2 (stage 10)';
     is wire( 'print 1;', ',wire=2' )->{version}, 2, 'wire=2 names it';
     like scalar( `$^X -Ilib -MO=-q,SoN,json,wire=1 -e 1 2>&1` ), qr/wire=1: the wire is version 2 \(wire v1 is gone\)/,
         'another version is refused by name';

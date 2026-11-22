@@ -13,9 +13,10 @@ use JSON::PP ();
 use Scalar::Util qw(blessed);
 
 # THE WIRE IS VERSION 2 (docs/plans/2026-11-20-wire-v2.md, section 3): `inputs`
-# are values only, and `mem_in` / `mem_out` name the memory edges; `profile`
-# says which parts of v2 the wire obeys. Wire v1 is gone (stage 6); its reader
-# for the deparser is SoN::Wire::as_v1.
+# are values only, and `mem_in` / `mem_out` name the memory edges; an eval's
+# die leaves by an edge, a loop goes round by one. Wire v1 is gone (stage 6);
+# its reader for the deparser is SoN::Wire::as_v1. The `profile` that named
+# the parts of v2 during the migration is gone too (stage 10): all are v2.
 
 # _control_in($node) -- the node the wire names as $node's control_in.
 sub _control_in ($node) {
@@ -743,7 +744,6 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 
     my $data = {
         version => 2,
-        profile => [ 'mem', 'eval', 'loop' ],
         source  => undef,
         methods => \%methods,
     };

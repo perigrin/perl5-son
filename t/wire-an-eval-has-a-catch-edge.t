@@ -30,7 +30,6 @@ sub f ( $x, $k ) { ( $x->{fields} // {} )->{$k} }
 sub is_g ( $x, $sym ) { $x && $x->{op} eq 'EntryDef' && ( f( $x, 'symbol' ) // '' ) eq $sym }
 
 my $w = wire(q{our $g = 1; eval { local $g = 2; die "x\n" }; print "$g $@";});
-ok( ( grep { $_ eq 'eval' } $w->{profile}->@* ), 'the wire says it obeys the eval profile' );
 my ( $nodes, $by ) = graph($w);
 
 my ($die) = grep { $_->{op} eq 'Unwind' } @$nodes;

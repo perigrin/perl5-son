@@ -25,7 +25,7 @@ sub rules ($w) {
     return \%by;
 }
 sub v2 (@nodes) {
-    return { version => 2, profile => ['mem'],
+    return { version => 2,
         methods => { g => { returns => [ $nodes[-1]{id} ], nodes => \@nodes } } };
 }
 # nd(id, op, [inputs], ctl => C, mem => M, out => 1, field => value ...)
@@ -157,11 +157,11 @@ subtest 'programs B::SoN made' => sub {
     is $r->{'write-unreachable'}, undef, '`$g = 1; die`: the Unwind is a root';
     # REVIEW FOCUS 2: a loop with no way out. B::SoN refuses the program by
     # name (no exit Region to go on from), so the wire is written by hand, in
-    # the `loop` profile's shape: Loop [entry, back], the header's memory Phi
+    # wire v2's loop shape: Loop [entry, back], the header's memory Phi
     # over the store, no exit -- and no Return (nothing after it runs).
     like scalar( `$^X -Ilib -MO=-q,SoN,json -e 'our \$g = 0; while (1) { \$g++ }' 2>&1` ),
         qr/GAP: loop without a lowerable condition/, '`while (1) { $g++ }`: B::SoN refuses it by name';
-    my $spin = { version => 2, profile => [ 'mem', 'eval', 'loop' ], methods => { g => { returns => [], nodes => [
+    my $spin = { version => 2, methods => { g => { returns => [], nodes => [
         nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ),
         nd( 2, 'EntryDef', [], package => 'main', sigil => '$', symbol => 'g' ),
         nd( 3, 'Loop', [ 0, 7 ] ),
@@ -174,11 +174,11 @@ subtest 'programs B::SoN made' => sub {
     is [ sort keys %$l ], [], '... and its v2 wire, by hand: the header memory Phi is a root, its store reached, no rule broken';
 };
 
-# A LOOP'S TEST CHAIN (a wire without the `loop` profile: the test's effects
-# pinned to the Loop, its body hung off Proj 0 beside them): what the body
-# follows is the test's last version, which control reaches only through the
-# Loop. V5 asked the Loop's memory Phi and called 51 chalk graphs wrong.
-subtest 'V5 at a loop whose test writes, without the loop profile' => sub {
+# A LOOP'S TEST CHAIN: what the body follows is the test's last version (the
+# If the test is comes after it). Before stage 9a the test's effects were
+# pinned to the Loop beside the body's Proj 0, and V5 asked the Loop's memory
+# Phi and called 51 chalk graphs wrong.
+subtest 'V5 at a loop whose test writes' => sub {
     is rules('my @q = (1,2,3); my $s = 0; while (my $x = shift @q) { $s += $x; push @q, 10 if $x == 1 } print "$s\n";')
         ->{'memory-order-disagrees'}, undef, 'a body after `while (my $x = shift @q)` follows the shift';
     is rules('sub g { "<$_[0]>" } sub f { my @w = (1, 2); my $s = ""; while (my $n = shift @w) { $s .= g($n) } $s } print f(), "\n";')
@@ -201,6 +201,45 @@ subtest 'a wire that is not v2 is refused by name' => sub {
     like dies { SoN::Verify::verify($v1) }, qr/\ASoN::Verify: wire version 1: the rules are wire v2's/, 'version 1';
     delete $v1->{version};
     like dies { SoN::Verify::verify($v1) }, qr/wire version none/, 'no version';
+};
+
+# WIRE V2 HAS NO PROFILE (stage 10): it named the parts of v2 a wire obeyed
+# while the migration ran, and the rules of a part not listed were not asked.
+# Every part is v2: a wire that lists them is from before, refused by name;
+# every wire is held to every rule.
+subtest 'a wire with a profile is refused by name; every rule holds without one' => sub {
+    for my $p ( [qw(mem eval loop)], ['mem'] ) {
+        my $w = good();
+        $w->{profile} = $p;
+        like dies { SoN::Verify::verify($w) }, qr/\ASoN::Verify: wire v2 `profile` \[@$p\]: /, "profile [@$p]";
+    }
+    # (the `loop` part's rules, V11 and V8's phi-trivial, on a wire that names no part)
+    my $l = good( nd( 6, 'Loop', [ 0, 0, 0 ] ) );
+    ok scalar( grep { $_ eq 'loop' } rule_names( rules($l) )->@* ), 'V11: a Loop of three inputs';
+    my $t = good( nd( 6, 'Loop', [ 0, 4 ] ), nd( 7, 'Phi', [ 2, 7 ], region => 6 ) );
+    ok scalar( grep { $_ eq 'phi-trivial' } rule_names( rules($t) )->@* ), 'V8: a trivial loop Phi';
+};
+
+# INPUTS HOLD VALUES ONLY (requirement 3): a memory version that is no value
+# -- MemStart, a memory Phi -- named as an input of anything but a memory Phi.
+subtest 'memory-as-value: MemStart as a value input' => sub {
+    my $g = good( nd( 6, 'Print', [1], ctl => 4 ) );
+    $g->{methods}{g}{nodes}[7]{control_in} = 6;
+    is rule_names( rules($g) ), ['memory-as-value'], 'a Print of MemStart';
+};
+
+# EVERY WRITE IS A VERSION (V2): a node of a kind that writes memory, or a
+# builtin that writes, carries mem_out -- so mem_in and control_in. One that
+# does not was a floating write the chain never named (v1's write-floating).
+subtest 'V2: a write that is no memory version' => sub {
+    my $w = good( nd( 6, 'EntryWrite', [ 3, 2 ] ) );
+    is rule_names( rules($w) ), ['version-off-chain'], 'an EntryWrite off both chains';
+    my $c = good( nd( 6, 'Call', [2], ctl => 4, mem => 4, dispatch_kind => 'builtin', name => 'bless' ) );
+    $c->{methods}{g}{nodes}[7]{control_in} = 6;
+    is rule_names( rules($c) ), ['version-off-chain'], 'a builtin that is a version (bless) with no mem_out';
+    my $w2 = good( nd( 6, 'Call', [2], ctl => 4, mem => 4, dispatch_kind => 'builtin', name => 'unlink' ) );
+    $w2->{methods}{g}{nodes}[7]{control_in} = 6;
+    is rules($w2), {}, '... but one that writes the world (unlink) follows memory and is ordered by control, as Print';
 };
 
 # V6, ITS CLASSES (moved from the v1 rules' test): a read of changeable state

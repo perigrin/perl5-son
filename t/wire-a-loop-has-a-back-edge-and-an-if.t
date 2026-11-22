@@ -46,7 +46,6 @@ sub loop_rules ( $w, $what ) {
 }
 
 my $w = wire(q{our $g = 0; my $i = 0; while ($i < 3) { $g = $g + $i; $i++ } print "$g\n";});
-ok( ( grep { $_ eq 'loop' } $w->{profile}->@* ), 'the wire says it obeys the loop profile' );
 loop_rules( $w, 'the 3.6 loop' );
 {
     my ( $nodes, $by ) = graph($w);

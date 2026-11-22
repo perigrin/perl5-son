@@ -50,3 +50,5 @@ the verifier; `tools/wire-verify.pl --list` to see each violation; use
 
 Related: [[the-memory-table-must-be-scraped]], [[make-the-guard-fail-on-purpose]],
 [[a-memory-phi-must-be-marked]], [[verify-the-harness-before-reading-its-output]].
+
+**Stage 10 (2026-11-22):** the ratchet is no ratchet any more: every rule is hard, the few that stay are held by name (t/wire-verify-ratchet.t `%HELD`), and the baseline holds only `#wires` and `#graphs` ([[a-held-count-is-not-a-held-name]]).

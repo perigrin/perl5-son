@@ -62,37 +62,9 @@
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
-corpus	allowed:param-bind	8
-corpus	allowed:record	57
-corpus	control-fork	0
-corpus	control-sink	0
-corpus	loop	0
-corpus	mem-in-not-version	0
-corpus	memory-order-disagrees	0
-corpus	phi-arity	0
-corpus	phi-no-region	0
-corpus	phi-trivial	0
-corpus	phi:memory-as-value	0
-corpus	record	0
-corpus	version-off-chain	0
-corpus	write-unreachable	0
 probes	#cases	542
 probes	#graphs	799
 probes	#wires	542
-probes	allowed:param-bind	1
-probes	allowed:record	12
-probes	control-fork	0
-probes	control-sink	0
-probes	loop	0
-probes	mem-in-not-version	0
-probes	memory-order-disagrees	0
-probes	phi-arity	0
-probes	phi-no-region	0
-probes	phi-trivial	0
-probes	phi:memory-as-value	0
-probes	record	1
-probes	version-off-chain	0
-probes	write-unreachable	0
 # 2026-11-21 (wire v2, stage 5): corpus2 V5 7 -> 0 and V2 1 -> 0, probes2 V5 4 -> 0 and V7 5 -> 1
 # (pl13, held in chalk's wire-verify.t), probes write-floating 4 -> 0: the verifier at a loop's
 # test chain, the producer's header memory Phi for a body writing its foreach alias or storing
@@ -101,3 +73,7 @@ probes	write-unreachable	0
 # loop whose value Phis already have no back edge, now has a header memory Phi (the body writes
 # its alias) with none either -- the shape al2 has; chalk refuses both by name (L6, and T2's
 # "a loop phi with other than two ways in").
+# 2026-11-22 (wire v2, stage 10): EVERY RULE IS HARD. The rule rows are deleted: each was 0 but
+# probes record 1 (pl13), now held by name in t/wire-verify-ratchet.t with chalk's two DynaLoader
+# graphs (t/data/wire-verify-chalk-graphs.tsv and tools/lib/WireRatchet.pm, the per-graph record,
+# are deleted with the counts). What is left is the denominator: #wires and #graphs may not fall.

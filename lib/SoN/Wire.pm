@@ -61,7 +61,6 @@ sub as_v1 ($wire) {
     my $w = Storable::dclone($wire);
     return $w unless ( $w->{version} // 1 ) == 2;
     $w->{version} = 1;
-    delete $w->{profile};
     for my $g ( values( ( $w->{methods} // {} )->%* ) ) {
         my $nodes = $g->{nodes} // [];
         # (dropped: the ids are positions again below, renumbered)

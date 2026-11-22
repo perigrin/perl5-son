@@ -27,8 +27,9 @@ like $out, qr/^dropped: chalk Slow\b/m, 'the timed-out one by name';
 like $out, qr/^dropped: chalk Killed\b/m, 'the killed one by name';
 unlike $out, qr/^dropped: chalk Bad\b/m, 'a program perl rejects, with a wire written, is not dropped';
 like $out, qr/^chalk\t#wires\t2$/m, 'two wires written';
-like $out, qr/^chalk\t\@Ok::f\t/m, 'its graphs are counted one by one';
-like $out, qr/^chalk\t\@Ok:main::__PROGRAM__\t/m, 'a file graph is named by its wire';
+# (stage 10: no per-graph lines -- every rule is hard, a violation is printed
+# by name -- but the graphs of the wires written are counted)
+like $out, qr/^chalk\t#graphs\t[1-9]\d*$/m, 'their graphs are counted';
 ok !-e "$wires/chalk/Slow.json" && !-e "$wires/chalk/Killed.json", 'a dropped wire is not cached';
 
 done_testing;

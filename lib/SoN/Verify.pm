@@ -41,14 +41,26 @@ sub verify ($wire) {
     my %res = ( violations => [], allowed => {}, graphs => 0 );
     die "SoN::Verify: wire version " . ( $wire->{version} // 'none' ) . ": the rules are wire v2's\n"
         unless ( $wire->{version} // 0 ) == 2;
+    # NO PROFILE (stage 10): it named the parts of v2 a wire obeyed while the
+    # migration ran. Every part is v2; a wire that lists them is from before.
+    die 'SoN::Verify: wire v2 `profile` ' . ( ref $wire->{profile} eq 'ARRAY' ? "[$wire->{profile}->@*]" : $wire->{profile} // 'null' )
+        . ": a wire from before wire v2 closed (stage 10); every rule holds on every wire\n" if exists $wire->{profile};
     for my $name ( sort keys( ( $wire->{methods} // {} )->%* ) ) {
         $res{graphs}++;
-        _graph_v2( $name, $wire->{methods}{$name}, \%res, { map { $_ => 1 } ( $wire->{profile} // [] )->@* } );
+        _graph_v2( $name, $wire->{methods}{$name}, \%res );
     }
     return \%res;
 }
 
 sub _fields ($n) { $n->{fields} // {} }
+
+# The kinds that store whenever they run (the plan's 3.3: each a version).
+# HELD BY NAME, NOT IN IT: LocalAlias (`$_` aliased per pass) is pinned and
+# follows memory (mem_in) but is no version: B::SoN forwards its binding to
+# the reads of `$_` in its body, and a callee's reads are in its own graph.
+# The plan's 3.3 lists it with mem_out; making it a version is a placement
+# change the producer has not made (stage 10's report).
+my %WRITE = map { $_ => 1 } qw(EntryWrite CellWrite Delete ElemRestore MakeCell);
 
 
 # The nodes control reaches $n from: a Region's every input; the first input
@@ -56,8 +68,7 @@ sub _fields ($n) { $n->{fields} // {} }
 sub _control_preds ($n) {
     my $in = $n->{inputs} // [];
     return grep { defined } @$in if $n->{op} eq 'Region';
-    # (a Loop's back input, on the `loop` profile, is the pass's end: the
-    # Loop follows it)
+    # (a Loop's back input is the pass's end: the Loop follows it)
     return grep { defined } @$in if $n->{op} eq 'Loop';
     my @p = $n->{op} =~ /^(?:If|Loop|Proj)$/ ? ( $in->[0] ) : ();
     push @p, $n->{control_in};
@@ -105,7 +116,9 @@ sub _describe ( $n, $by ) {
 #                        version (MemStart, a memory Phi, a node with mem_out).
 #   version-off-chain    V2: a node with mem_out lacks mem_in or control_in;
 #                        or a Return, an Unwind, a sub Call or an Assign that
-#                        is no record has no mem_in.
+#                        is no record has no mem_in; or a write (a node of a
+#                        kind that stores, a builtin EffectTable calls a
+#                        version) is no version (no mem_out).
 #   write-unreachable    V3: a node with mem_out the backward walk over
 #                        mem_in and memory Phi inputs does not visit, from the
 #                        roots (V4): each Return's and Unwind's mem_in, and
@@ -121,18 +134,20 @@ sub _describe ( $n, $by ) {
 #                        are not `my` scalars (or `my` aggregates bound from @_).
 #   phi-arity            V8: a Phi's inputs do not pair with its Region's
 #                        control inputs (a Loop's Phi has two: way in, way round).
-#                        An eval's join too: since the `eval` profile (stage
-#                        8) its catch is a way in like the body's end.
+#                        An eval's join too: since stage 8 its catch is a
+#                        way in like the body's end.
 #   phi-no-region        a Phi whose `region` is no Region or Loop.
 #   phi:memory-as-value  V8: a memory Phi used as a value input.
+#   memory-as-value      (inputs are values only) MemStart used as a value
+#                        input.
 #   control-fork         V9: a node other than an If or a Loop has more than
 #                        one control successor: two things claim to run next.
-#   phi-trivial          V8 (`loop` profile, stage 9b): a loop's Phi whose
+#   phi-trivial          V8 (stage 9b): a loop's Phi whose
 #                        inputs other than itself are all one node.
-#   loop                 V11 (`loop` profile): a Loop has one or two inputs
+#   loop                 V11 (stage 9a): a Loop has one or two inputs
 #                        and one control successor, and no Proj takes it; a
 #                        Phi at it has one input per input of it.
-sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
+sub _graph_v2 ( $name, $g, $res ) {
     my @nodes = ( $g->{nodes} // [] )->@*;
     my %by    = map { $_->{id} => $_ } @nodes;
     my ( %cons, %succ );
@@ -181,6 +196,12 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
             && ( $op =~ /^(?:Return|Unwind|Assign)$/ || $op eq 'Call' && ( $f->{dispatch_kind} // '' ) ne 'builtin' ) ) {
             $bad->( $n, 'version-off-chain', "a $op that follows no memory" . ( $op eq 'Assign' ? ' and is no record' : '' ) );
         }
+        # (a builtin that writes the world -- printf, unlink, srand -- is
+        # ordered by control, as Print is, and follows memory: its
+        # EffectTable `version` column says whether it is a version)
+        elsif ( $WRITE{$op} || $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' && B::SoN::EffectTable::is_version( $f->{name} ) ) {
+            $bad->( $n, 'version-off-chain', 'a write that is no memory version' . ( $op eq 'Call' ? " ($f->{name})" : '' ) );
+        }
     }
 
     # (V3, V4) EVERY VERSION IS REACHED BACKWARDS FROM A ROOT.
@@ -198,31 +219,9 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         push @q, grep { defined } ( $x->{inputs} // [] )->@* if $memphi->($x);
     }
     $bad->( $_, 'write-unreachable', 'no Return or Unwind reaches it backwards' ) for grep { $_->{mem_out} && !$seen{ $_->{id} } } @nodes;
-    # A pinned node nothing follows is an end: a root -- or, on a wire
-    # without the `loop` profile, the end of a loop's test or of its body,
-    # which has no back edge to follow it (stage 9a gives it one): its walk
-    # back reaches the Loop itself or the Loop's body Proj.
-    my $in_a_loop = sub ($n) {
-        my ( $c, %seen ) = ( $by{ $n->{control_in} // '' } );
-        while ( $c && !$seen{ $c->{id} }++ ) {
-            my $op = $c->{op};
-            return 1 if $op eq 'Loop';
-            return 0 if $op eq 'Start';
-            if ( $op eq 'Proj' ) {
-                my $h = $by{ $c->{inputs}[0] // '' };
-                return 1 if $h && $h->{op} eq 'Loop' && ( _fields($c)->{index} // 0 ) == 0;
-                $c = $h && $h->{op} eq 'Loop' ? $by{ $h->{control_in} // $h->{inputs}[0] // '' } : $h;
-            }
-            elsif ( $op eq 'Region' ) { $c = $by{ $c->{inputs}[0] // '' } }
-            elsif ( $op eq 'If' )     { $c = $by{ $c->{control_in} // $c->{inputs}[0] // '' } }
-            else                      { $c = $by{ $c->{control_in} // '' } }
-        }
-        return 0;
-    };
-    my $loop_profile = $profile->{loop};
+    # A pinned node nothing follows is an end: a root, or a fault.
     for my $n ( grep { defined $_->{control_in} && $_->{op} !~ /^(?:Return|Unwind)$/ } @nodes ) {
         next if ( $succ{ $n->{id} } // [] )->@*;
-        next if !$loop_profile && $in_a_loop->($n);
         $bad->( $n, 'control-sink', 'nothing follows it' );
     }
 
@@ -231,27 +230,6 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
     # Phi, else the way in's).
     my %region_mem;
     for my $p ( grep { $memphi->($_) } @nodes ) { $region_mem{ _fields($p)->{region} // -1 } //= $p->{id} }
-    # A LOOP'S TEST, on a wire without the `loop` profile: its effects are
-    # pinned to the Loop beside the body's Proj 0 (stage 9a gives the test an
-    # If), and the body follows the last of them -- the test's version no
-    # other on its chain follows. Undef where the test writes nothing.
-    my $test_version = sub ($loop) {
-        my ( @q, %seen, %v ) = ( $loop->{id} );
-        while ( defined( my $id = shift @q ) ) {
-            next if $seen{$id}++;
-            for my $s ( grep { $by{$_}{op} ne 'Proj' || $id != $loop->{id} } ( $succ{$id} // [] )->@* ) {
-                $v{$s} = 1 if $by{$s}{mem_out};
-                # (a test with arms -- `while (C && shift @q)` -- merges its
-                # memory at a Region of its own)
-                $v{ $region_mem{$s} } = 1 if $by{$s}{op} eq 'Region' && exists $region_mem{$s};
-                push @q, $s;
-            }
-        }
-        for my $x ( map { $by{$_} } keys %v ) {
-            delete @v{ grep { defined } $x->{mem_in}, ( $memphi->($x) ? ( $x->{inputs} // [] )->@* : () ) };
-        }
-        return keys %v == 1 ? ( keys %v )[0] : undef;
-    };
     my $back = sub ($p) {
         for ( 1 .. 100000 ) {
             my $pn = $by{ $p // '' } or return undef;
@@ -262,14 +240,7 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
             }
             return $p if $pn->{mem_out};
             if    ( $op eq 'Region' || $op eq 'Loop' ) { return $region_mem{$p} if exists $region_mem{$p}; $p = $pn->{inputs}[0] }
-            elsif ( $op eq 'Proj' ) {
-                my $h = $by{ $pn->{inputs}[0] // '' };
-                if ( !$loop_profile && $h && $h->{op} eq 'Loop' && ( _fields($pn)->{index} // 0 ) == 0 ) {
-                    my $t = $test_version->($h);
-                    return $t if defined $t;
-                }
-                $p = $pn->{inputs}[0];
-            }
+            elsif ( $op eq 'Proj' )                    { $p = $pn->{inputs}[0] }
             elsif ( $op eq 'If' )                      { $p = $pn->{control_in} // $pn->{inputs}[0] }
             else                                       { $p = $pn->{control_in} }
         }
@@ -403,16 +374,14 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
     }
 
     # (V11) A LOOP IS ENTERED ONCE AND GOES ROUND ONCE; ITS TEST IS AN If.
-    if ($loop_profile) {
-        for my $L ( grep { $_->{op} eq 'Loop' } @nodes ) {
-            my $k = scalar( ( $L->{inputs} // [] )->@* );
-            $bad->( $L, 'loop', "$k inputs (one or two)" ) if $k < 1 || $k > 2;
-            my %u;
-            my @s = grep { $by{$_}{op} ne 'Proj' && !$u{$_}++ } ( $succ{ $L->{id} } // [] )->@*;
-            $bad->( $L, 'loop', scalar(@s) . ' control successors' ) if @s > 1;
-            $bad->( $L, 'loop', 'a Proj of it: ' . join ', ', map { $say->($_) } @{ [ grep { $by{$_}{op} eq 'Proj' } ( $succ{ $L->{id} } // [] )->@* ] } )
-                if grep { $by{$_}{op} eq 'Proj' } ( $succ{ $L->{id} } // [] )->@*;
-        }
+    for my $L ( grep { $_->{op} eq 'Loop' } @nodes ) {
+        my $k = scalar( ( $L->{inputs} // [] )->@* );
+        $bad->( $L, 'loop', "$k inputs (one or two)" ) if $k < 1 || $k > 2;
+        my %u;
+        my @s = grep { $by{$_}{op} ne 'Proj' && !$u{$_}++ } ( $succ{ $L->{id} } // [] )->@*;
+        $bad->( $L, 'loop', scalar(@s) . ' control successors' ) if @s > 1;
+        $bad->( $L, 'loop', 'a Proj of it: ' . join ', ', map { $say->($_) } @{ [ grep { $by{$_}{op} eq 'Proj' } ( $succ{ $L->{id} } // [] )->@* ] } )
+            if grep { $by{$_}{op} eq 'Proj' } ( $succ{ $L->{id} } // [] )->@*;
     }
 
     # (V8) PHIS PAIR WITH THEIR REGION; MEMORY AND VALUES DO NOT MIX.
@@ -420,14 +389,14 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         my $f = _fields($n);
         my $r = $by{ $f->{region} // '' };
         if ( !$r || $r->{op} !~ /^(?:Region|Loop)$/ ) { $bad->( $n, 'phi-no-region', 'region=' . ( $f->{region} // 'none' ) ); next }
-        my $want = $r->{op} eq 'Loop' ? ( $loop_profile ? scalar $r->{inputs}->@* : 2 ) : scalar grep { defined } $r->{inputs}->@*;
+        my $want = $r->{op} eq 'Loop' ? scalar $r->{inputs}->@* : scalar grep { defined } $r->{inputs}->@*;
         my $have = scalar( $n->{inputs}->@* );
         $bad->( $n, 'phi-arity',
             "$have inputs for $want ways into $r->{op}#$r->{id}" . ( $f->{memory} ? ' (memory)' : '' ) )
             if $have != $want;
         # (stage 9b, Braun: a loop's Phi the pass never wrote -- its inputs
         # but itself all one node -- is forwarded, not written)
-        if ( $loop_profile && $r->{op} eq 'Loop' ) {
+        if ( $r->{op} eq 'Loop' ) {
             my %v = map { ( $_ => 1 ) } grep { defined && $_ != $n->{id} } $n->{inputs}->@*;
             $bad->( $n, 'phi-trivial', 'a loop Phi of ' . ( keys %v ? $say->( ( keys %v )[0] ) : 'nothing' ) . ' alone' )
                 if keys %v < 2;
@@ -436,6 +405,11 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
             my @v = grep { !$memphi->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;
             $bad->( $n, 'phi:memory-as-value', 'used by ' . join( ',', map { "$_->[0]{op}#$_->[0]{id}" } @v ) ) if @v;
         }
+    }
+    # (INPUTS ARE VALUES ONLY: MemStart is a version and no value)
+    for my $n ( grep { $_->{op} eq 'MemStart' } @nodes ) {
+        my @v = grep { !$memphi->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;
+        $bad->( $n, 'memory-as-value', 'used by ' . join( ',', map { "$_->[0]{op}#$_->[0]{id}" } @v ) ) if @v;
     }
     return;
 }
