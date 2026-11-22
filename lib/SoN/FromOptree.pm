@@ -17897,6 +17897,19 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A `die` IN THE BODY'S OWN STATEMENTS -- the last one, or one
+            # before it -- was stepped past as unhandled: `for (1) { die }`
+            # ran on (audit 2026-11-22, risk 1). Its pass ends at the Unwind,
+            # which is the way round as a dead input, as an arm's is a merge's.
+            if ($name eq 'die') {
+                my $unwind = $factory->make_cfg('Unwind', inputs => [ $sim->pop_to_mark ]);
+                $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
+                _set_message_site($unwind, $op);
+                _pin_die($sim, $factory, $unwind);
+                $op = $op->next;
+                next;
+            }
+
             my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
             if ($sig eq 'unhandled') {
                 # Unknown - skip
@@ -21177,7 +21190,16 @@ class SoN::FromOptree 0.01 {
             # before the visited test so a caller can tell clean convergence
             # (returns the stop op) from a back-edge (returns a visited op
             # elsewhere -- a statement-modifier loop).
-            return $op if defined $stop_addr && $$op == $stop_addr;
+            if (defined $stop_addr && $$op == $stop_addr) {
+                # AN EVAL'S BODY IS A SCOPE: its `local`s are put back where it
+                # ends without a die, as on each Exc edge -- they were restored
+                # only there, so `eval { local $g = 2; 1 }` left 2 (audit
+                # 2026-11-22, risk 2). (A body that died has no way on.)
+                _restore_locals($sim, $ctx, $factory)
+                    if $op->name =~ /\A(?:leavetry|poptry)\z/
+                    && !( defined $sim->control && $sim->control->operation eq 'Unwind' );
+                return $op;
+            }
             # EVERY ARM IN A LOOP BODY STOPS AT THE LATCH. The continue block
             # belongs to the loop, not to whichever arm reaches it, and a
             # nested arm walk (a `last if` inside a `next if`'s rest arm) that
