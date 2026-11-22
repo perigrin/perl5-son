@@ -63,10 +63,12 @@ sub refuses ($src, $name, $why) {
     is $call->{fields}{dispatch_kind}, 'direct', 'direct';
     ok $call->{fields}{string_eval}, 'which says it runs an eval string';
     ok defined $call->{fields}{eval_id}, 'inside an eval';
-    my ($region) = grep { $_->{op} eq 'Region' && defined $_->{fields}{eval_id} } values %$n;
+    my ($region) = grep { $_->{op} eq 'Region' && defined $_->{fields}{eval_id} && !$_->{fields}{catch} } values %$n;
     ok $region, 'the eval is a trap' or last;
     is $region->{fields}{eval_id}, $call->{fields}{eval_id}, 'the call is in that trap';
-    is $region->{inputs}, [ $call->{id} ], 'and the trap joins after the call';
+    is $n->{ $region->{inputs}[0] }{control_in}, $call->{id}, 'and the trap joins after the call (its end clears $@)';
+    my ($x) = grep { $_->{op} eq 'Exc' } values %$n;
+    is $x && $x->{inputs}, [ $call->{id} ], '... and its catch: the call\'s way out';
     my $body = nodes($w, $anon->{fields}{name});
     ok( ( grep { $_->{op} eq 'CellParam' && $_->{fields}{name} eq '$i' } values %$body ), 'the body names $i through its CellParam');
     ok( ( grep { $_->{op} eq 'CellWrite' } values %$body ), 'and writes it');

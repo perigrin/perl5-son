@@ -676,6 +676,16 @@ class SoN::FromOptree 0.01 {
     # built there carries it, as does the eval's Region.
     our $EVAL_ID;
     our $EVAL_COUNT = 0;   # (reset by B::SoN for each pass over the program)
+    # THE EXCEPTIONAL EDGES (wire v2's `eval` profile) of the evals being
+    # walked in this graph, innermost last: { eval_id, factory, base (the
+    # @SAVES_STACK index the eval's own `local`s start at), edges => [ { exc,
+    # sim } ] }. Each node in the body that may die has its way out, an Exc:
+    # _exc_edge. They merge at the eval's catch Region (_catch_way).
+    our @EXC_FRAMES;
+    # True while the restores on a way out are made: each its own node (two
+    # ways out at one memory version would hash-cons theirs into one, pinned
+    # twice).
+    our $EXC_EDGE = 0;
 
     # The pad slots this graph shares with a named sub (or, in a sub, with
     # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
@@ -900,6 +910,7 @@ class SoN::FromOptree 0.01 {
         # "before\n"` printed before it died.
         if (_may_fault($node)) {
             _pin($sim, $node);
+            _exc_edge($sim, $node);
             $PINS_MADE++;
             return;
         }
@@ -915,6 +926,7 @@ class SoN::FromOptree 0.01 {
             || ( $PIN_OP && _op_takes_an_element($PIN_OP) && _takes_an_element($node) );
         $PINNED_MAY_DIE{ refaddr $node } = 1 unless $tied;
         _place($sim, $node);
+        _exc_edge($sim, $node);
         $PINS_MADE++;
         return;
     }
@@ -2576,6 +2588,8 @@ class SoN::FromOptree 0.01 {
 
         my $factory = SoN::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();
+        # (an eval's ways out are its graph's)
+        local @EXC_FRAMES = ();
         # What may die, as it is made: checked against the finished graph.
         local $SoN::IR::NodeFactory::MADE_MAY_DIE = {};
         my $start   = $factory->make_cfg('Start');
@@ -2874,7 +2888,7 @@ class SoN::FromOptree 0.01 {
                 my $unwind = $factory->make_cfg('Unwind', inputs => [[$msg]]);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 _set_message_site($unwind, $op);
-                _pin($sim, $unwind);
+                _pin_die($sim, $factory, $unwind);
                 $op = $op->next;
                 next;
             }
@@ -3774,7 +3788,7 @@ class SoN::FromOptree 0.01 {
                     inputs => [$args]);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 _set_message_site($unwind, $op);
-                _pin($sim, $unwind);
+                _pin_die($sim, $factory, $unwind);
                 $op = $op->next;
                 next;
             }
@@ -5892,6 +5906,8 @@ class SoN::FromOptree 0.01 {
             stamp    => SoN::IR::Stamp->new(type => 'CodeRef'));
         local $IN_EVAL_BODY = 1;
         local $EVAL_ID = ++$EVAL_COUNT;
+        my $frame = { eval_id => $EVAL_ID, factory => $factory, base => scalar @SAVES_STACK, edges => [] };
+        local @EXC_FRAMES = ( @EXC_FRAMES, $frame );
         my $eval_entry = $sim->control;
         _entry_store($factory, $sim,
             $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@',
@@ -5908,15 +5924,18 @@ class SoN::FromOptree 0.01 {
             string_eval   => 1);
         _pin($sim, $call);
         _call_memory_barrier($sim, $call, $ctx);
-        my $region = $factory->make_cfg('Region', inputs => [$call]);
+        # (the call's way out, to the catch; its end clears $@)
+        my $catch = _catch_way($factory, $sim, $frame);
+        _clear_err($factory, $sim);
+        my $region = $factory->make_cfg('Region', inputs => [ $sim->control, ( $catch ? $catch->control : () ) ]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
         $region->set_eval_id($EVAL_ID);
         $sim->set_control($region);
-        _eval_join_memory($factory, $sim, $region, $sim->memory);
+        _eval_join_memory($factory, $sim, $region, $sim->memory, ( $catch ? $catch->memory : () ));
         unless ($void) {
             my $undef = $factory->make('Constant', value => undef, const_type => 'undef',
                 stamp => SoN::IR::Stamp->new(type => 'Undef'));
-            $sim->push_node($factory->make_unique('Phi', inputs => [ $call, $undef ], region => $region));
+            $sim->push_node( $catch ? $factory->make_unique('Phi', inputs => [ $call, $undef ], region => $region) : $call );
         }
         return ($op->next, 'handled');
     }
@@ -5999,6 +6018,78 @@ class SoN::FromOptree 0.01 {
         return unless defined $sim->memory;
         $node->set_mem_out(1);
         $sim->set_memory($node);
+        # (in an eval a call that dies leaves by its way out: one ordered where it runs)
+        _exc_edge($sim, $node) if defined $node->control_in;
+    }
+
+    # _exc_edge($sim, $node): in a block eval's body (or a try's, or a string
+    # eval's), the way out of $node, which may die (wire v2's `eval` profile,
+    # docs/plans/2026-11-20-wire-v2.md 3.5): an Exc, and on it the restore of
+    # every `local` the eval made that is live here, innermost first, from
+    # the memory after $node (a call's: what the callee wrote before it died
+    # is in it). Recorded in the eval's frame; _catch_way merges them.
+    sub _exc_edge ($sim, $node) {
+        my $f = $EXC_FRAMES[-1] or return;
+        return if $IN_SCOUT || !defined $EVAL_ID || $f->{eval_id} != $EVAL_ID || !defined $sim->memory;
+        my $factory = $f->{factory};
+        my $edge = $sim->snapshot;
+        my $exc  = $factory->make_cfg('Exc', inputs => [$node]);
+        $edge->set_control($exc);
+        $edge->set_memory( $node->mem_out ? $node : $node->mem_in // $sim->memory );
+        my @saves = map { $_->@* } @SAVES_STACK[ $f->{base} .. $#SAVES_STACK ];
+        if (@saves) {
+            local $EXC_EDGE = 1;
+            _restore_locals($edge, { local_saves => \@saves }, $factory, 0, 1);
+        }
+        push $f->{edges}->@*, { exc => $exc, sim => $edge };
+        return;
+    }
+
+    # _pin_die($sim, $factory, $unwind): a die, on the chain. In an eval here
+    # its way out is an edge (_exc_edge). Where none is, the `local`s live
+    # here are put back first, immediately before it: nothing observable runs
+    # between (a __DIE__ handler would; one is refused), and a caller's eval
+    # that catches it sees them restored (probe lo2).
+    sub _pin_die ($sim, $factory, $unwind) {
+        if ( !defined $EVAL_ID && defined $sim->memory ) {
+            my @saves = map { $_->@* } @SAVES_STACK;
+            local $EXC_EDGE = 1;
+            _restore_locals($sim, { local_saves => \@saves }, $factory, 0, 1) if @saves;
+        }
+        _pin($sim, $unwind);
+        _exc_edge($sim, $unwind);
+        return;
+    }
+
+    # _catch_way($factory, $sim, $frame) -> a sim at the end of the eval's
+    # catch, or undef where nothing in its body may die: the catch Region
+    # merges the ways out, a memory Phi their memory, a Phi the exceptions
+    # (one way out: its Exc itself), and $@ is stored from it there.
+    sub _catch_way ($factory, $sim, $f) {
+        my @e = $f->{edges}->@* or return undef;
+        my $catch = $factory->make_cfg('Region', inputs => [ map { $_->{sim}->control } @e ]);
+        $catch->set_catch(1);
+        $catch->set_eval_id( $f->{eval_id} );
+        my $c = $sim->snapshot;
+        $c->set_control($catch);
+        my @m = map { $_->{sim}->memory } @e;
+        $c->set_memory( @m == 1 ? $m[0] : $factory->make_unique('Phi', inputs => \@m, region => $catch, memory => 1) );
+        my $err = @e == 1 ? $e[0]{exc}
+            : $factory->make_unique('Phi', inputs => [ map { $_->{exc} } @e ], region => $catch,
+                stamp => SoN::IR::Stamp->new(type => 'Scalar'));
+        _entry_store($factory, $c,
+            $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@', mem => $c->memory), $err);
+        return $c;
+    }
+
+    # _clear_err($factory, $sim): `$@ = ""`, stored where an eval ends without
+    # a die (perl clears it there; and as the eval begins).
+    sub _clear_err ($factory, $sim) {
+        return unless defined $sim->memory;
+        _entry_store($factory, $sim,
+            $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@', mem => $sim->memory),
+            $factory->make('Constant', value => '', const_type => 'string', stamp => SoN::IR::Stamp->new(type => 'Str')));
+        return;
     }
 
     # _slice_reading($factory, $op, $slice) -- the value a slice op yields.
@@ -7561,11 +7652,21 @@ class SoN::FromOptree 0.01 {
             # VANISHED from the graph, leaving a bare Region -- the same silent
             # drop `write` and `goto` are refused for. An eval can die and can
             # define subs; it happens whether or not anyone reads its value.
+            # ITS WAY OUT (wire v2's `eval` profile): a trap of its own, as a
+            # block eval's -- the compile and run die by an Exc to a catch,
+            # which stores $@; its end clears $@.
+            local $EVAL_ID = ++$EVAL_COUNT;
+            my $frame = { eval_id => $EVAL_ID, factory => $factory, base => scalar @SAVES_STACK, edges => [] };
+            local @EXC_FRAMES = ( @EXC_FRAMES, $frame );
             _pin($sim, $code);
-            my $region = $factory->make_cfg('Region', inputs => [$code]);
+            _exc_edge($sim, $code);
+            my $catch = _catch_way($factory, $sim, $frame);
+            _clear_err($factory, $sim);
+            my $region = $factory->make_cfg('Region', inputs => [ $sim->control, ( $catch ? $catch->control : () ) ]);
             $sim->set_control($region);
-            my $value = $factory->make_unique('Phi',
-                inputs => [$code, $undef], region => $region);
+            _eval_join_memory($factory, $sim, $region, $sim->memory, ( $catch ? $catch->memory : () ));
+            my $value = $catch ? $factory->make_unique('Phi',
+                inputs => [$code, $undef], region => $region) : $code;
             # Void context discards the value; the effect above still stands.
             $sim->push_node($value) unless ($op->flags & 3) == 1; # OPf_WANT_VOID
             return ($op->next, 'handled');
@@ -13606,7 +13707,7 @@ class SoN::FromOptree 0.01 {
             # deparser spells nothing for it -- the store was spelled `local`.
             if (my $e = $save->{elem}) {
                 next unless $factory && defined $sim->memory;
-                my $r = $factory->make('ElemRestore', kind => $e->{kind},
+                my $r = $factory->${ \( $EXC_EDGE ? 'make_unique' : 'make' ) }('ElemRestore', kind => $e->{kind},
                     at_return => $at_return,
                     inputs => [ @$e{qw(container index saved existed)}], mem => $sim->memory);
                 _place($sim, $r);
@@ -19226,6 +19327,11 @@ class SoN::FromOptree 0.01 {
         local $SoN::IR::NodeFactory::MAY_DIE = \$may_die;
         my %made_before = map { $_ => 1 } keys %{ $SoN::IR::NodeFactory::MADE_MAY_DIE // {} };
         local $EVAL_ID = ++$EVAL_COUNT;
+        # ITS WAYS OUT, one per node in the body that may die (_exc_edge): the
+        # body's own `local`s are the ones on them (@SAVES_STACK starts empty
+        # there, below).
+        my $frame = { eval_id => $EVAL_ID, factory => $factory, base => 0, edges => [] };
+        local @EXC_FRAMES = ( @EXC_FRAMES, $frame );
         # WHERE THE PROTECTED BODY BEGINS, captured before the walk moves on.
         # The Region below records where the eval JOINS; without this the
         # statements it protects cannot be told from those before it, and a
@@ -19295,10 +19401,18 @@ class SoN::FromOptree 0.01 {
             value      => undef,
             const_type => 'undef',
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-        # ITS WAYS IN: the body's end (unless every path returned), then each
-        # return, in order; the value Phi below takes their values the same way.
+        # THE CATCH: the ways out of what died, merged, and $@ stored there.
+        my $catch = _catch_way($factory, $sim, $frame);
+        # A BODY THAT ENDS IN A DIE does not reach the join by its end: only
+        # by its catch. One that ends otherwise clears $@ there.
+        my $body_died = $catch && !$body_left && $body_sim->control->operation eq 'Unwind';
+        _clear_err($factory, $body_sim) unless $body_left || $body_died;
+        my $body_in = !$body_left && !$body_died;
+        # ITS WAYS IN: the body's end (unless every path returned, or it died),
+        # then each return, in order, then the catch; the value Phi below takes
+        # their values the same way.
         my $region = $factory->make_cfg('Region',
-            inputs => [ ( $body_left ? () : $body_sim->control ), map { $_->{control} } @ev_exits ]);
+            inputs => [ ( $body_in ? $body_sim->control : () ), map( { $_->{control} } @ev_exits ), ( $catch ? $catch->control : () ) ]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
         # A DIVISION THE BODY MADE BUT NOTHING REACHES (`my $q = 1 / $z` with
         # $q unread) is not in the graph, and perl still dies making it: the
@@ -19326,7 +19440,7 @@ class SoN::FromOptree 0.01 {
             if ($op->flags & 3) == 3 || ($op->flags & 3) == 0;
         $sim->set_control($region);
         _eval_join_memory($factory, $sim, $region,
-            ( $body_left ? () : $body_sim->memory ), map { $_->{memory} } @ev_exits);
+            ( $body_in ? $body_sim->memory : () ), map( { $_->{memory} } @ev_exits ), ( $catch ? $catch->memory : () ));
 
         # The body's value, or undef if it died. Three cases, and the
         # depth tells them apart:
@@ -19349,9 +19463,9 @@ class SoN::FromOptree 0.01 {
             if defined $region->eval_want && _leaves_a_list(_last_kid($op->other));
         if (@ev_exits || $body_sim->stack_depth > $sim->stack_depth) {
             # ONE VALUE PER WAY IN: the body's last (undef if it left none),
-            # then each return's.
-            my @vals = ( ( $body_left ? () : ( $body_sim->stack_depth > $sim->stack_depth ? $body_sim->pop_node : $undef ) ),
-                         map { $_->{value} } @ev_exits );
+            # then each return's, then the catch's (undef).
+            my @vals = ( ( $body_in ? ( $body_sim->stack_depth > $sim->stack_depth ? $body_sim->pop_node : $undef ) : () ),
+                         map( { $_->{value} } @ev_exits ), ( $catch ? $undef : () ) );
             my $val = $vals[0];
 
             # STAMP IT HERE, from the join of the two arms. B::SoN's
@@ -19375,8 +19489,9 @@ class SoN::FromOptree 0.01 {
                 $stamp = SoN::IR::Stamp::join($stamp, $_->stamp) for @vals;
             }
 
-            $sim->push_node($factory->make_unique('Phi',
-                inputs => [@vals, $undef], region => $region,
+            # (one way in: its value, no Phi)
+            $sim->push_node( @vals == 1 ? $vals[0] : $factory->make_unique('Phi',
+                inputs => [@vals], region => $region,
                 (defined $stamp ? (stamp => $stamp) : ())));
         }
         elsif (($op->flags & 3) != 1) {   # not OPf_WANT_VOID
@@ -19444,7 +19559,10 @@ class SoN::FromOptree 0.01 {
         my $eval_entry = $sim->control;
         my $body_sim = $sim->snapshot;
         my $try_id = ++$EVAL_COUNT;
+        # ITS WAYS OUT (_exc_edge): the `local`s made from here on are its own.
+        my $frame = { eval_id => $try_id, factory => $factory, base => scalar @SAVES_STACK, edges => [] };
         {
+            local @EXC_FRAMES = ( @EXC_FRAMES, $frame );
             local $IN_EVAL_BODY = 1;
             # A die in the try body is the try's, not an enclosing eval's.
             local $ARM_PINS = 1;
@@ -19459,12 +19577,17 @@ class SoN::FromOptree 0.01 {
             const_type => 'integer', stamp => SoN::IR::Stamp->new(type => 'Int'));
         my $undef = $factory->make('Constant', value => undef,
             const_type => 'undef', stamp => SoN::IR::Stamp->new(type => 'Undef'));
-        my $region = $factory->make_cfg('Region', inputs => [$body_sim->control]);
+        # THE CATCH (_catch_way), and the body's end where it does not die.
+        my $caught = _catch_way($factory, $sim, $frame);
+        my $body_died = $caught && $body_sim->control->operation eq 'Unwind';
+        _clear_err($factory, $body_sim) unless $body_died;
+        my @ways = ( ( $body_died ? () : [ $body_sim, $one ] ), ( $caught ? [ $caught, $undef ] : () ) );
+        my $region = $factory->make_cfg('Region', inputs => [ map { $_->[0]->control } @ways ]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
         $region->set_eval_id($try_id);
         $sim->set_control($region);
-        _eval_join_memory($factory, $sim, $region, $body_sim->memory);
-        my $ok = $factory->make_unique('Phi', inputs => [$one, $undef],
+        _eval_join_memory($factory, $sim, $region, map { $_->[0]->memory } @ways);
+        my $ok = @ways == 1 ? $ways[0][1] : $factory->make_unique('Phi', inputs => [ map { $_->[1] } @ways ],
             region => $region);
 
         # THE EXCEPTION IS READ WHERE THE EVAL ENDS, pinned there: the eval
@@ -21423,7 +21546,7 @@ class SoN::FromOptree 0.01 {
                     inputs => [$args]);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 _set_message_site($unwind, $op);
-                _pin($sim, $unwind);
+                _pin_die($sim, $factory, $unwind);
                 $op = $op->next;
                 next;
             }
@@ -22908,7 +23031,9 @@ class SoN::FromOptree 0.01 {
     # (one memory per way in: the body's end, then each return's)
     sub _eval_join_memory ($factory, $sim, $region, @memory) {
         $sim->set_memory($memory[0]);
-        return unless grep { defined } @memory;
+        # (one way in: its memory; the catch's $@ store, or the body's clearing
+        # of it, is a version of its own)
+        return unless @memory > 1 && grep { defined } @memory;
         $sim->set_memory($factory->make_unique('Phi', inputs => [@memory], region => $region, memory => 1));
     }
 
@@ -22916,7 +23041,7 @@ class SoN::FromOptree 0.01 {
         return unless $target
             && $target->isa('SoN::IR::Node::EntryDef')
             && defined $sim->memory;
-        my $write = $factory->make('EntryWrite',
+        my $write = $factory->${ \( $EXC_EDGE ? 'make_unique' : 'make' ) }('EntryWrite',
             binds  => $binds,
             inputs => [$target, $value], mem => $sim->memory);
         _place($sim, $write);

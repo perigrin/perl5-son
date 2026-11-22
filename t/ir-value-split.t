@@ -57,7 +57,7 @@ my @VALUE_CLASSES = qw(
 );
 
 my @CONTROL_CLASSES = qw(
-    If ListAssign Loop MemStart PackageMark Print Proj Region Return Start TryCatch
+    Exc If ListAssign Loop MemStart PackageMark Print Proj Region Return Start TryCatch
     Unwind VarDecl
 );
 
@@ -122,7 +122,7 @@ my @KNOWN_AT_98 = qw(
     BacktickExpr BinOp BitAnd BitOr BitXor Call CellParam CellRead CellWrite
     Coerce Complement
     CompoundAssign Concat Constant Count Defined DefinedOr Delete Divide ElemRestore EntryDef EntryWrite LocalAlias
-    EnvRead Exists ExpressionList FieldAccess HashLiteral If Interpolate
+    EnvRead Exc Exists ExpressionList FieldAccess HashLiteral If Interpolate
     Increment IsaOp LeftShift Length ListAppend ListAssign Loop Match MemStart Modulo
     MakeCell
     Multiply Negate Not NotMatch NumCmp NumEq NumGe NumGt NumLe NumLt NumNe
@@ -150,7 +150,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     # is stale" -- and only one of those is interesting. chalk hit the second
     # running this suite against a lib/ snapshot taken one commit before an
     # Exists node landed, and nearly attributed the red to its own change.
-    my $EXPECTED = 108;
+    my $EXPECTED = 109;
     if (scalar @names != $EXPECTED) {
         my %known = map { $_ => 1 } @KNOWN_AT_98;
         my @extra   = grep { !$known{$_} } @names;

@@ -26,6 +26,9 @@
 # 2026-11-22 (wire v2 stage 7, branch v2-s7): the read-unversioned:* entries are taken out of
 # every row -- V6 is hard (t/wire-verify-ratchet.t: zero in every source, this one included);
 # every other count as recorded at 5284360b.
+# 2026-11-22 (wire v2 stage 8, branch v2-s8): phi-arity:eval-join deleted from every graph
+# (18 graphs, 40 in all): no such class since the eval's catch is a way into its join. The
+# rest as recorded.
 # chalk at 27c376e2
 chalk	@Chalk/Bootstrap/BNF/Target/C:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/BNF/Target/Perl:main::__PROGRAM__	
@@ -402,12 +405,12 @@ chalk	@Chalk::Bootstrap::Earley::__DEFAULT_2
 chalk	@Chalk::Bootstrap::Earley::__DEFAULT_3	
 chalk	@Chalk::Bootstrap::Earley::__DEFAULT_4	
 chalk	@Chalk::Bootstrap::Earley::__DEFAULT_5	
-chalk	@Chalk::Bootstrap::Earley::_advance_from_completed	phi-arity:eval-join=1
+chalk	@Chalk::Bootstrap::Earley::_advance_from_completed	
 chalk	@Chalk::Bootstrap::Earley::_cell_rel_dists	
 chalk	@Chalk::Bootstrap::Earley::_chart_get	
 chalk	@Chalk::Bootstrap::Earley::_chart_has	
 chalk	@Chalk::Bootstrap::Earley::_chart_set	
-chalk	@Chalk::Bootstrap::Earley::_complete	phi-arity:eval-join=2
+chalk	@Chalk::Bootstrap::Earley::_complete	
 chalk	@Chalk::Bootstrap::Earley::_emit_parse_diagnostic	
 chalk	@Chalk::Bootstrap::Earley::_find_sync_point	
 chalk	@Chalk::Bootstrap::Earley::_force	
@@ -420,10 +423,10 @@ chalk	@Chalk::Bootstrap::Earley::_is_safe_set
 chalk	@Chalk::Bootstrap::Earley::_make_complete_context	
 chalk	@Chalk::Bootstrap::Earley::_make_scan_context	
 chalk	@Chalk::Bootstrap::Earley::_predict	
-chalk	@Chalk::Bootstrap::Earley::_queue_late	phi-arity:eval-join=1
-chalk	@Chalk::Bootstrap::Earley::_run_parse	phi-arity:eval-join=3
+chalk	@Chalk::Bootstrap::Earley::_queue_late	
+chalk	@Chalk::Bootstrap::Earley::_run_parse	
 chalk	@Chalk::Bootstrap::Earley::_run_parse::__ANON__:648:65	
-chalk	@Chalk::Bootstrap::Earley::_scan	phi-arity:eval-join=1
+chalk	@Chalk::Bootstrap::Earley::_scan	
 chalk	@Chalk::Bootstrap::Earley::_symbol_after_dot_for	
 chalk	@Chalk::Bootstrap::Earley::chart_origin_type	
 chalk	@Chalk::Bootstrap::Earley::chart_snapshot	
@@ -515,7 +518,7 @@ chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:235:16
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:3108:69	
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:315:68	
 chalk	@Chalk::Bootstrap::Perl::Actions::Atom	
-chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:1498:13	phi-arity:eval-join=1
+chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:1498:13	
 chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:183:9	
 chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::Attribute	
@@ -724,7 +727,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::C::__DEFAULT_25
 chalk	@Chalk::Bootstrap::Perl::Target::C::__DEFAULT_27	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_analyze_class	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_class_slug_for	
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_anon_sub_expr	phi-arity:eval-join=1
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_anon_sub_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_builtin_call	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_block_close_tail	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_block_open_head	
@@ -748,8 +751,8 @@ chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_empty_method
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_empty_sub	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_return_method	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_return_sub	
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_sub	phi-arity:eval-join=1
-chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files	phi-arity:eval-join=2
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_sub	
+chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files::__SORTCMP__:1	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files::__SORTCMP__:2	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_loop_condition_c	
@@ -976,7 +979,7 @@ chalk	@Chalk::Bootstrap::Semiring::FilterComposite::__DEFAULT_1
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::__DEFAULT_2	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_add_unpacked	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_annotation_semirings	
-chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_filter_compare	phi-arity:eval-join=2
+chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_filter_compare	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_filter_compare::__ANON__:355:8	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_has_real_annotation_difference	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_has_real_annotation_difference::__ANON__:234:16	
@@ -1029,7 +1032,7 @@ chalk	@Chalk::Bootstrap::Semiring::SemanticAction::on_merge
 chalk	@Chalk::Bootstrap::Semiring::SemanticAction::on_merge::__ANON__:112:26	
 chalk	@Chalk::Bootstrap::Semiring::SemanticAction::one	
 chalk	@Chalk::Bootstrap::Semiring::SemanticAction::one_with_control	
-chalk	@Chalk::Bootstrap::Semiring::SemanticAction::preserving_action_state	phi-arity:eval-join=1
+chalk	@Chalk::Bootstrap::Semiring::SemanticAction::preserving_action_state	
 chalk	@Chalk::Bootstrap::Semiring::SemanticAction::reset_cache	
 chalk	@Chalk::Bootstrap::Semiring::SemanticAction::set_factory	
 chalk	@Chalk::Bootstrap::Semiring::SemanticAction::set_mop	
@@ -2652,7 +2655,7 @@ chalk	@Chalk::Target::LLVM::Builder::_glob_of
 chalk	@Chalk::Target::LLVM::Builder::_hash_name	
 chalk	@Chalk::Target::LLVM::Builder::_head_aggregates	
 chalk	@Chalk::Target::LLVM::Builder::_is_feature_class	
-chalk	@Chalk::Target::LLVM::Builder::_is_list	phi-arity:eval-join=1
+chalk	@Chalk::Target::LLVM::Builder::_is_list	
 chalk	@Chalk::Target::LLVM::Builder::_list_use	
 chalk	@Chalk::Target::LLVM::Builder::_loop_scope	
 chalk	@Chalk::Target::LLVM::Builder::_loop_test	
@@ -2767,7 +2770,7 @@ chalk	@Chalk::Target::LLVM::Builder::item_refs::__ANON__:1016:30
 chalk	@Chalk::Target::LLVM::Builder::list_args_assign	
 chalk	@Chalk::Target::LLVM::Builder::list_choice	
 chalk	@Chalk::Target::LLVM::Builder::list_choice::__ANON__:1217:32	
-chalk	@Chalk::Target::LLVM::Builder::list_only	phi-arity:eval-join=1
+chalk	@Chalk::Target::LLVM::Builder::list_only	
 chalk	@Chalk::Target::LLVM::Builder::location	
 chalk	@Chalk::Target::LLVM::Builder::loop	
 chalk	@Chalk::Target::LLVM::Builder::loop_breaks	
@@ -2799,7 +2802,7 @@ chalk	@Chalk::Target::LLVM::Builder::reads_before
 chalk	@Chalk::Target::LLVM::Builder::reads_topic	
 chalk	@Chalk::Target::LLVM::Builder::refs_into_args	
 chalk	@Chalk::Target::LLVM::Builder::regex_capture	
-chalk	@Chalk::Target::LLVM::Builder::regex_fn	phi-arity:eval-join=1
+chalk	@Chalk::Target::LLVM::Builder::regex_fn	
 chalk	@Chalk::Target::LLVM::Builder::regex_list	
 chalk	@Chalk::Target::LLVM::Builder::regex_result	
 chalk	@Chalk::Target::LLVM::Builder::regex_split	
@@ -2825,7 +2828,7 @@ chalk	@Chalk::Target::LLVM::Builder::substr_write
 chalk	@Chalk::Target::LLVM::Builder::swapped	
 chalk	@Chalk::Target::LLVM::Builder::topic_alias	
 chalk	@Chalk::Target::LLVM::Builder::topic_raw	
-chalk	@Chalk::Target::LLVM::Builder::translit	phi-arity:eval-join=1
+chalk	@Chalk::Target::LLVM::Builder::translit	
 chalk	@Chalk::Target::LLVM::Builder::truth	
 chalk	@Chalk::Target::LLVM::Builder::type_of	
 chalk	@Chalk::Target::LLVM::Builder::uv_bits	
@@ -2839,7 +2842,7 @@ chalk	@Chalk::Target::LLVM::Lower::_choose
 chalk	@Chalk::Target::LLVM::Lower::_default_num_repr	
 chalk	@Chalk::Target::LLVM::Lower::_narrow_node	
 chalk	@Chalk::Target::LLVM::Lower::llvm_type_for	
-chalk	@Chalk::Target::LLVM::Lower::lower_program	phi-arity:eval-join=3
+chalk	@Chalk::Target::LLVM::Lower::lower_program	
 chalk	@Chalk::Target::LLVM::Lower::narrow_graphs	
 chalk	@Chalk::Target::LLVM::Lower::narrow_num	
 chalk	@Chalk::Target::LLVM::Node::AAppend::to_ll	
@@ -3106,7 +3109,7 @@ chalk	@Digest::base::b64digest
 chalk	@Digest::base::base64_padded_digest	
 chalk	@Digest::base::hexdigest	
 chalk	@Digest::base::reset	
-chalk	@DynaLoader::bootstrap	phi-arity:eval-join=1,record=1
+chalk	@DynaLoader::bootstrap	record=1
 chalk	@DynaLoader::bootstrap_inherit	record=1
 chalk	@DynaLoader::croak	
 chalk	@DynaLoader::dl_expandspec	
@@ -3206,7 +3209,7 @@ chalk	@JSON::PP::object_to_json
 chalk	@JSON::PP::pretty	
 chalk	@JSON::PP::sort_by	
 chalk	@JSON::PP::string	
-chalk	@JSON::PP::tag	phi-arity:eval-join=1
+chalk	@JSON::PP::tag	
 chalk	@JSON::PP::to_json	
 chalk	@JSON::PP::true	
 chalk	@JSON::PP::unblessed_bool	

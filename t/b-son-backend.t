@@ -51,7 +51,7 @@ subtest 'json output is parseable JSON with correct structure' => sub {
     my $data = eval { JSON::PP::decode_json($output) };
     ok(!$@, "JSON parses without error: $@");
     is($data->{version}, 2, "plain -MO=SoN,json writes wire v2");
-    is($data->{profile}, ["mem"], "the parts of v2 it obeys");
+    is($data->{profile}, ["mem", "eval"], "the parts of v2 it obeys");
     ok(exists $data->{methods}{'main::foo'}, 'JSON has main::foo method');
 };
 
