@@ -64,7 +64,8 @@ is $err->{mem_in}, $restore->{id}, '... after the restore';
 
 my ($join) = grep { $_->{op} eq 'Region' && defined f( $_, 'eval_entry' ) } @$nodes;
 is $join->{inputs}, [ $err->{id} ], 'the join: its one way in the catch\'s (the body always dies)';
-ok !( grep { $_->{op} eq 'Phi' && f( $_, 'region' ) == $join->{id} } @$nodes ), '... with no Phi (one way in)';
+ok !( grep { $_->{op} eq 'Phi' && f( $_, 'memory' ) && f( $_, 'region' ) == $join->{id} } @$nodes ), '... with no memory Phi (one way in)';
+ok !( grep { $_->{op} eq 'Phi' && f( $_, 'region' ) == $join->{id} && $_->{inputs}->@* != 1 } @$nodes ), '... and a Phi there has one input';
 my ($read) = grep { is_g( $_, 'g' ) && ( $_->{mem_in} // -1 ) == $err->{id} } @$nodes;
 ok $read, 'the read of $g after the eval is at the $@ store, after the restore';
 my ($ret) = grep { $_->{op} eq 'Return' } @$nodes;
@@ -94,5 +95,16 @@ is $ret->{mem_in}, $err->{id}, 'the Return names it too';
     ok $st, 'the store through the dereference' or last;
     my ($x) = grep { $_->{op} eq 'Exc' && $_->{inputs}[0] == $st->{id} } @$n3;
     ok $x, '... has its way out';
+}
+# AN EVAL IN LIST CONTEXT that dies gives the empty list, not undef: its
+# value is a Phi at the join even with the one way in (the catch's), whose
+# Region says the context -- the consumer makes () there.
+{
+    my ( $n4, $by4 ) = graph( wire(q{my @r = eval { die "x\n"; (1) }; print scalar(@r), "\n";}) );
+    my ($j) = grep { $_->{op} eq 'Region' && defined f( $_, 'eval_entry' ) } @$n4;
+    is f( $j, 'eval_want' ), 'list', 'a list eval\'s join says so';
+    my ($v) = grep { $_->{op} eq 'Phi' && !f( $_, 'memory' ) && f( $_, 'region' ) == $j->{id} } @$n4;
+    ok $v, '... and its value is a Phi there' or last;
+    is scalar $v->{inputs}->@*, scalar $j->{inputs}->@*, '... one input per way in';
 }
 done_testing;
