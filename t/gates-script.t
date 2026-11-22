@@ -23,6 +23,8 @@ like $list, qr/^ratchet\b.*wire-verify-baseline/m,                    q(the ratc
 # deparser's reader: its round trip over the corpus holds it.)
 like $list, qr/^ratchet\b.*corpus-roundtrip\.pl.*ROUNDTRIP >= 430.*EMITS_INVALID_PERL 0/m, "and the deparser's round trip";
 unlike $list, qr/downgrade|wire 1/,                                     'no v1 left in it';
+# (stage 9b: Braun's construction, proved against the scouts' wire)
+like $list, qr/^ratchet\b.*wire-braun-proof\.pl.*chalk's lib.*BRAUN-PROOF PASS/m, "and stage 9b's proof over corpus, probes and chalk's lib";
 like $list, qr/^ratchet\b.*chalk's lib per graph.*no wire dropped/m,   "chalk per graph (perigrin), and a dropped wire fails";
 
 done_testing;

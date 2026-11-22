@@ -26,6 +26,10 @@
 # took the place of stage 3's downgrade proof when the v1 writer went, stage
 # 6). One gate for both: chalk's t/bootstrap/gates-script.t holds the list.
 #
+# AND THE PROOF OF STAGE 9b, tools/wire-braun-proof.pl: over the corpus, the
+# probes and chalk's lib, each wire equals the stage 9a producer's (commit
+# $BRAUN_BASE, read from this repository's history) but for trivial Phis.
+#
 # THE SUITES LEAVE OUT THREE FILES that are gates of their own, so that none
 # runs twice: chalk's t/bootstrap/corpus/son-corpus-wide.t (corpus-gate) and
 # t/bootstrap/ir/audit-probes.t (probes), the producer's
@@ -38,6 +42,7 @@ set -u
 
 ROUNDTRIP_MIN=426
 DEPARSE_MIN=430
+BRAUN_BASE=006b485   # the stage 9a producer: the scouts, the `loop` profile
 GATE_GREEN_MIN=222
 GATES="producer-suite chalk-suite census corpus-gate probes ratchet"
 
@@ -48,7 +53,7 @@ chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files
 census          tools/corpus-llvm-roundtrip.pl: ROUNDTRIP >= $ROUNDTRIP_MIN, DIFFERS 0, LLI_FAIL 0
 corpus-gate     chalk t/bootstrap/corpus/son-corpus-wide.t: passes, gate-green >= $GATE_GREEN_MIN, paad/worklist.json untouched
 probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else
-ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib: no rule above t/data/wire-verify-baseline.tsv, chalk's lib per graph (t/data/wire-verify-chalk-graphs.tsv: no recorded graph rises), no wire dropped; and tools/corpus-roundtrip.pl (the deparser's round trip, through SoN::Wire::as_v1): ROUNDTRIP >= $DEPARSE_MIN, EMITS_INVALID_PERL 0
+ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib: no rule above t/data/wire-verify-baseline.tsv, chalk's lib per graph (t/data/wire-verify-chalk-graphs.tsv: no recorded graph rises), no wire dropped; tools/corpus-roundtrip.pl (the deparser's round trip, through SoN::Wire::as_v1): ROUNDTRIP >= $DEPARSE_MIN, EMITS_INVALID_PERL 0; and tools/wire-braun-proof.pl over corpus, probes and chalk's lib against $BRAUN_BASE: BRAUN-PROOF PASS
 EOF
 }
 
@@ -173,6 +178,17 @@ secs() {
     printf ' [%dm%02ds]' $((t / 60)) $((t % 60))
 }
 
+braun_line() {
+    local f=$OUT/braun.out
+    [ -f "$f" ] || { printf '%-15s PEND\n' braun-proof; return 1; }
+    local v=PASS
+    grep -q '^BRAUN-PROOF PASS' "$f" || v=MISS
+    printf '%-15s %s  (wire-braun-proof against %s) %s%s\n' '' $v $BRAUN_BASE \
+        "$(grep -E '^(corpus|probes|chalk) [A-Z-]+ [0-9]+$' "$f" | tr '\n' ';' | sed 's/;$//; s/;/; /g')" "$(secs braun)"
+    [ $v = PASS ] || grep -E '^(corpus|probes|chalk)\t' "$f" | head -12 | sed 's/^/                  /'
+    [ $v = PASS ]
+}
+
 summary() {
     local miss=0
     echo "gates: producer $(cat "$OUT/producer.at" 2>/dev/null)  chalk $(cat "$OUT/chalk.at" 2>/dev/null)  ($OUT)"
@@ -183,6 +199,7 @@ summary() {
     wanted probes         && { probes_line      || miss=1; }
     wanted ratchet        && { ratchet_line     || miss=1; }
     wanted ratchet        && { deparse_line     || miss=1; }
+    wanted ratchet        && { braun_line       || miss=1; }
     return $miss
 }
 
@@ -286,6 +303,17 @@ deparse() {
     grep -q '^ROUNDTRIP' "$OUT/deparse.tmp" && mv "$OUT/deparse.tmp" "$OUT/deparse.out"
 }
 
+# The 9a producer's lib is taken from this repository's history, so the proof
+# compares with the scouts' wire of the same files.
+braun() {
+    [ -f "$OUT/braun.out" ] && return 0
+    mkdir -p "$OUT/braun-base"
+    [ -d "$OUT/braun-base/lib" ] || git -C "$HERE" archive "$BRAUN_BASE" lib | tar -x -C "$OUT/braun-base" || return 1
+    ( cd "$P" && timeout 14400 perl tools/wire-braun-proof.pl --base "$OUT/braun-base/lib" --corpus --probes --chalk "$C" \
+        --wires "$OUT/braun-wires" --jobs "$1" --list ) > "$OUT/braun.tmp" 2>&1
+    grep -q '^BRAUN-PROOF' "$OUT/braun.tmp" && mv "$OUT/braun.tmp" "$OUT/braun.out"
+}
+
 # timed(gate, command...): run it, and add its seconds to $OUT/GATE.secs (a
 # resumed gate adds to what it had; a gate with nothing left to do adds 0).
 timed() {
@@ -301,7 +329,7 @@ timed() {
 # three more than it has, and after that for exactly what it has.
 bg=""
 if wanted corpus-gate; then timed corpus-gate corpus_gate & bg="$bg $!"; fi
-if wanted ratchet;     then { timed ratchet ratchet 2; timed deparse deparse; } & bg="$bg $!"; fi
+if wanted ratchet;     then { timed ratchet ratchet 2; timed deparse deparse; timed braun braun 2; } & bg="$bg $!"; fi
 sj=$JOBS
 wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/wire-verify-ratchet\.t$'
 wanted chalk-suite    && timed chalk-suite suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
