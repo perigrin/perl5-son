@@ -189,7 +189,7 @@ main::__PROGRAM__: {start: 0, returns: [116], nodes: [
   [EnvRead, {key: X}, ~, ~, Str], # 63
   [DefinedOr, ~, [63, 8], ~, Str], # 64
   [Coerce, {from_repr: Str, to_repr: Num}, [64], ~, Num], # 65
-  [Divide, {eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 14}, [62, 65], 59, Num], # 66
+  [Divide, {eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 14}, [62, 65], 59, Num], # 66
   [EntryWrite, ~, [60, 15], 66, Unknown, 59, true], # 67
   [Exc, ~, [66]], # 68
   [Region, {catch: true, eval_id: 1}, [68]], # 69
@@ -207,7 +207,7 @@ main::__PROGRAM__: {start: 0, returns: [116], nodes: [
   [EntryWrite, ~, [73, 15], 80, Unknown, 72, true], # 81
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 81], # 82
   [Constant, {const_type: string, value: "x\n"}, ~, ~, Str], # 83
-  [Unwind, {eval_id: 2, file: "/tmp/yDlL8UMbFX/case.pl", line: 16}, [83], 81, ~, 81], # 84
+  [Unwind, {eval_id: 2, file: "/tmp/mvrHQew3rs/case.pl", line: 16}, [83], 81, ~, 81], # 84
   [Exc, ~, [84]], # 85
   [Region, {catch: true, eval_id: 2}, [85]], # 86
   [EntryWrite, ~, [82, 85], 86, Unknown, 81, true], # 87

@@ -383,7 +383,7 @@ main::corpus_case: {start: 0, returns: [3], nodes: [
   [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: strict, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: strict, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -443,7 +443,7 @@ main::corpus_case: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, external: true, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::sum, package: main, param_names: [], xs: true}, [1, 2, 3], 0, Unknown, 4, true], # 5
+  [Call, {dispatch_kind: direct, external: true, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::sum, package: main, param_names: [], xs: true}, [1, 2, 3], 0, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -458,7 +458,7 @@ main::corpus_case: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: "List/Util.pm"}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: List::Util, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: List::Util, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -1668,7 +1668,7 @@ main::corpus_case: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Int, to_repr: Num}, [11], ~, Num], # 12
   [EntryDef, {package: main, sigil: $, symbol: b}, ~, ~, Int, 10], # 13
   [Coerce, {from_repr: Int, to_repr: Num}, [13], ~, Num], # 14
-  [Divide, {file: "/tmp/yDlL8UMbFX/case.pl", line: 7}, [12, 14], 10, Num], # 15
+  [Divide, {file: "/tmp/mvrHQew3rs/case.pl", line: 7}, [12, 14], 10, Num], # 15
   [Coerce, {from_repr: Num, to_repr: Str}, [15], ~, Str], # 16
   [Print, ~, [16, 3], 15, "Maybe[Boolean]"], # 17
   [Print, ~, [2, 3], 17, "Maybe[Boolean]"], # 18

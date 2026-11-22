@@ -83,7 +83,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Assign, ~, [5, 8], 0, Str, 4, true], # 9
   [EntryWrite, {binds: true}, [2, 3], 9, Unknown, 9, true], # 10
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 10], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::sq, package: main, param_names: [], want: list}, [11], 10, Unknown, 10, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::sq, package: main, param_names: [], want: list}, [11], 10, Unknown, 10, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Num, 12], # 15
@@ -216,7 +216,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::missing, package: main, param_names: [], want: list}, ~, 0, Unknown, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::missing, package: main, param_names: [], want: list}, ~, 0, Unknown, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6

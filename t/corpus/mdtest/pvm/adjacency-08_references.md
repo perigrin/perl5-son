@@ -90,7 +90,7 @@ main::__PROGRAM__: {start: 0, returns: [56], nodes: [
   [Ref, ~, [4], ~, ArrayRef], # 5
   [MemStart], # 6
   [Ref, {each: true}, [4], 0, List, 6, true], # 7
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, package: main, sigil: "@", strict: false}, [5], ~, Array, 7], # 8
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 11, package: main, sigil: "@", strict: false}, [5], ~, Array, 7], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
   [Constant, {const_type: code, value: main::twice}, ~, ~, Code], # 10
   [Ref, ~, [10], ~, CodeRef], # 11
@@ -103,24 +103,24 @@ main::__PROGRAM__: {start: 0, returns: [56], nodes: [
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 18
   [Constant, {const_type: integer, value: "40"}, ~, ~, Int], # 19
   [ArrayLiteral, ~, [18, 19], 7, ArrayRef], # 20
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, package: main, sigil: "@", strict: false}, [5], 20, Array, 7, true], # 21
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, package: main, sigil: "@", strict: false}, [5], 21, Array, 21, true], # 22
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, package: main, sigil: "@", strict: false}, [5], 22, Array, 22, true], # 23
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, package: main, sigil: "%", strict: false}, [17], 23, Hash, 23, true], # 24
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 11, package: main, sigil: "@", strict: false}, [5], 20, Array, 7, true], # 21
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 12, package: main, sigil: "@", strict: false}, [5], 21, Array, 21, true], # 22
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 13, package: main, sigil: "@", strict: false}, [5], 22, Array, 22, true], # 23
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 14, package: main, sigil: "%", strict: false}, [17], 23, Hash, 23, true], # 24
   [Subscript, {kind: array}, [5, 9], 24, Scalar, 24, true], # 25
   [Subscript, {kind: array}, [13, 14], ~, Scalar, 25], # 26
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 15, package: main, sigil: $, strict: false}, [26], 25, Scalar, 25, true], # 27
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 15, name: "", package: main, param_names: [], want: list}, [11, 12], 27, Unknown, 27, true], # 28
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 15, package: main, sigil: $, strict: false}, [26], 25, Scalar, 25, true], # 27
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 15, name: "", package: main, param_names: [], want: list}, [11, 12], 27, Unknown, 27, true], # 28
   [Subscript, {kind: array}, [8, 9], ~, Scalar, 28], # 29
   [Coerce, {from_repr: Unknown, to_repr: Str}, [29], ~, Str], # 30
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 31
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, package: main, sigil: "@", strict: false}, [5], ~, Array, 21], # 32
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 12, package: main, sigil: "@", strict: false}, [5], ~, Array, 21], # 32
   [Subscript, {kind: array}, [32, 14], ~, Scalar, 28], # 33
   [Coerce, {from_repr: Unknown, to_repr: Str}, [33], ~, Str], # 34
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, package: main, sigil: "@", strict: false}, [5], ~, Array, 22], # 35
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 13, package: main, sigil: "@", strict: false}, [5], ~, Array, 22], # 35
   [Subscript, {kind: array}, [35, 9], ~, Scalar, 28], # 36
   [Coerce, {from_repr: Unknown, to_repr: Str}, [36], ~, Str], # 37
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, package: main, sigil: "%", strict: false}, [17], ~, Hash, 23], # 38
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 14, package: main, sigil: "%", strict: false}, [17], ~, Hash, 23], # 38
   [Subscript, {kind: hash}, [38, 15], ~, Scalar, 28], # 39
   [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
   [Constant, {const_type: code, value: main::one}, ~, ~, Code], # 41

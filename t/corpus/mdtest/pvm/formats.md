@@ -74,7 +74,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "after write\n"}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::__FORMAT__:main::STDOUT, package: main, param_names: [], want: void}, ~, 0, Scalar, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::__FORMAT__:main::STDOUT, package: main, param_names: [], want: void}, ~, 0, Scalar, 3, true], # 4
   [Print, ~, [2], 4, "Maybe[Boolean]"], # 5
   [Return, {implicit: true}, [1], 5, ~, 4]]} # 6
 ```
@@ -152,7 +152,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [MemStart], # 7
   [EntryWrite, ~, [5, 6], 0, Unknown, 7, true], # 8
   [EntryWrite, ~, [3, 4], 8, Unknown, 8, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::__FORMAT__:main::STDOUT, package: main, param_names: [], want: void}, ~, 9, Scalar, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::__FORMAT__:main::STDOUT, package: main, param_names: [], want: void}, ~, 9, Scalar, 9, true], # 10
   [Print, ~, [2], 10, "Maybe[Boolean]"], # 11
   [Return, {implicit: true}, [1], 11, ~, 10]]} # 12
 ```

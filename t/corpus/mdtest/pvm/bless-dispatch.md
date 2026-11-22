@@ -168,7 +168,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], 2, Unknown, 4, true], # 5
-  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: hi, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: hi, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -280,7 +280,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [HashLiteral, ~, ~, 7, HashRef], # 8
   [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 9
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [8, 9], 8, Unknown, 7, true], # 10
-  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: Derived::SUPER::hi, package: Derived, param_names: [], want: list}, [10], 10, Unknown, 10, true], # 11
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: Derived::SUPER::hi, package: Derived, param_names: [], want: list}, [10], 10, Unknown, 10, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [12, 13], 11, "Maybe[Boolean]"], # 14
@@ -337,7 +337,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
   [RefType, ~, [4], ~, Str, 4], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [5, 6], 4, "Maybe[Boolean]"], # 7
@@ -506,8 +506,8 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Assign, ~, [8, 7], 7, Unknown, 7, true], # 9
   [PadAccess, {sigil: $, symbol: o}, ~, ~, Unknown, 9], # 10
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 11
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: can, package: main, param_names: [], want: scalar}, [10, 11], 9, Unknown, 9, true], # 12
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: "", package: main, param_names: [], want: list}, [12, 10], 12, Unknown, 12, true], # 13
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: can, package: main, param_names: [], want: scalar}, [10, 11], 9, Unknown, 9, true], # 12
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: "", package: main, param_names: [], want: list}, [12, 10], 12, Unknown, 12, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [14, 15], 13, "Maybe[Boolean]"], # 16
@@ -548,14 +548,14 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Constant, {const_type: string, value: Optimizer}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {class_name: Optimizer, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: collapse, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
+  [Call, {class_name: Optimizer, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: collapse, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 5], # 9
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 10
   [EntryWrite, ~, [9, 10], 5, Unknown, 5, true], # 11
-  [Call, {class_name: Optimizer, dispatch_kind: method, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: collapse, package: main, param_names: [], want: void}, [2], 11, Str, 11, true], # 12
+  [Call, {class_name: Optimizer, dispatch_kind: method, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: collapse, package: main, param_names: [], want: void}, [2], 11, Str, 11, true], # 12
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 12], # 13
   [EntryWrite, ~, [13, 10], 12, Unknown, 12, true], # 14
   [Exc, ~, [12]], # 15

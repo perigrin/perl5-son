@@ -49,6 +49,29 @@ join; a die of one value that may be a reference stores the value itself
 - **A body that died at its end has no way into the join**, but dead code
   after a die (ev12's `$g = 3`) is still pinned after the Unwind: that end
   stays a way in (dead), or its store is a version nothing reaches (V3/L4).
+- **A trivial Phi can carry meaning.** Dropping the eval's value Phi where
+  one way reached the join lost two things: the deparser's spelling of the
+  eval's value (it is found by that Phi), and the list context of a body
+  that always dies -- the empty list, read by T2 at the Phi from the
+  Region's `eval_want`. Without it `my @r = eval { die "x\n"; (1) }`
+  counted 1 for perl's 0. The value Phi stays (one input per way); only
+  memory Phis of one input, and the catch's one-edge Phi, are left out.
+  `my @r = eval { die "x\n" }` was that silent wrong at base; refused by
+  name now.
+- **A store can die by what it is made of.** T2 dies in a value it makes
+  while lowering a statement (`${$r[-1]} = 2` through a read-only literal):
+  `_pin` gives a node an Exc when a value off the chain it is made of names
+  where it dies (a deref, an element reference, a division).
+- **An Exc is a consumer that is no use.** T2's scans of a call's uses
+  (`_use_counts`, `_value_read`) counted it; and an Exc T2 never branches
+  to (a call whose die it does not check) is a way into the catch with no
+  pred -- `merge_at`'s list-slice pairing then shifted the next way onto it.
+- **Interval oracle ids moved again** (Phi#N renumbered by joins and
+  catches): re-recorded, compared modulo ids, own:edges' allowed losses
+  kept as recorded.
+- **Do not stash a tree a background run reads.** A `git stash` to compare
+  with base, while the census ran over the working tree, gave one case
+  NOJSON; and a census under load times a case out (013, 9 s alone).
 - **The deparser reads v1 through `as_v1`**, which drops each Exc, what
   stands on it, the catch, the `$@` store and the clearing at the body's end
   (the clearing became the body's last effect: `eval { push @a, 1 }` would

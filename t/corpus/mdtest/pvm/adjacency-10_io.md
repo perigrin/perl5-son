@@ -138,8 +138,8 @@ main::__PROGRAM__: {start: 0, returns: [55], nodes: [
   [Call, {dispatch_kind: builtin, name: select, param_names: []}, [31], 33, Unknown, 30], # 34
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [5], 34, Boolean, 30, true], # 35
   [EntryWrite, {binds: true}, [3, 4], 35, Unknown, 35, true], # 36
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 17, name: main::sq, package: main, param_names: [], want: list}, [2], 36, Unknown, 36, true], # 37
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 17, name: main::missing, package: main, param_names: [], want: list}, ~, 37, Unknown, 37, true], # 38
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 17, name: main::sq, package: main, param_names: [], want: list}, [2], 36, Unknown, 36, true], # 37
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 17, name: main::missing, package: main, param_names: [], want: list}, ~, 37, Unknown, 37, true], # 38
   [PadAccess, {sigil: $, symbol: buf}, ~, ~, Str, 38], # 39
   [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
   [Constant, {const_type: string, value: "ready "}, ~, ~, Str], # 41
@@ -175,6 +175,6 @@ main::__PROGRAM__::__ANON__:16:25: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
