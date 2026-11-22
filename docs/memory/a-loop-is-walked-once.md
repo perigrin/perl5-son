@@ -28,8 +28,30 @@ translated again (`_translate_from`). Depth 14: 28 s -> well under 2 s.
   list. So the scan asks what REBINDS a slot, not what changes it: not an
   element's container, an aggregate a builtin changes in place, a call's
   argument, a deref's operand, a foreach's list, a `my` the pass declares,
-  the pads under a substitution's subject. 482 corpus+probe loops: 507 extra
-  Phis -> 63, no miss.
+  the pads under a substitution's subject, an element's container under an
+  assignment's target (`($a[0], $a[1]) = ...` in a loop flattened @a's
+  literal after it: `1 2` for `4 5`, found by chalk's suite, not by the
+  proof's sets). A `my $s` the pass declares stays in (a C-style for's
+  `my $j` keeps its binding past its block); a `my @a`/`my %h` is out -- a
+  fresh aggregate each pass (chalk's LR0DFA `my %kernels`). 484 corpus+probe loops: 507 extra Phis
+  -> 23, no miss.
+- **A refusal that hangs on what the loop carries waits for the sealing.**
+  `$h{$k} //= []` into an aggregate the loop rebinds is refused (GAP); read
+  off the header's incomplete Phi, it refused LR0DFA's and Earley's loops,
+  where the Phi was trivial. The walk records it on the key
+  (`refuse_if_carried`), `_braun_seal` dies with it only for a Phi that stays
+  (t/loop-a-hash-the-pass-declares-is-not-carried.t).
+- **The proof over chalk's lib does not close** (17 rows, 10 graphs; five read
+  node by node, the other five differ by a `PostfixDeref '@'` and its users
+  alone): the 9a wire there carried the scouts' doing -- a
+  `mutated_aggregate` set by a scout before the real walk (Builder::_common_memo:
+  a copy versioned at the pre-loop memory), node-id collisions in
+  `%MUTATED_LITERALS` that moved with the counters (a pinned
+  `PostfixDeref '@'` on one side: object_to_json's `join(',', @results)`;
+  [[pending-bug-mutated-literals-keyed-by-node-id]]), and a `my @a` with no
+  Phi now lowered as a TernaryExpr where 9a built an If (check_nodes'
+  `@controls = ... if ...`). No WRONG in probes, census or the deparser's
+  round trip; corpus and probes are SAME up to the listed stamps.
 - **A mark on a node the walk made is lost when the node is forwarded.** An
   inner foreach writing @b's elements marked the outer loop's Phi for @b
   mutated; forwarded, the read after the loops flattened the literal (`5 6`

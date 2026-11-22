@@ -34,7 +34,8 @@ use PvmCorpus qw(read_cases);
 # not trivial: it carries the eval's value (stage 8).
 #
 # TWO DEPARTURES FROM "EQUAL", each counted and listed apart, and passing:
-#   SAME-BUT-STAMPS  the same graph but for stamps and lines. The scouts read
+#   SAME-BUT-STAMPS  the same graph but for stamps, the coercions they make,
+#                    and lines. The scouts read
 #                    placeholders where the walk reads the real bindings, so
 #                    the walk may know a type better (a Phi the scout left
 #                    unstamped); and a scout's walk left its last line for
@@ -146,6 +147,17 @@ my %REF = map { ( $_ => 1 ) } qw(region head eval_entry);
 sub signatures ( $g, $stamps = 1 ) {
     my %by  = map { ( $_->{id} => $_ ) } ( $g->{nodes} // [] )->@*;
     my $fwd = trivial( \%by );
+    # (stamp-blind, a coercion is what it coerces: whether one is made
+    # depends on the stamps at its two ends)
+    unless ($stamps) {
+        for my $c ( grep { $_->{op} eq 'Coerce' && !defined $_->{control_in} } values %by ) {
+            my $to = $c->{inputs}[0];
+            $to = $fwd->{$to} // $to;
+            $to = $by{$to}{inputs}[0] while defined $to && $by{$to} && $by{$to}{op} eq 'Coerce' && !defined $by{$to}{control_in};
+            $fwd->{ $c->{id} } = $fwd->{$to} // $to;
+        }
+        $_ = $fwd->{$_} // $_ for values %$fwd;
+    }
     my $r   = sub ($id) { defined $id && exists $fwd->{$id} ? $fwd->{$id} : $id };
     # (what nothing that runs uses is not compared: a value made and left)
     my %used;

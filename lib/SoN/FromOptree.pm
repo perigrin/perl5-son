@@ -14369,8 +14369,14 @@ class SoN::FromOptree 0.01 {
             # binding's class (a literal's element stamp, a known sub).
             # (nor a foreach's list: its elements are aliased, not its slot)
             $pname = 'enteriter' if $pname eq 'null' && $up->parent && ${ $up->parent } && $up->parent->name eq 'enteriter';
+            # (A `my @a` or `my %h` the pass declares is a fresh aggregate
+            # each pass, never carried -- a Phi for it made `$h{$k} //= []`
+            # into it "an aggregate rebound inside the loop", refused. A `my`
+            # scalar stays: a C-style for's `my $j` keeps its binding past
+            # its block.)
             $w{ $op->targ } = 1
                 if $name =~ /\Apad(?:sv|av|hv|any)\z/ && ( $mod || $intro )
+                && !( $intro && $name =~ /\Apad[ah]v\z/ )
                 && ( $intro || !( $IN_PLACE_OP{$pname} || $pname eq 'enteriter' || _is_call_argument_op($op)
                     || $pname =~ /\A(?:aelem|helem|aslice|hslice|kvaslice|kvhslice|multideref|rv2av|rv2hv|rv2sv)\z/ ) );
             # (a scalar's store; an element's, aelemfastlex_store, is memory)
@@ -14491,6 +14497,7 @@ class SoN::FromOptree 0.01 {
             $DIRTY = 1;
         }
         my @stay;
+        my $refuse = @LOOP_STACK ? $LOOP_STACK[-1]{refuse_if_carried} // {} : {};
         for my $k ( sort _scope_key_order keys %$phis ) {
             my $ph = $phis->{$k};
             my $b  = $post->{$k};
@@ -14503,7 +14510,10 @@ class SoN::FromOptree 0.01 {
                 # after the loops flattened the literal -- `5 6` for `5z 6z`)
                 $MUTATED_LITERALS{ $ph->inputs->[0]->resolved->id } = 1 if $MUTATED_LITERALS{ $ph->id };
             }
-            else { push @stay, $k }
+            else {
+                die $refuse->{$k} if $refuse->{$k};
+                push @stay, $k;
+            }
         }
         return \@stay;
     }
@@ -19649,12 +19659,15 @@ class SoN::FromOptree 0.01 {
             # died on "Can't use an array as a reference". So an element of
             # any aggregate the loop carries refuses. The plain store shares
             # the defect; the fix belongs to the reassign.
+            # (Which aggregates a loop carries is known at its sealing: a
+            # header Phi the pass never rebinds is forwarded, and its
+            # aggregate was never rebound. So the refusal waits there.)
             for my $f (@LOOP_STACK) {
                 my $phis = $f->{phis} or next;
-                die "GAP: `$spelling` into an element of an aggregate"
+                $f->{refuse_if_carried}{$_} //= "GAP: `$spelling` into an element of an aggregate"
                   . " rebound inside the loop\n"
-                    if grep { my $b = $sim->lookup($_);
-                              defined $b && $b == $root } keys %$phis;
+                    for grep { my $b = $sim->lookup($_);
+                               defined $b && $b == $root } keys %$phis;
             }
             # THE VALUE IS THE ELEMENT ITSELF, an alias the consumer reads
             # when it runs; the Phi below is a snapshot of it. That is the
