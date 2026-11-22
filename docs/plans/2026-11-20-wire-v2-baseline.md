@@ -445,3 +445,19 @@ ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new
 The Braun proof holds over the corpus and the probes (SAME up to the listed stamps; GAINED: ev8) and MISSES over chalk's lib: 17 rows, 10 graphs. Read node by node, they are the 9a wire's scout artifacts, not Braun's: a pinned `PostfixDeref '@'` on one side, from `%MUTATED_LITERALS` node-id collisions that moved with the counters (docs/memory/pending-bug-mutated-literals-keyed-by-node-id.md) or a scout's `mutated_aggregate` mark (Builder::_common_memo); and check_nodes' `@controls = ... if ...` as a TernaryExpr where 9a built an If (no Phi for a `my @a`). No WRONG anywhere (probes, census, the deparser's round trip, chalk's suite).
 
 The Braun proof is retired from `tools/gates.sh` in stage 10. It was a one-time check of the 9b producer against the 9a producer's wire (006b485), and this section records its result. Its 17 chalk-lib rows were judged leftovers of the 9a wire, not departures of Braun's: each is a place where the 9a scouts made the wire less precise (a `PostfixDeref '@'` pinned by a `%MUTATED_LITERALS` node-id collision or a scout's `mutated_aggregate` mark, and check_nodes' `@controls = ... if ...` built as an If with no Phi for a `my @a`), the 9b wire is the more precise of the two, and no gate found a wrong answer on either side. What the proof was for -- that Braun's walk builds the 9a graph up to trivial Phis -- is shown on the corpus and the probes; chalk's lib needs no proof against a wire that was the imprecise one. `tools/wire-braun-proof.pl` stays in `tools/` as the script that made this record.
+
+## 16. After stage 10
+
+Heads: producer `v2-s10` 4a3019c (no profile; every rule hard, held by name; Braun proof retired), c17f570 (census pin); chalk `v2-s10` 1cd20654 (loader refuses `profile`; L1-L9 on every wire; wire-verify.t all hard), 287e5da1 (chalk's grammar refuses an interpolated postfix deref: the refusal message joins). Held by name: probes pl13 `main::sw`, chalk's lib DynaLoader::bootstrap and bootstrap_inherit (V7 `record`); LocalAlias out of V2's store kinds (SoN::Verify, with its reason). The verifier over chalk's lib: 221 wires in the gated run, the two held its only violations (25158 graphs in a run before it, on the lib bar 287e5da1's one line).
+
+`tools/gates.sh` at producer c17f570, chalk 287e5da1 (a first run at 4a3019c / 1cd20654 missed one chalk test, t/grammar-conformance.t, on the refusal's interpolated `->@*`; everything else passed there):
+
+```
+producer-suite  PASS  779 files, 0 failing [10m02s]
+chalk-suite     PASS  929 files, 0 failing [70m08s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m38s]
+corpus-gate     PASS  gate-green 223 (>= 222), prove exit 0, paad/worklist.json untouched [5m01s]
+probes          PASS  LOUD=2 REFUSED=97 SAME=434; WRONG 0, SAME lost 0, changed 0 [1m22s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 3 [28m40s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [2m47s]
+```
