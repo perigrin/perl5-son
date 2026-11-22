@@ -36,6 +36,9 @@ while ( $src =~ /make(?:_unique)?\(\s*'(\w+)'\s*,((?:[^()]++|\((?2)\))*)\)/gs ) 
 # memory state, and the renderer knows such a merge by _is_memory, not by
 # this table. The loop exit's merge of its breaks' memory is one.
 delete $builds_with_memory{Phi};
+# A KIND SoN::Wire::as_v1 HANDS NO MEMORY (v1 had none for it: a Slice's last
+# input is its container) has no trailing edge to trim either.
+delete @builds_with_memory{ keys %SoN::Wire::NO_V1_MEMORY };
 
 ok scalar(keys %builds_with_memory) > 5,
     'the scrape found the construction sites'

@@ -1967,7 +1967,7 @@ class SoN::Deparse 0.01 {
                 && ( $self->_is_memory( $in[0] )
                      || ( $self->_is_barrier_call( $in[0] )
                           && !$in_eval_body->( $in[0] ) ) );
-            my $f = $n->{fields} // {};
+            my $f = { ( $n->{fields} // {} )->%*, _stamp => $n->{stamp} };
             next unless defined $f->{symbol} || defined $f->{field_index};
 
             # Walk forward from the read's version looking for a store to this
@@ -2030,7 +2030,13 @@ class SoN::Deparse 0.01 {
             next unless $shadowed;
             $stale_join{ $n->{id} } = $join if defined $join;
 
-            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            # A package or field aggregate read whole is held in an aggregate
+            # (W10: `$stale = @main::g` kept its count).
+            my $sg = ( $f->{sigil} // '$' ) =~ /\A[\@%]\z/ ? $f->{sigil}
+                   : defined $f->{field_index} && ( $f->{_stamp} // '' ) eq 'Array' ? '@'
+                   : defined $f->{field_index} && ( $f->{_stamp} // '' ) eq 'Hash'  ? '%'
+                   : '$';
+            $bound{ $n->{id} } = sprintf( '%sstale%d', $sg, $n->{id} );
             push @stale_reads, $n;
         }
         # A `local` save behind an effect, placed as a stale read is: after
@@ -3354,7 +3360,7 @@ class SoN::Deparse 0.01 {
                 $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
                 next;
             }
-            my $f = $n->{fields} // {};
+            my $f = { ( $n->{fields} // {} )->%*, _stamp => $n->{stamp} };
             my ( @queue, %seen, $anchor ) = ( ( $n->{inputs} // [] )->[0] );
             while ( @queue ) {
                 my $m = shift @queue;
@@ -4065,7 +4071,7 @@ class SoN::Deparse 0.01 {
             # and its `my $stale7 = $main::n;` never appeared while `$stale7`
             # was used twice.
             $out .= $self->_emit_statement($_, $next_of)
-                for (($after_effect{ $n->{id} } // [])->@*);
+                for $self->_after_their_inputs( ($after_effect{ $n->{id} } // [])->@* );
 
             # A binding pinned to this Region goes here: the loop it reads
             # from has closed, and nothing after it has read the target yet.
@@ -8830,27 +8836,73 @@ class SoN::Deparse 0.01 {
     # perl's warning depth and did not finish; a worklist with a cache does it
     # in one pass, and a node already on the stack contributes no evidence
     # (a loop-carried Phi names itself across the back edge).
+    # _after_their_inputs(@nodes) -> @nodes, each after any of the others its
+    # value is made of (through its inputs): two reads anchored at one effect
+    # where one reads the other's binding -- `scalar(%g)` of a `%g` read held
+    # in `%stale9` -- were spelled in id order of their passes, the count first.
+    method _after_their_inputs (@list) {
+        return @list if @list < 2;
+        my %in_list = map { $_->{id} => 1 } @list;
+        my %deps;
+        for my $n (@list) {
+            my ( @q, %seen ) = ( ( $n->{inputs} // [] )->@* );
+            while (@q) {
+                my $id = shift @q;
+                next if !defined $id || ref $id || $seen{$id}++;
+                if ( $in_list{$id} ) { $deps{ $n->{id} }{$id} = 1; next }
+                my $c = $nodes->{$id} or next;
+                next if defined $c->{control_in};
+                push @q, ( $c->{inputs} // [] )->@*;
+            }
+        }
+        my ( @out, %done );
+        my $place;
+        $place = sub ($n, $stack) {
+            return if $done{ $n->{id} } || $stack->{ $n->{id} }++;
+            $place->( $_, $stack ) for grep { $deps{ $n->{id} }{ $_->{id} } } @list;
+            push @out, $n unless $done{ $n->{id} }++;
+        };
+        $place->( $_, {} ) for @list;
+        return @out;
+    }
+
     # _writes_this_name($node, $fields) -- is $node a store to the variable the
     # EntryDef fields name? ONE definition, because the stale-read pass asks it
     # twice (forward, to find a store the read must not see; backward, to find
     # the store to anchor the temporary after) and a copy of a four-part name
     # comparison is exactly the shape this file has lost days to.
     method _writes_this_name ($n, $f) {
-        if ( defined $f->{field_index} ) {
-            return 0 unless $n && ( $n->{op} // '' ) eq 'Assign';
-            my $t = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } or return 0;
+        return 0 unless $n;
+        my $op = $n->{op} // '';
+        my $is_it = sub ($t) {
+            return 0 unless $t;
             my $tf = $t->{fields} // {};
-            return ( $t->{op} // '' ) eq 'FieldAccess'
-                && ( $tf->{field_index} // -1 ) == $f->{field_index}
-                && ( $tf->{field_stash} // '' ) eq ( $f->{field_stash} // '' ) ? 1 : 0;
+            if ( defined $f->{field_index} ) {
+                return ( $t->{op} // '' ) eq 'FieldAccess'
+                    && ( $tf->{field_index} // -1 ) == $f->{field_index}
+                    && ( $tf->{field_stash} // '' ) eq ( $f->{field_stash} // '' ) ? 1 : 0;
+            }
+            return 0 unless ( $t->{op} // '' ) eq 'EntryDef' && defined $tf->{symbol} && defined $f->{symbol};
+            return $tf->{symbol} eq $f->{symbol}
+                && ( $tf->{package} // '' ) eq ( $f->{package} // '' )
+                && ( $tf->{sigil}   // '' ) eq ( $f->{sigil}   // '' ) ? 1 : 0;
+        };
+        my $t = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 };
+        return 1 if ( defined $f->{field_index} ? $op eq 'Assign' : $op eq 'EntryWrite' ) && $is_it->($t);
+        # AN AGGREGATE READ WHOLE (a field's, a package array's or hash's) is
+        # changed in place too: a store into an element of it, a builtin that
+        # writes it (push, splice, delete ...).
+        my $whole = ( $f->{sigil} // '' ) =~ /\A[\@%]\z/
+            || defined $f->{field_index} && ( $f->{_stamp} // '' ) =~ /\A(?:Array|Hash)\z/;
+        return 0 unless $whole;
+        return 1 if $op =~ /\A(?:Delete|ElemRestore)\z/ && $is_it->($t);
+        return 1 if $op eq 'Call' && ( ( $n->{fields} // {} )->{dispatch_kind} // '' ) eq 'builtin'
+            && B::SoN::EffectTable::writes( ( $n->{fields} // {} )->{name} ) && $is_it->($t);
+        if ( $op =~ /\A(?:Assign|EntryWrite)\z/ && $t && ( $t->{op} // '' ) =~ /\A(?:Subscript|Slice)\z/ ) {
+            my $c = $nodes->{ ( $t->{op} eq 'Slice' ? $t->{inputs}[-1] : $t->{inputs}[0] ) // -1 };
+            return 1 if $is_it->($c);
         }
-        return 0 unless $n && ( $n->{op} // '' ) eq 'EntryWrite';
-        my $t = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } or return 0;
-        my $tf = $t->{fields} // {};
-        return 0 unless defined $tf->{symbol} && defined $f->{symbol};
-        return $tf->{symbol} eq $f->{symbol}
-            && ( $tf->{package} // '' ) eq ( $f->{package} // '' )
-            && ( $tf->{sigil}   // '' ) eq ( $f->{sigil}   // '' ) ? 1 : 0;
+        return 0;
     }
 
     # The id of the latest chain STORE that $n's value reads through pure

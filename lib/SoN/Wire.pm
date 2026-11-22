@@ -32,10 +32,14 @@ use JSON::PP ();
 # memory input, and says so by `memory_input`, which is what the deparser asks.
 my %FOLLOWS_ONLY = map { $_ => 1 } qw(Assign Return Unwind LocalAlias Match RegexMatch);
 my %ORDERED_READ = map { $_ => 1 } qw(Call Ref FieldAccess);
+# A Slice read none in v1 (its container was its last input); its version waits for
+# the deparser to read v2 (stage 11).
+our %NO_V1_MEMORY = map { $_ => 1 } qw(Slice);
 
 sub _operand ($n) {
     my $op = $n->{op};
     return 0 if $FOLLOWS_ONLY{$op};
+    return 0 if $NO_V1_MEMORY{$op};
     return 0 if $op eq 'Call' && ( ( $n->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin';
     return 0 if $ORDERED_READ{$op} && defined $n->{control_in} && !$n->{mem_out};
     return 1;

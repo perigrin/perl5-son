@@ -1239,9 +1239,13 @@ sub _readers_read_fields {
             } $graph->nodes->@*;
             next unless @stale;
 
+            # READ AT THE ACCESSOR'S ENTRY MEMORY (its one version: the body
+            # stores nothing), as a method's own field read is.
+            my ($mem) = grep { defined } map { $_->mem_in } ( $graph->returns // [] )->@*;
             my $field_read = $factory->make( 'FieldAccess',
                 field_index => $fidx,
                 field_stash => $cname,
+                ( $mem ? ( mem => $mem ) : () ),
             );
 
             for my $node ( $graph->nodes->@* ) {

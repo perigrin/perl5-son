@@ -52,15 +52,9 @@ unlike producer_stderr(q{our @a = (1); local @a = (5); print "@a\n";}),
     qr/GAP: local on a package array or hash/, 'a local at program scope is a store';
 
 
-# THE DEPARSER spells a returned value read from the local aggregate after the
-# restore; it refuses that by name, never the outer contents (B::SoN's graph
-# is right: T2 runs it).
-{
-    my $f = write_src(q{our @a = (1); sub g { local @a = (5); return "@a" } print g(), " @a\n";});
-    my $j = qx($^X -Ilib -MO=-q,SoN,json,not_package=SoN $f 2>/dev/null);
-    my $d = SoN::Deparse->new;
-    is $d->render(JSON::PP->new->decode($j)), undef, 'a value returned past the restore is not spelled';
-    like $d->gap // '', qr/GAP: a value read from a local aggregate/, '... refused by name';
-}
+# A VALUE RETURNED PAST THE RESTORE, read from the local aggregate: the read
+# names its version (wire v2 stage 7), so the deparser holds it before the
+# restore (it refused it by name while the read was the name itself).
+round_trips(q{our @a = (1); sub g { local @a = (5); return "@a" } print g(), " @a\n";});
 
 done_testing;

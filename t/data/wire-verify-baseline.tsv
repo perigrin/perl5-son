@@ -43,6 +43,10 @@
 # rows (corpus2, probes2) are the rows of the one wire, under the plain names; the
 # chalk rows of t/data/wire-verify-chalk-graphs.tsv likewise (chalk2 -> chalk).
 # probes #wires 486 -> 519: probes added since (ag1-ag33).
+# 2026-11-22 (wire v2, stage 7): every read-unversioned row 0 on corpus and probes (field,
+# my-aggregate, through-ref, package, package-aggregate-literal, external, args, cell; and the
+# verifier's V6 precision fixes). probes #wires 519 -> 542, #graphs 755 -> 799: ag34-ag43 (an
+# earlier branch) and rv1-rv13 (this stage) added.
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
@@ -58,18 +62,18 @@ corpus	phi-no-region	0
 corpus	phi:memory-as-value	0
 corpus	read-unversioned:args	0
 corpus	read-unversioned:cell	0
-corpus	read-unversioned:external	14
-corpus	read-unversioned:field	5
-corpus	read-unversioned:my-aggregate	24
-corpus	read-unversioned:package	7
+corpus	read-unversioned:external	0
+corpus	read-unversioned:field	0
+corpus	read-unversioned:my-aggregate	0
+corpus	read-unversioned:package	0
 corpus	read-unversioned:package-aggregate-literal	0
-corpus	read-unversioned:through-ref	35
+corpus	read-unversioned:through-ref	0
 corpus	record	0
 corpus	version-off-chain	0
 corpus	write-unreachable	0
-probes	#cases	519
-probes	#graphs	755
-probes	#wires	519
+probes	#cases	542
+probes	#graphs	799
+probes	#wires	542
 probes	allowed:param-bind	1
 probes	allowed:record	12
 probes	control-fork	0
@@ -80,14 +84,14 @@ probes	phi-arity	4
 probes	phi-arity:eval-join	25
 probes	phi-no-region	0
 probes	phi:memory-as-value	0
-probes	read-unversioned:args	1
-probes	read-unversioned:cell	1
-probes	read-unversioned:external	14
+probes	read-unversioned:args	0
+probes	read-unversioned:cell	0
+probes	read-unversioned:external	0
 probes	read-unversioned:field	0
-probes	read-unversioned:my-aggregate	2
-probes	read-unversioned:package	4
-probes	read-unversioned:package-aggregate-literal	5
-probes	read-unversioned:through-ref	1
+probes	read-unversioned:my-aggregate	0
+probes	read-unversioned:package	0
+probes	read-unversioned:package-aggregate-literal	0
+probes	read-unversioned:through-ref	0
 probes	record	1
 probes	version-off-chain	0
 probes	write-unreachable	0
