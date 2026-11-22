@@ -76,6 +76,17 @@ made of (`_after_their_inputs`: `scalar(%stale9)` before `%stale9 = ...`).
   took its version as a third input; V1 does not see an input.
 - **`!grep {...} @u ? 1 : 0` is `!grep {...} (@u ? 1 : 0)`.** It crashed the
   verifier on Carp: parenthesize a list operator before `?:`.
+- **A copy at a version is of what the PLACE lowers to**, not of the
+  variable's storage: `my ($c, @x) = @_` binds @x to the arguments, and the
+  first copy took an empty array (only chalk's suite saw it, t2-slurpy-args:
+  add rv14/rv15-like probes for every way a variable is bound).
+- **A new mem_in reaches as_v1's consumer too.** An external read handed
+  memory v1 never had made the deparser read an eval join's store as a value
+  (corpus 006, the round trip 430 -> 429): run the deparser census with the
+  producer change, not only the LLVM one.
+- **An oracle keyed by structure renames when a memory input changes**: 8
+  Count proofs "lost" and 8 "new", one for one; re-recorded, keeping the
+  allowed-lost rows as they were.
 - **Two runs of the machine at once double every time** (another session's
   `--jobs 8` put the load at 20): measure with fewer jobs, not more.
 
