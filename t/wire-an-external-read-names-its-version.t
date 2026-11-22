@@ -47,6 +47,8 @@ reads_at_versions( qr/\Aread-unversioned:external\z/,
     [ 'a file test (ef3)', q{print -e "/" ? "e" : "n", -d "/" ? "d" : "f", "\n";} ],
     [ 'tied of a tied scalar (corpus 416)',
         q{package T; sub TIESCALAR { bless {}, shift } sub FETCH { 7 } package main; tie my $t, "T"; print ref(tied $t), " $t\n";} ],
+    [ 'time after an eval that dies (corpus 006): its memory is the eval join',
+        q{our $e; eval { $e = 1; die "x\n" }; my $t = time; print "-t", $t > 1000000000 ? 1 : 0, "\n";} ],
     [ 'localtime of a constant (corpus 312)', q{my @t = localtime(0); print scalar(@t), "\n";} ],
 );
 

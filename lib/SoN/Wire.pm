@@ -4,6 +4,7 @@ package SoN::Wire;
 use v5.42.0;
 use Storable ();
 use JSON::PP ();
+use B::SoN::EffectTable ();
 
 # as_v1($wire) -> a new decoded wire in v1's shape; $wire is not touched.
 #
@@ -32,14 +33,16 @@ use JSON::PP ();
 # memory input, and says so by `memory_input`, which is what the deparser asks.
 my %FOLLOWS_ONLY = map { $_ => 1 } qw(Assign Return Unwind LocalAlias Match RegexMatch);
 my %ORDERED_READ = map { $_ => 1 } qw(Call Ref FieldAccess);
-# A Slice read none in v1 (its container was its last input); its version waits for
-# the deparser to read v2 (stage 11).
+# A Slice read none in v1 (its container was its last input), nor an external
+# read (below); their versions wait for the deparser to read v2 (stage 11).
 our %NO_V1_MEMORY = map { $_ => 1 } qw(Slice);
 
 sub _operand ($n) {
     my $op = $n->{op};
     return 0 if $FOLLOWS_ONLY{$op};
     return 0 if $NO_V1_MEMORY{$op};
+    # (nor an external read -- time, -e, stat: stage 7 gave it memory, v1 had none)
+    return 0 if $op eq 'Call' && ( B::SoN::EffectTable::reads_state( ( $n->{fields} // {} )->{name} ) // '' ) eq 'external';
     return 0 if $op eq 'Call' && ( ( $n->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin';
     return 0 if $ORDERED_READ{$op} && defined $n->{control_in} && !$n->{mem_out};
     return 1;
