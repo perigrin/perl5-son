@@ -44,6 +44,8 @@ $ENV{PERL_PERTURB_KEYS} = 0;
 # kind nobody runs. chalk's lib is opt-in -- SON_RATCHET=1, with SON_CHALK or
 # ~/dev/chalk -- because it is another repository's working tree and takes
 # half an hour.
+# V6 (read-unversioned:*) IS HARD (wire v2 stage 7): zero in every source,
+# chalk's lib included; the baseline has no row for it.
 # SON_WIRE_CACHE=DIR reuses wires (see the tool: a stale cache lies).
 # SON_WIRE_JOBS=N compiles N wires at a time.
 
@@ -85,6 +87,10 @@ for my $source ( sort keys %got ) {
     subtest $source => sub {
         my $g = $got{$source};
         is $g->{'#dropped'} // 0, 0, 'no wire dropped (a failed or timed-out compile)';
+        # EVERY READ NAMES A VERSION (V6), in every source and every graph:
+        # hard since wire v2 stage 7, not a row.
+        is [ map {"$_ $g->{$_}"} grep { /^read-unversioned:/ && $g->{$_} } sort keys %$g ], [],
+            'V6: no read without a memory version';
         if ( $source =~ /^chalk/ ) {
             note "$source: $_ $g->{$_}" for sort keys %$g;
             return;

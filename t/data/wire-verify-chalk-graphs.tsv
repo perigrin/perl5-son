@@ -23,7 +23,10 @@
 # read-unversioned:through-ref 0 -> 1 (stage 6 rewrote it: `mem => $g->{mem}` and
 # `$g->{mem} = ...` are one hash-consed Subscript, read and place -- stage 7's through-ref
 # class); 43 fell, 84 new (none with violations), 90 gone (WireUpgrade, is_placed, is_memory, ...).
-# chalk at 5284360b
+# 2026-11-22 (wire v2 stage 7, branch v2-s7): the read-unversioned:* entries are taken out of
+# every row -- V6 is hard (t/wire-verify-ratchet.t: zero in every source, this one included);
+# every other count as recorded at 5284360b.
+# chalk at 27c376e2
 chalk	@Chalk/Bootstrap/BNF/Target/C:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/BNF/Target/Perl:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/BNF/Target/XS/AST/CompositeNode:main::__PROGRAM__	
@@ -52,7 +55,7 @@ chalk	@Chalk/Bootstrap/Perl/Target/C:main::__PROGRAM__
 chalk	@Chalk/Bootstrap/Perl/Target/ClassRegistry:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/Perl/Target/EmitHelpers:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/Perl/Target/Perl:main::__PROGRAM__	
-chalk	@Chalk/Bootstrap/Runtime:main::__PROGRAM__	read-unversioned:external=2
+chalk	@Chalk/Bootstrap/Runtime:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/Semiring/Boolean:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/Semiring/FilterComposite:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/Semiring/Precedence:main::__PROGRAM__	
@@ -239,23 +242,23 @@ chalk	@Chalk::Bootstrap::BNF::Target::C::__DEFAULT_1
 chalk	@Chalk::Bootstrap::BNF::Target::C::__DEFAULT_2	
 chalk	@Chalk::Bootstrap::BNF::Target::C::__DEFAULT_6	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_c_string::__SUBSTREPL__:1	
-chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_completion_maps	read-unversioned:my-aggregate=2
+chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_completion_maps	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_completion_maps::__ANON__:19:61	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_completion_maps::__ANON__:32:57	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_core_item_arrays	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_core_item_arrays::__ANON__:19:17	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_core_item_arrays::__ANON__:32:45	
-chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_goto_tables	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_goto_tables	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_goto_tables::__ANON__:19:33	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_goto_tables::__ANON__:32:45	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_header	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_nullable_set	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_nullable_set::__ANON__:19:21	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_nullable_set::__ANON__:32:25	
-chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_prediction_tables	read-unversioned:my-aggregate=2
+chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_prediction_tables	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_prediction_tables::__ANON__:19:54	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_prediction_tables::__ANON__:32:50	
-chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_terminal_maps	read-unversioned:my-aggregate=2
+chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_terminal_maps	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_terminal_maps::__ANON__:19:63	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_emit_terminal_maps::__ANON__:32:59	
 chalk	@Chalk::Bootstrap::BNF::Target::C::_normalize_rule::__ANON__:39:3	
@@ -263,11 +266,11 @@ chalk	@Chalk::Bootstrap::BNF::Target::C::generate
 chalk	@Chalk::Bootstrap::BNF::Target::C::generate::__ANON__:50:15	
 chalk	@Chalk::Bootstrap::BNF::Target::C::generate_distribution	
 chalk	@Chalk::Bootstrap::BNF::Target::C::generate_runtime_header	
-chalk	@Chalk::Bootstrap::BNF::Target::C::last_dfa_state_count	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::C::last_rule_count	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::C::last_terminal_patterns	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::C::last_dfa_state_count	
+chalk	@Chalk::Bootstrap::BNF::Target::C::last_rule_count	
+chalk	@Chalk::Bootstrap::BNF::Target::C::last_terminal_patterns	
 chalk	@Chalk::Bootstrap::BNF::Target::Perl::_emit_body	
-chalk	@Chalk::Bootstrap::BNF::Target::Perl::_emit_expression	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::BNF::Target::Perl::_emit_expression	
 chalk	@Chalk::Bootstrap::BNF::Target::Perl::_emit_rule	
 chalk	@Chalk::Bootstrap::BNF::Target::Perl::_emit_symbol	
 chalk	@Chalk::Bootstrap::BNF::Target::Perl::_escape_single_quote	
@@ -275,26 +278,26 @@ chalk	@Chalk::Bootstrap::BNF::Target::Perl::_postamble
 chalk	@Chalk::Bootstrap::BNF::Target::Perl::_preamble	
 chalk	@Chalk::Bootstrap::BNF::Target::Perl::generate	
 chalk	@Chalk::Bootstrap::BNF::Target::Perl::generate_distribution	
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::CompositeNode::children	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::CompositeNode::children	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::CompositeNode::emit	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Module::emit	
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Module::module	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Module::package	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Module::module	
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Module::package	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Node::emit	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Preamble::emit	
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Statement::code	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Statement::code	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::Statement::emit	
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::VarDecl::emit	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::VarDecl::name	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::VarDecl::type	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::VarDecl::emit	
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::VarDecl::name	
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::VarDecl::type	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::__DEFAULT_0	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::__DEFAULT_3	
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::body	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::body	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::emit	
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::name	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::params	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::return_type	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::BNF::Target::XS::__ADJUST_0	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::name	
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::params	
+chalk	@Chalk::Bootstrap::BNF::Target::XS::AST::XSUB::return_type	
+chalk	@Chalk::Bootstrap::BNF::Target::XS::__ADJUST_0	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::__DEFAULT_0	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::__DEFAULT_1	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::__DEFAULT_2	
@@ -311,9 +314,9 @@ chalk	@Chalk::Bootstrap::BNF::Target::XS::_module_path_prefix
 chalk	@Chalk::Bootstrap::BNF::Target::XS::_strip_terminal_delimiters	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::generate	
 chalk	@Chalk::Bootstrap::BNF::Target::XS::generate_distribution	
-chalk	@Chalk::Bootstrap::BNF::Target::XS::module_name	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Bindings::Sentinel::loop	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Bindings::Sentinel::pre_value	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::BNF::Target::XS::module_name	
+chalk	@Chalk::Bootstrap::Bindings::Sentinel::loop	
+chalk	@Chalk::Bootstrap::Bindings::Sentinel::pre_value	
 chalk	@Chalk::Bootstrap::Bindings::__ADJUST_0	
 chalk	@Chalk::Bootstrap::Bindings::__DEFAULT_0	
 chalk	@Chalk::Bootstrap::Bindings::_remove_trivial_phi	
@@ -342,39 +345,39 @@ chalk	@Chalk::Bootstrap::Context::__DEFAULT_6
 chalk	@Chalk::Bootstrap::Context::__DEFAULT_7	
 chalk	@Chalk::Bootstrap::Context::__DEFAULT_8	
 chalk	@Chalk::Bootstrap::Context::__DEFAULT_9	
-chalk	@Chalk::Bootstrap::Context::annotations	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::bindings	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::cfg_state	read-unversioned:my-aggregate=1
-chalk	@Chalk::Bootstrap::Context::children	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::control_head	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Context::annotations	
+chalk	@Chalk::Bootstrap::Context::bindings	
+chalk	@Chalk::Bootstrap::Context::cfg_state	
+chalk	@Chalk::Bootstrap::Context::children	
+chalk	@Chalk::Bootstrap::Context::control_head	
 chalk	@Chalk::Bootstrap::Context::duplicate	
 chalk	@Chalk::Bootstrap::Context::duplicate::__ANON__:59:2	
-chalk	@Chalk::Bootstrap::Context::error	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Context::error	
 chalk	@Chalk::Bootstrap::Context::extend	
 chalk	@Chalk::Bootstrap::Context::extract	
-chalk	@Chalk::Bootstrap::Context::factory	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::focus	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::graph	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::is_ambiguous	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::is_zero	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Context::factory	
+chalk	@Chalk::Bootstrap::Context::focus	
+chalk	@Chalk::Bootstrap::Context::graph	
+chalk	@Chalk::Bootstrap::Context::is_ambiguous	
+chalk	@Chalk::Bootstrap::Context::is_zero	
 chalk	@Chalk::Bootstrap::Context::leaves	
 chalk	@Chalk::Bootstrap::Context::leaves::__ANON__:66:3	
-chalk	@Chalk::Bootstrap::Context::mop	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::position	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Context::rule	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Context::mop	
+chalk	@Chalk::Bootstrap::Context::position	
+chalk	@Chalk::Bootstrap::Context::rule	
 chalk	@Chalk::Bootstrap::Context::scanned_text	
 chalk	@Chalk::Bootstrap::Context::scope	
-chalk	@Chalk::Bootstrap::Context::token	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Context::token	
 chalk	@Chalk::Bootstrap::Context::walk	
 chalk	@Chalk::Bootstrap::Context::walk_acc	
-chalk	@Chalk::Bootstrap::Context::walk_all	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Context::walk_all	
 chalk	@Chalk::Bootstrap::CoreItemIndex::__DEFAULT_10	
 chalk	@Chalk::Bootstrap::CoreItemIndex::advance	
 chalk	@Chalk::Bootstrap::CoreItemIndex::alt_idx_for	
 chalk	@Chalk::Bootstrap::CoreItemIndex::alt_idxs	
 chalk	@Chalk::Bootstrap::CoreItemIndex::build_from_grammar	
 chalk	@Chalk::Bootstrap::CoreItemIndex::completions	
-chalk	@Chalk::Bootstrap::CoreItemIndex::count	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::CoreItemIndex::count	
 chalk	@Chalk::Bootstrap::CoreItemIndex::dot_for	
 chalk	@Chalk::Bootstrap::CoreItemIndex::dots	
 chalk	@Chalk::Bootstrap::CoreItemIndex::id_for	
@@ -409,7 +412,7 @@ chalk	@Chalk::Bootstrap::Earley::_emit_parse_diagnostic
 chalk	@Chalk::Bootstrap::Earley::_find_sync_point	
 chalk	@Chalk::Bootstrap::Earley::_force	
 chalk	@Chalk::Bootstrap::Earley::_format_parse_error	
-chalk	@Chalk::Bootstrap::Earley::_free_unreachable_rows	read-unversioned:field=1,read-unversioned:my-aggregate=2
+chalk	@Chalk::Bootstrap::Earley::_free_unreachable_rows	
 chalk	@Chalk::Bootstrap::Earley::_has_waiters	
 chalk	@Chalk::Bootstrap::Earley::_is_complete_id	
 chalk	@Chalk::Bootstrap::Earley::_is_processed_here	
@@ -424,11 +427,11 @@ chalk	@Chalk::Bootstrap::Earley::_scan	phi-arity:eval-join=1
 chalk	@Chalk::Bootstrap::Earley::_symbol_after_dot_for	
 chalk	@Chalk::Bootstrap::Earley::chart_origin_type	
 chalk	@Chalk::Bootstrap::Earley::chart_snapshot	
-chalk	@Chalk::Bootstrap::Earley::core_index	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Earley::core_index	
 chalk	@Chalk::Bootstrap::Earley::debug_chart_origins	
 chalk	@Chalk::Bootstrap::Earley::errors	
 chalk	@Chalk::Bootstrap::Earley::gc_stats	
-chalk	@Chalk::Bootstrap::Earley::grammar	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Earley::grammar	
 chalk	@Chalk::Bootstrap::Earley::lr0_dfa	
 chalk	@Chalk::Bootstrap::Earley::parse	
 chalk	@Chalk::Bootstrap::Earley::parse_value	
@@ -436,7 +439,7 @@ chalk	@Chalk::Bootstrap::Earley::processed_table
 chalk	@Chalk::Bootstrap::Earley::profile_data	
 chalk	@Chalk::Bootstrap::Earley::reset_parse_state	
 chalk	@Chalk::Bootstrap::Earley::scan_stats	
-chalk	@Chalk::Bootstrap::Earley::semiring	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Earley::semiring	
 chalk	@Chalk::Bootstrap::Earley::waiting_core_ids	
 chalk	@Chalk::Bootstrap::IR::Optimizer::collapse_phi	
 chalk	@Chalk::Bootstrap::IR::Optimizer::collapse_region	
@@ -449,13 +452,13 @@ chalk	@Chalk::Bootstrap::LR0DFA::_compute_prediction_closure
 chalk	@Chalk::Bootstrap::LR0DFA::_is_nullable_symbol	
 chalk	@Chalk::Bootstrap::LR0DFA::_register_state	
 chalk	@Chalk::Bootstrap::LR0DFA::build	
-chalk	@Chalk::Bootstrap::LR0DFA::core_index	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::LR0DFA::grammar	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::LR0DFA::core_index	
+chalk	@Chalk::Bootstrap::LR0DFA::grammar	
 chalk	@Chalk::Bootstrap::LR0DFA::is_nullable	
 chalk	@Chalk::Bootstrap::LR0DFA::prediction_items_for	
-chalk	@Chalk::Bootstrap::LR0DFA::rule_table	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::LR0DFA::rule_table	
 chalk	@Chalk::Bootstrap::LR0DFA::state	
-chalk	@Chalk::Bootstrap::LR0DFA::state_count	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::LR0DFA::state_count	
 chalk	@Chalk::Bootstrap::LR0DFA::states	
 chalk	@Chalk::Bootstrap::Optimizer::DCE::_mark_reachable	
 chalk	@Chalk::Bootstrap::Optimizer::DCE::name	
@@ -496,10 +499,10 @@ chalk	@Chalk::Bootstrap::Optimizer::add_pass
 chalk	@Chalk::Bootstrap::Optimizer::optimize	
 chalk	@Chalk::Bootstrap::Optimizer::pass_count	
 chalk	@Chalk::Bootstrap::Perl::Actions::AdjustBlock	
-chalk	@Chalk::Bootstrap::Perl::Actions::AdjustBlock::__ANON__:183:5	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::AdjustBlock::__ANON__:183:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::AdjustBlock::__ANON__:274:9	
 chalk	@Chalk::Bootstrap::Perl::Actions::AnonymousSub	
-chalk	@Chalk::Bootstrap::Perl::Actions::AnonymousSub::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::AnonymousSub::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::ArrayConstructor	
 chalk	@Chalk::Bootstrap::Perl::Actions::ArrayConstructor::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::ArrayVariable	
@@ -507,43 +510,43 @@ chalk	@Chalk::Bootstrap::Perl::Actions::ArrayVariable::__ANON__:323:7
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignOp	
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignOp::__ANON__:223:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression	
-chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:235:16	
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:3108:69	
 chalk	@Chalk::Bootstrap::Perl::Actions::AssignmentExpression::__ANON__:315:68	
 chalk	@Chalk::Bootstrap::Perl::Actions::Atom	
 chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:1498:13	phi-arity:eval-join=1
-chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:183:9	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:183:9	
 chalk	@Chalk::Bootstrap::Perl::Actions::Atom::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::Attribute	
-chalk	@Chalk::Bootstrap::Perl::Actions::Attribute::__ANON__:211:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::Attribute::__ANON__:211:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::AttributeList	
 chalk	@Chalk::Bootstrap::Perl::Actions::AttributeList::__ANON__:195:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::BareKey	
 chalk	@Chalk::Bootstrap::Perl::Actions::BareKey::__ANON__:223:3	
 chalk	@Chalk::Bootstrap::Perl::Actions::BinaryExpression	
-chalk	@Chalk::Bootstrap::Perl::Actions::BinaryExpression::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::BinaryExpression::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::BinaryExpression::__ANON__:223:20	
 chalk	@Chalk::Bootstrap::Perl::Actions::BinaryOp	
 chalk	@Chalk::Bootstrap::Perl::Actions::BinaryOp::__ANON__:223:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::Block	
 chalk	@Chalk::Bootstrap::Perl::Actions::Block::__ANON__:195:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::Block::__ANON__:292:30	
-chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression	read-unversioned:my-aggregate=1
-chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression::__ANON__:183:5	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression	
+chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression::__ANON__:183:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression::__ANON__:223:53	
 chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression::__ANON__:274:28	
 chalk	@Chalk::Bootstrap::Perl::Actions::CircumfixDeref	
 chalk	@Chalk::Bootstrap::Perl::Actions::CircumfixDeref::__ANON__:195:8	
 chalk	@Chalk::Bootstrap::Perl::Actions::CircumfixDeref::__ANON__:223:12	
 chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock	
-chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock::__ANON__:259:88	
 chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock::__ANON__:274:15	
 chalk	@Chalk::Bootstrap::Perl::Actions::CompoundStatement	
 chalk	@Chalk::Bootstrap::Perl::Actions::CompoundStatement::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::ElsifChain	
-chalk	@Chalk::Bootstrap::Perl::Actions::ElsifChain::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::ElsifChain::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::ElsifChain::__ANON__:274:15	
 chalk	@Chalk::Bootstrap::Perl::Actions::ElsifChain::__ANON__:315:22	
 chalk	@Chalk::Bootstrap::Perl::Actions::Expression	
@@ -556,11 +559,11 @@ chalk	@Chalk::Bootstrap::Perl::Actions::FatCommaWord
 chalk	@Chalk::Bootstrap::Perl::Actions::FatCommaWord::__ANON__:223:3	
 chalk	@Chalk::Bootstrap::Perl::Actions::ForStatement	
 chalk	@Chalk::Bootstrap::Perl::Actions::ForStatement::__ANON__:165:86	
-chalk	@Chalk::Bootstrap::Perl::Actions::ForStatement::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::ForStatement::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::ForStatement::__ANON__:274:19	
 chalk	@Chalk::Bootstrap::Perl::Actions::ForStatement::__ANON__:315:28	
 chalk	@Chalk::Bootstrap::Perl::Actions::ForeachStatement	
-chalk	@Chalk::Bootstrap::Perl::Actions::ForeachStatement::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::ForeachStatement::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::ForeachStatement::__ANON__:274:18	
 chalk	@Chalk::Bootstrap::Perl::Actions::ForeachStatement::__ANON__:315:25	
 chalk	@Chalk::Bootstrap::Perl::Actions::HashConstructor	
@@ -568,7 +571,7 @@ chalk	@Chalk::Bootstrap::Perl::Actions::HashConstructor::__ANON__:195:4
 chalk	@Chalk::Bootstrap::Perl::Actions::HashVariable	
 chalk	@Chalk::Bootstrap::Perl::Actions::HashVariable::__ANON__:323:7	
 chalk	@Chalk::Bootstrap::Perl::Actions::IfStatement	
-chalk	@Chalk::Bootstrap::Perl::Actions::IfStatement::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::IfStatement::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::IfStatement::__ANON__:223:27	
 chalk	@Chalk::Bootstrap::Perl::Actions::IfStatement::__ANON__:274:22	
 chalk	@Chalk::Bootstrap::Perl::Actions::IfStatement::__ANON__:315:37	
@@ -582,9 +585,9 @@ chalk	@Chalk::Bootstrap::Perl::Actions::Literal
 chalk	@Chalk::Bootstrap::Perl::Actions::Literal::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::Literal::__ANON__:249:9	
 chalk	@Chalk::Bootstrap::Perl::Actions::MethodCall	
-chalk	@Chalk::Bootstrap::Perl::Actions::MethodCall::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::MethodCall::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::MethodDefinition	
-chalk	@Chalk::Bootstrap::Perl::Actions::MethodDefinition::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::MethodDefinition::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::MethodDefinition::__ANON__:274:16	
 chalk	@Chalk::Bootstrap::Perl::Actions::ModuleName	
 chalk	@Chalk::Bootstrap::Perl::Actions::ModuleName::__ANON__:223:5	
@@ -593,21 +596,21 @@ chalk	@Chalk::Bootstrap::Perl::Actions::NumericLiteral::__ANON__:223:5
 chalk	@Chalk::Bootstrap::Perl::Actions::ParenExpr	
 chalk	@Chalk::Bootstrap::Perl::Actions::ParenExpr::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::PhaserBlock	
-chalk	@Chalk::Bootstrap::Perl::Actions::PhaserBlock::__ANON__:183:9	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::PhaserBlock::__ANON__:183:9	
 chalk	@Chalk::Bootstrap::Perl::Actions::PhaserBlock::__ANON__:274:13	
-chalk	@Chalk::Bootstrap::Perl::Actions::PostfixDeref	read-unversioned:my-aggregate=1
-chalk	@Chalk::Bootstrap::Perl::Actions::PostfixDeref::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::PostfixDeref	
+chalk	@Chalk::Bootstrap::Perl::Actions::PostfixDeref::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixDeref::__ANON__:223:45	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixExpression	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixExpression::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixIncDec	
-chalk	@Chalk::Bootstrap::Perl::Actions::PostfixIncDec::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::PostfixIncDec::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixModifier	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixModifier::__ANON__:195:8	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixModifier::__ANON__:223:23	
 chalk	@Chalk::Bootstrap::Perl::Actions::PostfixModifier::__ANON__:315:15	
 chalk	@Chalk::Bootstrap::Perl::Actions::PreIncDec	
-chalk	@Chalk::Bootstrap::Perl::Actions::PreIncDec::__ANON__:183:7	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::PreIncDec::__ANON__:183:7	
 chalk	@Chalk::Bootstrap::Perl::Actions::Program	
 chalk	@Chalk::Bootstrap::Perl::Actions::Program::__ANON__:195:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::Program::__ANON__:259:34	
@@ -630,11 +633,11 @@ chalk	@Chalk::Bootstrap::Perl::Actions::SignatureParam::__ANON__:195:4
 chalk	@Chalk::Bootstrap::Perl::Actions::SignatureParams	
 chalk	@Chalk::Bootstrap::Perl::Actions::SignatureParams::__ANON__:195:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::SimpleStatement	
-chalk	@Chalk::Bootstrap::Perl::Actions::SimpleStatement::__ANON__:183:6	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::SimpleStatement::__ANON__:183:6	
 chalk	@Chalk::Bootstrap::Perl::Actions::SimpleStatement::__ANON__:195:13	
 chalk	@Chalk::Bootstrap::Perl::Actions::SlurpySignatureParam	
 chalk	@Chalk::Bootstrap::Perl::Actions::SlurpySignatureParam::__ANON__:228:5	
-chalk	@Chalk::Bootstrap::Perl::Actions::StatementItem	read-unversioned:through-ref=1
+chalk	@Chalk::Bootstrap::Perl::Actions::StatementItem	
 chalk	@Chalk::Bootstrap::Perl::Actions::StatementItem::__ANON__:150:36	
 chalk	@Chalk::Bootstrap::Perl::Actions::StatementItem::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::StatementList	
@@ -642,7 +645,7 @@ chalk	@Chalk::Bootstrap::Perl::Actions::StatementList::__ANON__:195:5
 chalk	@Chalk::Bootstrap::Perl::Actions::StringLiteral	
 chalk	@Chalk::Bootstrap::Perl::Actions::StringLiteral::__ANON__:223:7	
 chalk	@Chalk::Bootstrap::Perl::Actions::SubroutineDefinition	
-chalk	@Chalk::Bootstrap::Perl::Actions::SubroutineDefinition::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::SubroutineDefinition::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::SubroutineDefinition::__ANON__:274:22	
 chalk	@Chalk::Bootstrap::Perl::Actions::Subscript	
 chalk	@Chalk::Bootstrap::Perl::Actions::Subscript::__ANON__:195:7	
@@ -653,7 +656,7 @@ chalk	@Chalk::Bootstrap::Perl::Actions::TernaryExpression
 chalk	@Chalk::Bootstrap::Perl::Actions::TernaryExpression::__ANON__:195:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::TryCatchStatement	
 chalk	@Chalk::Bootstrap::Perl::Actions::TryCatchStatement::__ANON__:150:30	
-chalk	@Chalk::Bootstrap::Perl::Actions::TryCatchStatement::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::TryCatchStatement::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::TryCatchStatement::__ANON__:274:15	
 chalk	@Chalk::Bootstrap::Perl::Actions::TryCatchStatement::__ANON__:315:23	
 chalk	@Chalk::Bootstrap::Perl::Actions::UnaryExpression	
@@ -663,12 +666,12 @@ chalk	@Chalk::Bootstrap::Perl::Actions::UnaryExpression::__ANON__:228:16
 chalk	@Chalk::Bootstrap::Perl::Actions::UnaryExpression::__ANON__:249:23	
 chalk	@Chalk::Bootstrap::Perl::Actions::UnaryExpression::__ANON__:315:28	
 chalk	@Chalk::Bootstrap::Perl::Actions::UseDeclaration	
-chalk	@Chalk::Bootstrap::Perl::Actions::UseDeclaration::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::UseDeclaration::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::UseDeclaration::__ANON__:200:17	
 chalk	@Chalk::Bootstrap::Perl::Actions::Variable	
 chalk	@Chalk::Bootstrap::Perl::Actions::Variable::__ANON__:323:7	
 chalk	@Chalk::Bootstrap::Perl::Actions::VariableDeclaration	
-chalk	@Chalk::Bootstrap::Perl::Actions::VariableDeclaration::__ANON__:183:9	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::VariableDeclaration::__ANON__:183:9	
 chalk	@Chalk::Bootstrap::Perl::Actions::VariableDeclaration::__ANON__:315:46	
 chalk	@Chalk::Bootstrap::Perl::Actions::VariableList	
 chalk	@Chalk::Bootstrap::Perl::Actions::VariableList::__ANON__:195:5	
@@ -677,7 +680,7 @@ chalk	@Chalk::Bootstrap::Perl::Actions::VariableList::__ANON__:249:12
 chalk	@Chalk::Bootstrap::Perl::Actions::Version	
 chalk	@Chalk::Bootstrap::Perl::Actions::Version::__ANON__:223:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::WhileStatement	
-chalk	@Chalk::Bootstrap::Perl::Actions::WhileStatement::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::WhileStatement::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::WhileStatement::__ANON__:274:20	
 chalk	@Chalk::Bootstrap::Perl::Actions::WhileStatement::__ANON__:315:26	
 chalk	@Chalk::Bootstrap::Perl::Actions::__ADJUST_0	
@@ -686,8 +689,8 @@ chalk	@Chalk::Bootstrap::Perl::Actions::__ANON__::__ANON__:223:7
 chalk	@Chalk::Bootstrap::Perl::Actions::__ANON__::__ANON__:315:6	
 chalk	@Chalk::Bootstrap::Perl::Actions::_bare_word_call	
 chalk	@Chalk::Bootstrap::Perl::Actions::_bare_word_call::__ANON__:223:14	
-chalk	@Chalk::Bootstrap::Perl::Actions::_collect_constants::__ANON__:183:4	read-unversioned:my-aggregate=1
-chalk	@Chalk::Bootstrap::Perl::Actions::_collect_ir_values::__ANON__:183:4	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::_collect_constants::__ANON__:183:4	
+chalk	@Chalk::Bootstrap::Perl::Actions::_collect_ir_values::__ANON__:183:4	
 chalk	@Chalk::Bootstrap::Perl::Actions::_double_quoted	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_escape	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_one_part	
@@ -699,16 +702,16 @@ chalk	@Chalk::Bootstrap::Perl::Actions::_dq_parts::__ANON__:1841:12
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_parts::__ANON__:1844:15	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_value	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_value::__ANON__:223:4	
-chalk	@Chalk::Bootstrap::Perl::Actions::_finalize_body_graph	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::_finalize_body_graph	
 chalk	@Chalk::Bootstrap::Perl::Actions::_finalize_body_graph::__ANON__:1179:48	
-chalk	@Chalk::Bootstrap::Perl::Actions::_find_constant::__ANON__:183:3	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::_find_constant::__ANON__:183:3	
 chalk	@Chalk::Bootstrap::Perl::Actions::_list_declaration	
 chalk	@Chalk::Bootstrap::Perl::Actions::_list_declaration::__ANON__:195:8	
 chalk	@Chalk::Bootstrap::Perl::Actions::_publish_list_declaration	
 chalk	@Chalk::Bootstrap::Perl::Actions::_publish_list_declaration::__ANON__:315:17	
 chalk	@Chalk::Bootstrap::Perl::Actions::_resolve_from_scope::__ANON__:315:6	
 chalk	@Chalk::Bootstrap::Perl::Actions::_wire_postfix_body	
-chalk	@Chalk::Bootstrap::Perl::Actions::_wire_postfix_body::__ANON__:183:20	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::_wire_postfix_body::__ANON__:183:20	
 chalk	@Chalk::Bootstrap::Perl::Actions::_wire_postfix_body::__ANON__:315:14	
 chalk	@Chalk::Bootstrap::Perl::Actions::class_bindings	
 chalk	@Chalk::Bootstrap::Perl::Actions::control_rebuild_enabled	
@@ -722,7 +725,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::C::__DEFAULT_27
 chalk	@Chalk::Bootstrap::Perl::Target::C::_analyze_class	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_class_slug_for	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_anon_sub_expr	phi-arity:eval-join=1
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_builtin_call	read-unversioned:through-ref=1
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_builtin_call	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_block_close_tail	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_block_open_head	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_catch_head	
@@ -731,13 +734,13 @@ chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_foreach_head
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_if_head	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_schedule_item	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_while_head	
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_complex_method	read-unversioned:my-aggregate=1
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_complex_sub_body	read-unversioned:my-aggregate=1
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_defop_for_xs_wrapper	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_complex_method	
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_complex_sub_body	
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_defop_for_xs_wrapper	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_init_expr	
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_interp_return	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_interp_return	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_method	
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_method_call_expr	read-unversioned:field=1,read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_method_call_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_scheduled_c_body	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_die_method	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_die_sub	
@@ -746,7 +749,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_empty_sub
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_return_method	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_simple_return_sub	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_sub	phi-arity:eval-join=1
-chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files	phi-arity:eval-join=2,read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files	phi-arity:eval-join=2
 chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files::__SORTCMP__:1	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_generate_c_files::__SORTCMP__:2	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_loop_condition_c	
@@ -755,10 +758,10 @@ chalk	@Chalk::Bootstrap::Perl::Target::C::_polymorphic_dispatch
 chalk	@Chalk::Bootstrap::Perl::Target::C::generate	
 chalk	@Chalk::Bootstrap::Perl::Target::C::generate_xs_wrapper	
 chalk	@Chalk::Bootstrap::Perl::Target::ClassRegistry::all_classes	
-chalk	@Chalk::Bootstrap::Perl::Target::ClassRegistry::compilation_order	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Target::ClassRegistry::compilation_order	
 chalk	@Chalk::Bootstrap::Perl::Target::ClassRegistry::register	
 chalk	@Chalk::Bootstrap::Perl::Target::ClassRegistry::resolve	
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::__ADJUST_0	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::__ADJUST_0	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::__DEFAULT_10	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::__DEFAULT_14	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::__DEFAULT_17	
@@ -767,7 +770,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::__DEFAULT_5
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::__DEFAULT_9	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_body_contains_bare_return	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_body_contains_return	
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_build_cfg_lookup	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_build_cfg_lookup	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_build_exists_delete_native	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_build_field_index_map	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_calls_uncompiled_my_subs	
@@ -842,7 +845,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_needs_eval_fallback
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_push_regex_static	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_record_repair	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_refuse_unmodelled_interp_part	
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_repair_stale_merge	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_repair_stale_merge	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_reset_cfg_lookup	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_reset_class_scope_vars	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_reset_class_subs	
@@ -869,27 +872,27 @@ chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_sv_true_wrap
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_uses_class_scope_vars	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_wrap_retval	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_xs_c_type_for	
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_cfg_if	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_cfg_loop	read-unversioned:my-aggregate=3
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_cfg_if	
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_cfg_loop	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_cfg_phi_if	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_cfg_try_catch	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_field_access	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_from_cfg_state	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::emit_struct_ref	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::generate_typedefs	
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::module_name	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::repair_counters	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::module_name	
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::repair_counters	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::reset_repair_counters	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::set_struct_schemas	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::__DEFAULT_1	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_build_cfg_lookup	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_build_cfg_lookup	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_anon_sub_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_array_ref_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_backtick_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_binary_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_block_open_head	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_body_block	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_builtin_call	read-unversioned:through-ref=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_builtin_call	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_catch_head	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_class_decl	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_compound_assign	
@@ -911,16 +914,16 @@ chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_list_rhs
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_list_store	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_loop_jump	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_method_call_expr	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_method_decl	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_adjust	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_method_decl	
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_adjust	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_class	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_field	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_import	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_method	read-unversioned:field=1
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_sub	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_method	
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_mop_sub	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_node	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_operand	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_operand_list	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_operand_list	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_postfix_deref_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_program	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_regex_match	
@@ -929,7 +932,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_return_stmt
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_schedule_item	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_scheduled_body	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_struct_ref_expr	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_sub_decl	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_sub_decl	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_subscript_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_ternary_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_unary_expr	
@@ -938,7 +941,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_var_decl
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_var_decl_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_emit_while_head	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_escape_single_quote	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_format_subscript	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_format_subscript	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_generate_from_schedule	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_generate_with_cfg	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_indent_block	
@@ -950,8 +953,8 @@ chalk	@Chalk::Bootstrap::Perl::Target::Perl::_scan_aggregate_vars
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_scope_body_vars	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_scope_body_vars_mop	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::_scope_params	
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::_toposort_classes	read-unversioned:my-aggregate=1
-chalk	@Chalk::Bootstrap::Perl::Target::Perl::emit_cfg_if	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::_toposort_classes	
+chalk	@Chalk::Bootstrap::Perl::Target::Perl::emit_cfg_if	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::emit_cfg_loop	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::emit_cfg_phi_if	
 chalk	@Chalk::Bootstrap::Perl::Target::Perl::emit_cfg_try_catch	
@@ -972,8 +975,8 @@ chalk	@Chalk::Bootstrap::Semiring::FilterComposite::__ANON__::__ANON__:234:6
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::__DEFAULT_1	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::__DEFAULT_2	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_add_unpacked	
-chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_annotation_semirings	read-unversioned:through-ref=1
-chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_filter_compare	phi-arity:eval-join=2,read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_annotation_semirings	
+chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_filter_compare	phi-arity:eval-join=2
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_filter_compare::__ANON__:355:8	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_has_real_annotation_difference	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::_has_real_annotation_difference::__ANON__:234:16	
@@ -991,14 +994,14 @@ chalk	@Chalk::Bootstrap::Semiring::FilterComposite::multiply::__ANON__:207:8
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::one	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::one_with_control	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::reset_cache	
-chalk	@Chalk::Bootstrap::Semiring::FilterComposite::semirings	read-unversioned:field=1
+chalk	@Chalk::Bootstrap::Semiring::FilterComposite::semirings	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::tie_log	
 chalk	@Chalk::Bootstrap::Semiring::FilterComposite::zero	
-chalk	@Chalk::Bootstrap::Semiring::Precedence::_complete_prec	read-unversioned:through-ref=1
+chalk	@Chalk::Bootstrap::Semiring::Precedence::_complete_prec	
 chalk	@Chalk::Bootstrap::Semiring::Precedence::_do_lookup	
 chalk	@Chalk::Bootstrap::Semiring::Precedence::_intern	
 chalk	@Chalk::Bootstrap::Semiring::Precedence::_prec_multiply	
-chalk	@Chalk::Bootstrap::Semiring::Precedence::_scan_multiply	read-unversioned:through-ref=2
+chalk	@Chalk::Bootstrap::Semiring::Precedence::_scan_multiply	
 chalk	@Chalk::Bootstrap::Semiring::Precedence::_slot_val	
 chalk	@Chalk::Bootstrap::Semiring::Precedence::add	
 chalk	@Chalk::Bootstrap::Semiring::Precedence::is_zero	
@@ -1099,7 +1102,7 @@ chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Expression
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Expression::__ANON__:115:6	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Expression::__ANON__:64:4	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::ExpressionList	
-chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::ExpressionList::__ANON__:156:7	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::ExpressionList::__ANON__:156:7	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::ExpressionList::__ANON__:240:15	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::ExpressionList::__ANON__:251:22	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::ExpressionList::__ANON__:262:18	
@@ -1121,7 +1124,7 @@ chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::QwLiteral
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Signature	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Signature::__ANON__:64:4	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Subscript	
-chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Subscript::__ANON__:156:8	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Subscript::__ANON__:156:8	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Subscript::__ANON__:363:4	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::Subscript::__ANON__:388:11	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::TernaryExpression	
@@ -1146,16 +1149,16 @@ chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_get_prev_item_types::_
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_get_rightmost_type::__ANON__:19:2	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_get_rightmost_type::__ANON__:65:3	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_is_lone_word::__ANON__:377:3	
-chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_left_ends_in_bare_hash_op::__ANON__:156:5	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_left_ends_in_bare_hash_op::__ANON__:156:5	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_left_ends_in_bare_hash_op::__ANON__:170:11	
-chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_left_is_bare_word::__ANON__:156:5	read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_left_is_bare_word::__ANON__:156:5	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::_left_is_bare_word::__ANON__:170:11	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::dispatch	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::lookup_method_return	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::register_method_return	
 chalk	@Chalk::Bootstrap::Semiring::TypeInferenceActions::reset_method_registry	
 chalk	@Chalk::Bootstrap::Terminal::match	
-chalk	@Chalk::Bootstrap::Terminal::match_at	read-unversioned:through-ref=1
+chalk	@Chalk::Bootstrap::Terminal::match_at	
 chalk	@Chalk::Grammar::BNF::Actions::Alternatives	
 chalk	@Chalk::Grammar::BNF::Actions::Atom	
 chalk	@Chalk::Grammar::BNF::Actions::Comment	
@@ -1190,7 +1193,7 @@ chalk	@Chalk::Grammar::Perl::PrecedenceTable::low_word_level
 chalk	@Chalk::Grammar::Perl::PrecedenceTable::named_unary_assoc	
 chalk	@Chalk::Grammar::Perl::PrecedenceTable::named_unary_level	
 chalk	@Chalk::Grammar::Perl::PrecedenceTable::not_level	
-chalk	@Chalk::Grammar::Perl::TypeLibrary::_ancestors	read-unversioned:through-ref=1
+chalk	@Chalk::Grammar::Perl::TypeLibrary::_ancestors	
 chalk	@Chalk::Grammar::Perl::TypeLibrary::_is_variadic	
 chalk	@Chalk::Grammar::Perl::TypeLibrary::_maybe_of	
 chalk	@Chalk::Grammar::Perl::TypeLibrary::_operand_types	
@@ -1210,36 +1213,36 @@ chalk	@Chalk::Grammar::Perl::TypeLibrary::meet_types
 chalk	@Chalk::Grammar::Perl::TypeLibrary::narrow_type	
 chalk	@Chalk::Grammar::Perl::TypeLibrary::observed_operand_repr	
 chalk	@Chalk::Grammar::Perl::TypeLibrary::operand_repr_for_ir_op	
-chalk	@Chalk::Grammar::Perl::TypeLibrary::signature_conflicts	read-unversioned:my-aggregate=1
+chalk	@Chalk::Grammar::Perl::TypeLibrary::signature_conflicts	
 chalk	@Chalk::Grammar::Perl::TypeLibrary::type_bitset	
 chalk	@Chalk::Grammar::Perl::TypeLibrary::type_satisfies	
 chalk	@Chalk::Grammar::Rule::alternative_count	
-chalk	@Chalk::Grammar::Rule::expressions	read-unversioned:field=1
+chalk	@Chalk::Grammar::Rule::expressions	
 chalk	@Chalk::Grammar::Rule::is_terminal_rule	
-chalk	@Chalk::Grammar::Rule::name	read-unversioned:field=1
+chalk	@Chalk::Grammar::Rule::name	
 chalk	@Chalk::Grammar::Rule::to_string	
 chalk	@Chalk::Grammar::Symbol::__DEFAULT_2	
 chalk	@Chalk::Grammar::Symbol::goto_key	
 chalk	@Chalk::Grammar::Symbol::is_quantified	
 chalk	@Chalk::Grammar::Symbol::is_reference	
 chalk	@Chalk::Grammar::Symbol::is_terminal	
-chalk	@Chalk::Grammar::Symbol::quantifier	read-unversioned:field=1
+chalk	@Chalk::Grammar::Symbol::quantifier	
 chalk	@Chalk::Grammar::Symbol::to_string	
-chalk	@Chalk::Grammar::Symbol::type	read-unversioned:field=1
-chalk	@Chalk::Grammar::Symbol::value	read-unversioned:field=1
-chalk	@Chalk::IR::Analysis::_all_graph_nodes	read-unversioned:my-aggregate=1
+chalk	@Chalk::Grammar::Symbol::type	
+chalk	@Chalk::Grammar::Symbol::value	
+chalk	@Chalk::IR::Analysis::_all_graph_nodes	
 chalk	@Chalk::IR::Analysis::_answer_sub_defined	
 chalk	@Chalk::IR::Analysis::_arg_is_self_call	
 chalk	@Chalk::IR::Analysis::_assert_value_nodes_are_typed	
-chalk	@Chalk::IR::Analysis::_attach_autoload	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Analysis::_attach_autoload	
 chalk	@Chalk::IR::Analysis::_class_of_self_chains	
 chalk	@Chalk::IR::Analysis::_class_of_self_chains::__ANON__:1764:5	
 chalk	@Chalk::IR::Analysis::_classes_in_parent_order	
 chalk	@Chalk::IR::Analysis::_classes_in_parent_order::__ANON__:4101:6	
 chalk	@Chalk::IR::Analysis::_coercion_exists	
-chalk	@Chalk::IR::Analysis::_control_chain_nodes	read-unversioned:my-aggregate=1
-chalk	@Chalk::IR::Analysis::_ctor_arg_reprs	read-unversioned:my-aggregate=1
-chalk	@Chalk::IR::Analysis::_element_repr	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Analysis::_control_chain_nodes	
+chalk	@Chalk::IR::Analysis::_ctor_arg_reprs	
+chalk	@Chalk::IR::Analysis::_element_repr	
 chalk	@Chalk::IR::Analysis::_element_store_values	
 chalk	@Chalk::IR::Analysis::_element_stores	
 chalk	@Chalk::IR::Analysis::_element_stores::__SORTCMP__:1	
@@ -1262,7 +1265,7 @@ chalk	@Chalk::IR::Analysis::_iv_modelled
 chalk	@Chalk::IR::Analysis::_iv_mul	
 chalk	@Chalk::IR::Analysis::_iv_of	
 chalk	@Chalk::IR::Analysis::_iv_operand	
-chalk	@Chalk::IR::Analysis::_iv_step	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Analysis::_iv_step	
 chalk	@Chalk::IR::Analysis::_iv_sub	
 chalk	@Chalk::IR::Analysis::_iv_transfer	
 chalk	@Chalk::IR::Analysis::_iv_within	
@@ -1270,7 +1273,7 @@ chalk	@Chalk::IR::Analysis::_join_repr
 chalk	@Chalk::IR::Analysis::_may_start_undef	
 chalk	@Chalk::IR::Analysis::_narrow_unknown_coercions	
 chalk	@Chalk::IR::Analysis::_propagate_computed_reprs	
-chalk	@Chalk::IR::Analysis::_replay_classes	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Analysis::_replay_classes	
 chalk	@Chalk::IR::Analysis::_required_operand_repr	
 chalk	@Chalk::IR::Analysis::_resolve_aggregate	
 chalk	@Chalk::IR::Analysis::_resolve_direct_calls	
@@ -1280,7 +1283,7 @@ chalk	@Chalk::IR::Analysis::_seed_direct_call_arg_reprs::__ANON__:2225:7
 chalk	@Chalk::IR::Analysis::_seed_direct_call_arg_reprs::__SORTCMP__:1	
 chalk	@Chalk::IR::Analysis::_stamp_field_access_reprs	
 chalk	@Chalk::IR::Analysis::_stamp_is_absent	
-chalk	@Chalk::IR::Analysis::_stamp_list_assign_targets	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Analysis::_stamp_list_assign_targets	
 chalk	@Chalk::IR::Analysis::_stamp_method_call_reprs	
 chalk	@Chalk::IR::Analysis::_stamp_method_call_reprs::__SORTCMP__:1	
 chalk	@Chalk::IR::Analysis::_static_miss	
@@ -1290,13 +1293,13 @@ chalk	@Chalk::IR::Analysis::_type_calls_returning_self
 chalk	@Chalk::IR::Analysis::_type_calls_through_named_refs	
 chalk	@Chalk::IR::Analysis::_type_run_time_method_calls	
 chalk	@Chalk::IR::Analysis::_unwrap_ref	
-chalk	@Chalk::IR::Analysis::_widen_shared_scalar_reads	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Analysis::_widen_shared_scalar_reads	
 chalk	@Chalk::IR::Analysis::decimal_is_iv	
 chalk	@Chalk::IR::Analysis::hydrate	
 chalk	@Chalk::IR::Analysis::int_interval	
 chalk	@Chalk::IR::Analysis::int_is_iv	
 chalk	@Chalk::IR::Analysis::int_within	
-chalk	@Chalk::IR::Analysis::integer_intervals	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Analysis::integer_intervals	
 chalk	@Chalk::IR::Analysis::is_fractional_constant	
 chalk	@Chalk::IR::Analysis::narrow_return_type	
 chalk	@Chalk::IR::Analysis::not_a_value_type	
@@ -1310,22 +1313,22 @@ chalk	@Chalk::IR::ClassInfo::__DEFAULT_5
 chalk	@Chalk::IR::ClassInfo::__DEFAULT_6	
 chalk	@Chalk::IR::ClassInfo::__DEFAULT_7	
 chalk	@Chalk::IR::ClassInfo::add_consumer	
-chalk	@Chalk::IR::ClassInfo::adjusts	read-unversioned:field=1
-chalk	@Chalk::IR::ClassInfo::body	read-unversioned:field=1
-chalk	@Chalk::IR::ClassInfo::fields	read-unversioned:field=1
+chalk	@Chalk::IR::ClassInfo::adjusts	
+chalk	@Chalk::IR::ClassInfo::body	
+chalk	@Chalk::IR::ClassInfo::fields	
 chalk	@Chalk::IR::ClassInfo::id	
-chalk	@Chalk::IR::ClassInfo::methods	read-unversioned:field=1
-chalk	@Chalk::IR::ClassInfo::name	read-unversioned:field=1
-chalk	@Chalk::IR::ClassInfo::parent	read-unversioned:field=1
-chalk	@Chalk::IR::ClassInfo::parent_ci	read-unversioned:field=1
-chalk	@Chalk::IR::ClassInfo::subs	read-unversioned:field=1
+chalk	@Chalk::IR::ClassInfo::methods	
+chalk	@Chalk::IR::ClassInfo::name	
+chalk	@Chalk::IR::ClassInfo::parent	
+chalk	@Chalk::IR::ClassInfo::parent_ci	
+chalk	@Chalk::IR::ClassInfo::subs	
 chalk	@Chalk::IR::FieldInfo::__DEFAULT_1	
 chalk	@Chalk::IR::FieldInfo::__DEFAULT_2	
 chalk	@Chalk::IR::FieldInfo::add_consumer	
-chalk	@Chalk::IR::FieldInfo::attributes	read-unversioned:field=1
-chalk	@Chalk::IR::FieldInfo::default_value	read-unversioned:field=1
+chalk	@Chalk::IR::FieldInfo::attributes	
+chalk	@Chalk::IR::FieldInfo::default_value	
 chalk	@Chalk::IR::FieldInfo::id	
-chalk	@Chalk::IR::FieldInfo::name	read-unversioned:field=1
+chalk	@Chalk::IR::FieldInfo::name	
 chalk	@Chalk::IR::Graph::TypedInvariant::_arm_proj_of	
 chalk	@Chalk::IR::Graph::TypedInvariant::_check_repr_for_position	
 chalk	@Chalk::IR::Graph::TypedInvariant::_conforms	
@@ -1339,19 +1342,19 @@ chalk	@Chalk::IR::Graph::__DEFAULT_2
 chalk	@Chalk::IR::Graph::__DEFAULT_3	
 chalk	@Chalk::IR::Graph::__DEFAULT_5	
 chalk	@Chalk::IR::Graph::_seed	
-chalk	@Chalk::IR::Graph::component	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Graph::component	
 chalk	@Chalk::IR::Graph::members	
 chalk	@Chalk::IR::Graph::merge	
-chalk	@Chalk::IR::Graph::mop	read-unversioned:field=1
+chalk	@Chalk::IR::Graph::mop	
 chalk	@Chalk::IR::Graph::next_cfg_id	
 chalk	@Chalk::IR::Graph::nodes	
 chalk	@Chalk::IR::Graph::nodes::__ANON__:186:7	
-chalk	@Chalk::IR::Graph::nodes::__ANON__:271:57	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Graph::nodes::__ANON__:271:57	
 chalk	@Chalk::IR::Graph::nodes::__SORTCMP__:1	
 chalk	@Chalk::IR::Graph::own_nodes	
-chalk	@Chalk::IR::Graph::program_nodes	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Graph::program_nodes	
 chalk	@Chalk::IR::Graph::returns	
-chalk	@Chalk::IR::Graph::schedule	read-unversioned:field=1
+chalk	@Chalk::IR::Graph::schedule	
 chalk	@Chalk::IR::Graph::set_mop	
 chalk	@Chalk::IR::Graph::start	
 chalk	@Chalk::IR::Graph::unmerge	
@@ -1362,24 +1365,24 @@ chalk	@Chalk::IR::MethodInfo::__DEFAULT_4
 chalk	@Chalk::IR::MethodInfo::__DEFAULT_5	
 chalk	@Chalk::IR::MethodInfo::__DEFAULT_6	
 chalk	@Chalk::IR::MethodInfo::add_consumer	
-chalk	@Chalk::IR::MethodInfo::body	read-unversioned:field=1
-chalk	@Chalk::IR::MethodInfo::body_node	read-unversioned:field=1
-chalk	@Chalk::IR::MethodInfo::graph	read-unversioned:field=1
+chalk	@Chalk::IR::MethodInfo::body	
+chalk	@Chalk::IR::MethodInfo::body_node	
+chalk	@Chalk::IR::MethodInfo::graph	
 chalk	@Chalk::IR::MethodInfo::id	
-chalk	@Chalk::IR::MethodInfo::name	read-unversioned:field=1
-chalk	@Chalk::IR::MethodInfo::params	read-unversioned:field=1
-chalk	@Chalk::IR::MethodInfo::return_repr	read-unversioned:field=1
-chalk	@Chalk::IR::MethodInfo::return_type	read-unversioned:field=1
+chalk	@Chalk::IR::MethodInfo::name	
+chalk	@Chalk::IR::MethodInfo::params	
+chalk	@Chalk::IR::MethodInfo::return_repr	
+chalk	@Chalk::IR::MethodInfo::return_type	
 chalk	@Chalk::IR::Node::Access::__DEFAULT_9	
 chalk	@Chalk::IR::Node::Access::set_stash_has	
-chalk	@Chalk::IR::Node::Access::stash_has	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Access::stash_has	
 chalk	@Chalk::IR::Node::Add::identity_kind	
 chalk	@Chalk::IR::Node::Add::op_str	
 chalk	@Chalk::IR::Node::Add::operation	
 chalk	@Chalk::IR::Node::Add::staleness_kind	
 chalk	@Chalk::IR::Node::Aggregate::__DEFAULT_9	
 chalk	@Chalk::IR::Node::Aggregate::stored_whole	
-chalk	@Chalk::IR::Node::Aggregate::symbol	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Aggregate::symbol	
 chalk	@Chalk::IR::Node::And::identity_kind	
 chalk	@Chalk::IR::Node::And::op_str	
 chalk	@Chalk::IR::Node::And::operation	
@@ -1389,17 +1392,17 @@ chalk	@Chalk::IR::Node::AnonSub::__DEFAULT_10
 chalk	@Chalk::IR::Node::AnonSub::__DEFAULT_12	
 chalk	@Chalk::IR::Node::AnonSub::__DEFAULT_13	
 chalk	@Chalk::IR::Node::AnonSub::__DEFAULT_9	
-chalk	@Chalk::IR::Node::AnonSub::anon_id	read-unversioned:field=1
+chalk	@Chalk::IR::Node::AnonSub::anon_id	
 chalk	@Chalk::IR::Node::AnonSub::content_hash	
-chalk	@Chalk::IR::Node::AnonSub::glob_bound	read-unversioned:field=1
-chalk	@Chalk::IR::Node::AnonSub::graph	read-unversioned:field=1
+chalk	@Chalk::IR::Node::AnonSub::glob_bound	
+chalk	@Chalk::IR::Node::AnonSub::graph	
 chalk	@Chalk::IR::Node::AnonSub::identity_kind	
-chalk	@Chalk::IR::Node::AnonSub::name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::AnonSub::name	
 chalk	@Chalk::IR::Node::AnonSub::operation	
 chalk	@Chalk::IR::Node::AnonSub::set_glob_bound	
 chalk	@Chalk::IR::Node::AnonSub::set_sub	
 chalk	@Chalk::IR::Node::AnonSub::staleness_kind	
-chalk	@Chalk::IR::Node::AnonSub::sub	read-unversioned:field=1
+chalk	@Chalk::IR::Node::AnonSub::sub	
 chalk	@Chalk::IR::Node::ArgsSource::content_hash	
 chalk	@Chalk::IR::Node::ArgsSource::identity_kind	
 chalk	@Chalk::IR::Node::ArgsSource::operation	
@@ -1413,38 +1416,38 @@ chalk	@Chalk::IR::Node::Assign::content_hash
 chalk	@Chalk::IR::Node::Assign::is_args_list_assign	
 chalk	@Chalk::IR::Node::Assign::is_fixed	
 chalk	@Chalk::IR::Node::Assign::is_memory_version	
-chalk	@Chalk::IR::Node::Assign::local	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Assign::local	
 chalk	@Chalk::IR::Node::Assign::op_str	
 chalk	@Chalk::IR::Node::Assign::operation	
-chalk	@Chalk::IR::Node::Assign::record	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Assign::record	
 chalk	@Chalk::IR::Node::Assign::staleness_kind	
-chalk	@Chalk::IR::Node::Assign::targets	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Assign::targets	
 chalk	@Chalk::IR::Node::BacktickExpr::is_fixed	
 chalk	@Chalk::IR::Node::BacktickExpr::operation	
 chalk	@Chalk::IR::Node::BacktickExpr::staleness_kind	
 chalk	@Chalk::IR::Node::BinOp::__ADJUST_0	
 chalk	@Chalk::IR::Node::BinOp::__DEFAULT_10	
 chalk	@Chalk::IR::Node::BinOp::__DEFAULT_9	
-chalk	@Chalk::IR::Node::BinOp::left	read-unversioned:field=1
+chalk	@Chalk::IR::Node::BinOp::left	
 chalk	@Chalk::IR::Node::BinOp::op_str	
-chalk	@Chalk::IR::Node::BinOp::right	read-unversioned:field=1
+chalk	@Chalk::IR::Node::BinOp::right	
 chalk	@Chalk::IR::Node::BitAnd::__DEFAULT_11	
 chalk	@Chalk::IR::Node::BitAnd::content_hash	
-chalk	@Chalk::IR::Node::BitAnd::flavor	read-unversioned:field=1
+chalk	@Chalk::IR::Node::BitAnd::flavor	
 chalk	@Chalk::IR::Node::BitAnd::identity_kind	
 chalk	@Chalk::IR::Node::BitAnd::op_str	
 chalk	@Chalk::IR::Node::BitAnd::operation	
 chalk	@Chalk::IR::Node::BitAnd::staleness_kind	
 chalk	@Chalk::IR::Node::BitOr::__DEFAULT_11	
 chalk	@Chalk::IR::Node::BitOr::content_hash	
-chalk	@Chalk::IR::Node::BitOr::flavor	read-unversioned:field=1
+chalk	@Chalk::IR::Node::BitOr::flavor	
 chalk	@Chalk::IR::Node::BitOr::identity_kind	
 chalk	@Chalk::IR::Node::BitOr::op_str	
 chalk	@Chalk::IR::Node::BitOr::operation	
 chalk	@Chalk::IR::Node::BitOr::staleness_kind	
 chalk	@Chalk::IR::Node::BitXor::__DEFAULT_11	
 chalk	@Chalk::IR::Node::BitXor::content_hash	
-chalk	@Chalk::IR::Node::BitXor::flavor	read-unversioned:field=1
+chalk	@Chalk::IR::Node::BitXor::flavor	
 chalk	@Chalk::IR::Node::BitXor::identity_kind	
 chalk	@Chalk::IR::Node::BitXor::op_str	
 chalk	@Chalk::IR::Node::BitXor::operation	
@@ -1470,42 +1473,42 @@ chalk	@Chalk::IR::Node::Call::__DEFAULT_28
 chalk	@Chalk::IR::Node::Call::__DEFAULT_29	
 chalk	@Chalk::IR::Node::Call::_fact	
 chalk	@Chalk::IR::Node::Call::advances_iterator	
-chalk	@Chalk::IR::Node::Call::autoloads	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::autoloads	
 chalk	@Chalk::IR::Node::Call::blesses	
 chalk	@Chalk::IR::Node::Call::builtin_family	
 chalk	@Chalk::IR::Node::Call::builtin_kind	
 chalk	@Chalk::IR::Node::Call::case_change	
 chalk	@Chalk::IR::Node::Call::changes_case	
 chalk	@Chalk::IR::Node::Call::changes_state	
-chalk	@Chalk::IR::Node::Call::class_name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::class_name	
 chalk	@Chalk::IR::Node::Call::content_hash	
 chalk	@Chalk::IR::Node::Call::defaults_to_topic	
-chalk	@Chalk::IR::Node::Call::dispatch_kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::dispatch_kind	
 chalk	@Chalk::IR::Node::Call::does_handle_io	
 chalk	@Chalk::IR::Node::Call::does_nothing_unthreaded	
 chalk	@Chalk::IR::Node::Call::ends_program	
-chalk	@Chalk::IR::Node::Call::eval_id	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::file	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::eval_id	
+chalk	@Chalk::IR::Node::Call::file	
 chalk	@Chalk::IR::Node::Call::gives_a_list	
 chalk	@Chalk::IR::Node::Call::gives_local_time	
 chalk	@Chalk::IR::Node::Call::gives_match_offset	
-chalk	@Chalk::IR::Node::Call::indirect_handle	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::indirect_handle	
 chalk	@Chalk::IR::Node::Call::is_builtin	
 chalk	@Chalk::IR::Node::Call::is_fixed	
 chalk	@Chalk::IR::Node::Call::is_sub_call	
 chalk	@Chalk::IR::Node::Call::is_tie_builtin	
-chalk	@Chalk::IR::Node::Call::line	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::line	
 chalk	@Chalk::IR::Node::Call::lists_a_hash	
 chalk	@Chalk::IR::Node::Call::loads_a_file	
 chalk	@Chalk::IR::Node::Call::makes_a_string	
 chalk	@Chalk::IR::Node::Call::may_be_undef	
 chalk	@Chalk::IR::Node::Call::mutates_array	
-chalk	@Chalk::IR::Node::Call::name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::name	
 chalk	@Chalk::IR::Node::Call::number_kind	
 chalk	@Chalk::IR::Node::Call::numeral_base	
 chalk	@Chalk::IR::Node::Call::operation	
-chalk	@Chalk::IR::Node::Call::param_names	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::paren_form	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::param_names	
+chalk	@Chalk::IR::Node::Call::paren_form	
 chalk	@Chalk::IR::Node::Call::quotes_metacharacters	
 chalk	@Chalk::IR::Node::Call::reads_call_stack	
 chalk	@Chalk::IR::Node::Call::reads_class	
@@ -1524,26 +1527,26 @@ chalk	@Chalk::IR::Node::Call::set_sort_cmp_sub
 chalk	@Chalk::IR::Node::Call::set_target	
 chalk	@Chalk::IR::Node::Call::set_want	
 chalk	@Chalk::IR::Node::Call::set_xs	
-chalk	@Chalk::IR::Node::Call::shares_args	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::site_package	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::sort_cmp	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::sort_cmp_body	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::sort_cmp_sub	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::sort_order	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::sort_package	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::shares_args	
+chalk	@Chalk::IR::Node::Call::site_package	
+chalk	@Chalk::IR::Node::Call::sort_cmp	
+chalk	@Chalk::IR::Node::Call::sort_cmp_body	
+chalk	@Chalk::IR::Node::Call::sort_cmp_sub	
+chalk	@Chalk::IR::Node::Call::sort_order	
+chalk	@Chalk::IR::Node::Call::sort_package	
 chalk	@Chalk::IR::Node::Call::splits_a_string	
 chalk	@Chalk::IR::Node::Call::staleness_kind	
-chalk	@Chalk::IR::Node::Call::string_eval	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::string_eval	
 chalk	@Chalk::IR::Node::Call::takes_a_hash	
 chalk	@Chalk::IR::Node::Call::takes_a_list	
-chalk	@Chalk::IR::Node::Call::target	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Call::want	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::target	
+chalk	@Chalk::IR::Node::Call::want	
 chalk	@Chalk::IR::Node::Call::writes_first_argument	
-chalk	@Chalk::IR::Node::Call::xs	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Call::xs	
 chalk	@Chalk::IR::Node::CellParam::__DEFAULT_10	
 chalk	@Chalk::IR::Node::CellParam::__DEFAULT_9	
-chalk	@Chalk::IR::Node::CellParam::index	read-unversioned:field=1
-chalk	@Chalk::IR::Node::CellParam::name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::CellParam::index	
+chalk	@Chalk::IR::Node::CellParam::name	
 chalk	@Chalk::IR::Node::CellParam::operation	
 chalk	@Chalk::IR::Node::CellParam::staleness_kind	
 chalk	@Chalk::IR::Node::CellRead::operation	
@@ -1554,35 +1557,35 @@ chalk	@Chalk::IR::Node::CellWrite::is_memory_version
 chalk	@Chalk::IR::Node::CellWrite::operation	
 chalk	@Chalk::IR::Node::CellWrite::staleness_kind	
 chalk	@Chalk::IR::Node::Chomp::__DEFAULT_9	
-chalk	@Chalk::IR::Node::Chomp::kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Chomp::kind	
 chalk	@Chalk::IR::Node::Chomp::operation	
 chalk	@Chalk::IR::Node::ChompValue::__DEFAULT_9	
-chalk	@Chalk::IR::Node::ChompValue::kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::ChompValue::kind	
 chalk	@Chalk::IR::Node::ChompValue::operation	
 chalk	@Chalk::IR::Node::Coerce::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Coerce::const_choices	
 chalk	@Chalk::IR::Node::Coerce::const_pattern	
 chalk	@Chalk::IR::Node::Coerce::content_hash	
-chalk	@Chalk::IR::Node::Coerce::from_repr	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Coerce::from_repr	
 chalk	@Chalk::IR::Node::Coerce::identity_kind	
 chalk	@Chalk::IR::Node::Coerce::makes_the_same	
 chalk	@Chalk::IR::Node::Coerce::operation	
 chalk	@Chalk::IR::Node::Coerce::staleness_kind	
-chalk	@Chalk::IR::Node::Coerce::to_repr	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Coerce::wire_from	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Coerce::to_repr	
+chalk	@Chalk::IR::Node::Coerce::wire_from	
 chalk	@Chalk::IR::Node::Complement::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Complement::content_hash	
-chalk	@Chalk::IR::Node::Complement::flavor	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Complement::flavor	
 chalk	@Chalk::IR::Node::Complement::identity_kind	
 chalk	@Chalk::IR::Node::Complement::op_str	
 chalk	@Chalk::IR::Node::Complement::operation	
 chalk	@Chalk::IR::Node::Complement::staleness_kind	
 chalk	@Chalk::IR::Node::CompoundAssign::content_hash	
 chalk	@Chalk::IR::Node::CompoundAssign::is_fixed	
-chalk	@Chalk::IR::Node::CompoundAssign::op	read-unversioned:field=1
+chalk	@Chalk::IR::Node::CompoundAssign::op	
 chalk	@Chalk::IR::Node::CompoundAssign::operation	
 chalk	@Chalk::IR::Node::CompoundAssign::staleness_kind	
-chalk	@Chalk::IR::Node::Concat::const_choices	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Node::Concat::const_choices	
 chalk	@Chalk::IR::Node::Concat::const_pattern	
 chalk	@Chalk::IR::Node::Concat::identity_kind	
 chalk	@Chalk::IR::Node::Concat::makes_a_string	
@@ -1594,15 +1597,15 @@ chalk	@Chalk::IR::Node::Constant::__DEFAULT_10
 chalk	@Chalk::IR::Node::Constant::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Constant::const_choices	
 chalk	@Chalk::IR::Node::Constant::const_pattern	
-chalk	@Chalk::IR::Node::Constant::const_type	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Constant::const_type	
 chalk	@Chalk::IR::Node::Constant::content_hash	
-chalk	@Chalk::IR::Node::Constant::flags	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Constant::flags	
 chalk	@Chalk::IR::Node::Constant::identity_kind	
 chalk	@Chalk::IR::Node::Constant::makes_a_string	
 chalk	@Chalk::IR::Node::Constant::makes_the_same	
 chalk	@Chalk::IR::Node::Constant::operation	
 chalk	@Chalk::IR::Node::Constant::staleness_kind	
-chalk	@Chalk::IR::Node::Constant::value	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Constant::value	
 chalk	@Chalk::IR::Node::Count::identity_kind	
 chalk	@Chalk::IR::Node::Count::op_str	
 chalk	@Chalk::IR::Node::Count::operation	
@@ -1612,7 +1615,7 @@ chalk	@Chalk::IR::Node::Defined::op_str
 chalk	@Chalk::IR::Node::Defined::operation	
 chalk	@Chalk::IR::Node::Defined::staleness_kind	
 chalk	@Chalk::IR::Node::DefinedOr::identity_kind	
-chalk	@Chalk::IR::Node::DefinedOr::makes_a_string	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Node::DefinedOr::makes_a_string	
 chalk	@Chalk::IR::Node::DefinedOr::makes_the_same	
 chalk	@Chalk::IR::Node::DefinedOr::op_str	
 chalk	@Chalk::IR::Node::DefinedOr::operation	
@@ -1620,16 +1623,16 @@ chalk	@Chalk::IR::Node::DefinedOr::staleness_kind
 chalk	@Chalk::IR::Node::Delete::__DEFAULT_9	
 chalk	@Chalk::IR::Node::Delete::is_fixed	
 chalk	@Chalk::IR::Node::Delete::is_memory_version	
-chalk	@Chalk::IR::Node::Delete::kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Delete::kind	
 chalk	@Chalk::IR::Node::Delete::operation	
 chalk	@Chalk::IR::Node::Delete::staleness_kind	
 chalk	@Chalk::IR::Node::Divide::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Divide::__DEFAULT_12	
 chalk	@Chalk::IR::Node::Divide::__DEFAULT_13	
-chalk	@Chalk::IR::Node::Divide::eval_id	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Divide::file	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Divide::eval_id	
+chalk	@Chalk::IR::Node::Divide::file	
 chalk	@Chalk::IR::Node::Divide::identity_kind	
-chalk	@Chalk::IR::Node::Divide::line	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Divide::line	
 chalk	@Chalk::IR::Node::Divide::op_str	
 chalk	@Chalk::IR::Node::Divide::operation	
 chalk	@Chalk::IR::Node::Divide::set_die_site	
@@ -1637,7 +1640,7 @@ chalk	@Chalk::IR::Node::Divide::staleness_kind
 chalk	@Chalk::IR::Node::ElemRestore::__DEFAULT_9	
 chalk	@Chalk::IR::Node::ElemRestore::is_fixed	
 chalk	@Chalk::IR::Node::ElemRestore::is_memory_version	
-chalk	@Chalk::IR::Node::ElemRestore::kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::ElemRestore::kind	
 chalk	@Chalk::IR::Node::ElemRestore::operation	
 chalk	@Chalk::IR::Node::ElemRestore::staleness_kind	
 chalk	@Chalk::IR::Node::EntryDef::__DEFAULT_10	
@@ -1655,27 +1658,27 @@ chalk	@Chalk::IR::Node::EntryDef::metaobject_classes
 chalk	@Chalk::IR::Node::EntryDef::metaobject_package	
 chalk	@Chalk::IR::Node::EntryDef::name	
 chalk	@Chalk::IR::Node::EntryDef::operation	
-chalk	@Chalk::IR::Node::EntryDef::package	read-unversioned:field=1
+chalk	@Chalk::IR::Node::EntryDef::package	
 chalk	@Chalk::IR::Node::EntryDef::qualified_name	
-chalk	@Chalk::IR::Node::EntryDef::sigil	read-unversioned:field=1
+chalk	@Chalk::IR::Node::EntryDef::sigil	
 chalk	@Chalk::IR::Node::EntryDef::special_scalar	
-chalk	@Chalk::IR::Node::EntryDef::symbol	read-unversioned:field=1
+chalk	@Chalk::IR::Node::EntryDef::symbol	
 chalk	@Chalk::IR::Node::EntryDef::values_are_only_truths	
 chalk	@Chalk::IR::Node::EntryWrite::__DEFAULT_9	
-chalk	@Chalk::IR::Node::EntryWrite::binds	read-unversioned:field=1
+chalk	@Chalk::IR::Node::EntryWrite::binds	
 chalk	@Chalk::IR::Node::EntryWrite::is_fixed	
 chalk	@Chalk::IR::Node::EntryWrite::is_memory_version	
 chalk	@Chalk::IR::Node::EntryWrite::operation	
 chalk	@Chalk::IR::Node::EntryWrite::staleness_kind	
 chalk	@Chalk::IR::Node::EnvRead::content_hash	
 chalk	@Chalk::IR::Node::EnvRead::identity_kind	
-chalk	@Chalk::IR::Node::EnvRead::key	read-unversioned:field=1
+chalk	@Chalk::IR::Node::EnvRead::key	
 chalk	@Chalk::IR::Node::EnvRead::makes_a_string	
 chalk	@Chalk::IR::Node::EnvRead::makes_the_same	
 chalk	@Chalk::IR::Node::EnvRead::operation	
 chalk	@Chalk::IR::Node::EnvRead::staleness_kind	
 chalk	@Chalk::IR::Node::Exists::__DEFAULT_10	
-chalk	@Chalk::IR::Node::Exists::kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Exists::kind	
 chalk	@Chalk::IR::Node::Exists::operation	
 chalk	@Chalk::IR::Node::Exists::staleness_kind	
 chalk	@Chalk::IR::Node::ExpressionList::identity_kind	
@@ -1683,8 +1686,8 @@ chalk	@Chalk::IR::Node::ExpressionList::items
 chalk	@Chalk::IR::Node::ExpressionList::operation	
 chalk	@Chalk::IR::Node::ExpressionList::staleness_kind	
 chalk	@Chalk::IR::Node::FieldAccess::content_hash	
-chalk	@Chalk::IR::Node::FieldAccess::field_index	read-unversioned:field=1
-chalk	@Chalk::IR::Node::FieldAccess::field_stash	read-unversioned:field=1
+chalk	@Chalk::IR::Node::FieldAccess::field_index	
+chalk	@Chalk::IR::Node::FieldAccess::field_stash	
 chalk	@Chalk::IR::Node::FieldAccess::identity_kind	
 chalk	@Chalk::IR::Node::FieldAccess::operation	
 chalk	@Chalk::IR::Node::HashLiteral::is_named_hash	
@@ -1694,7 +1697,7 @@ chalk	@Chalk::IR::Node::HashLiteral::stored_whole_into
 chalk	@Chalk::IR::Node::If::__DEFAULT_9	
 chalk	@Chalk::IR::Node::If::control_in	
 chalk	@Chalk::IR::Node::If::operation	
-chalk	@Chalk::IR::Node::If::region	read-unversioned:field=1
+chalk	@Chalk::IR::Node::If::region	
 chalk	@Chalk::IR::Node::If::set_control_in	
 chalk	@Chalk::IR::Node::If::set_region	
 chalk	@Chalk::IR::Node::If::staleness_kind	
@@ -1717,7 +1720,7 @@ chalk	@Chalk::IR::Node::Length::op_str
 chalk	@Chalk::IR::Node::Length::operation	
 chalk	@Chalk::IR::Node::Length::staleness_kind	
 chalk	@Chalk::IR::Node::ListAppend::__DEFAULT_9	
-chalk	@Chalk::IR::Node::ListAppend::collector	read-unversioned:field=1
+chalk	@Chalk::IR::Node::ListAppend::collector	
 chalk	@Chalk::IR::Node::ListAppend::identity_kind	
 chalk	@Chalk::IR::Node::ListAppend::operation	
 chalk	@Chalk::IR::Node::ListAppend::staleness_kind	
@@ -1727,19 +1730,19 @@ chalk	@Chalk::IR::Node::ListAssign::control
 chalk	@Chalk::IR::Node::ListAssign::init	
 chalk	@Chalk::IR::Node::ListAssign::names	
 chalk	@Chalk::IR::Node::ListAssign::operation	
-chalk	@Chalk::IR::Node::ListAssign::scope	read-unversioned:field=1
+chalk	@Chalk::IR::Node::ListAssign::scope	
 chalk	@Chalk::IR::Node::ListAssign::staleness_kind	
 chalk	@Chalk::IR::Node::LocalAlias::__DEFAULT_9	
 chalk	@Chalk::IR::Node::LocalAlias::is_fixed	
-chalk	@Chalk::IR::Node::LocalAlias::name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::LocalAlias::name	
 chalk	@Chalk::IR::Node::LocalAlias::operation	
 chalk	@Chalk::IR::Node::LocalAlias::staleness_kind	
 chalk	@Chalk::IR::Node::Loop::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Loop::__DEFAULT_9	
 chalk	@Chalk::IR::Node::Loop::control_in	
-chalk	@Chalk::IR::Node::Loop::label	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Loop::label	
 chalk	@Chalk::IR::Node::Loop::operation	
-chalk	@Chalk::IR::Node::Loop::region	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Loop::region	
 chalk	@Chalk::IR::Node::Loop::set_backedge_ctrl	
 chalk	@Chalk::IR::Node::Loop::set_control_in	
 chalk	@Chalk::IR::Node::Loop::set_label	
@@ -1747,16 +1750,16 @@ chalk	@Chalk::IR::Node::Loop::set_region
 chalk	@Chalk::IR::Node::Loop::staleness_kind	
 chalk	@Chalk::IR::Node::MakeCell::__DEFAULT_10	
 chalk	@Chalk::IR::Node::MakeCell::__DEFAULT_9	
-chalk	@Chalk::IR::Node::MakeCell::captured_written	read-unversioned:field=1
-chalk	@Chalk::IR::Node::MakeCell::cell_name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::MakeCell::captured_written	
+chalk	@Chalk::IR::Node::MakeCell::cell_name	
 chalk	@Chalk::IR::Node::MakeCell::identity_kind	
 chalk	@Chalk::IR::Node::MakeCell::operation	
 chalk	@Chalk::IR::Node::MakeCell::staleness_kind	
 chalk	@Chalk::IR::Node::Match::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Match::__DEFAULT_12	
-chalk	@Chalk::IR::Node::Match::code_bodies	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Match::code_bodies	
 chalk	@Chalk::IR::Node::Match::content_hash	
-chalk	@Chalk::IR::Node::Match::flags	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Match::flags	
 chalk	@Chalk::IR::Node::Match::is_fixed	
 chalk	@Chalk::IR::Node::Match::op_str	
 chalk	@Chalk::IR::Node::Match::operation	
@@ -1768,10 +1771,10 @@ chalk	@Chalk::IR::Node::MemStart::staleness_kind
 chalk	@Chalk::IR::Node::Modulo::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Modulo::__DEFAULT_12	
 chalk	@Chalk::IR::Node::Modulo::__DEFAULT_13	
-chalk	@Chalk::IR::Node::Modulo::eval_id	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Modulo::file	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Modulo::eval_id	
+chalk	@Chalk::IR::Node::Modulo::file	
 chalk	@Chalk::IR::Node::Modulo::identity_kind	
-chalk	@Chalk::IR::Node::Modulo::line	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Modulo::line	
 chalk	@Chalk::IR::Node::Modulo::op_str	
 chalk	@Chalk::IR::Node::Modulo::operation	
 chalk	@Chalk::IR::Node::Modulo::set_die_site	
@@ -1826,11 +1829,11 @@ chalk	@Chalk::IR::Node::Or::operation
 chalk	@Chalk::IR::Node::Or::staleness_kind	
 chalk	@Chalk::IR::Node::PackageMark::is_fixed	
 chalk	@Chalk::IR::Node::PackageMark::operation	
-chalk	@Chalk::IR::Node::PackageMark::package	read-unversioned:field=1
+chalk	@Chalk::IR::Node::PackageMark::package	
 chalk	@Chalk::IR::Node::PadAccess::__DEFAULT_13	
 chalk	@Chalk::IR::Node::PadAccess::__DEFAULT_14	
 chalk	@Chalk::IR::Node::PadAccess::content_hash	
-chalk	@Chalk::IR::Node::PadAccess::file	read-unversioned:field=1
+chalk	@Chalk::IR::Node::PadAccess::file	
 chalk	@Chalk::IR::Node::PadAccess::identity_kind	
 chalk	@Chalk::IR::Node::PadAccess::is_assign_target	
 chalk	@Chalk::IR::Node::PadAccess::is_location	
@@ -1839,27 +1842,27 @@ chalk	@Chalk::IR::Node::PadAccess::is_my_hash
 chalk	@Chalk::IR::Node::PadAccess::is_named_hash	
 chalk	@Chalk::IR::Node::PadAccess::name	
 chalk	@Chalk::IR::Node::PadAccess::operation	
-chalk	@Chalk::IR::Node::PadAccess::shared	read-unversioned:field=1
-chalk	@Chalk::IR::Node::PadAccess::sigil	read-unversioned:field=1
-chalk	@Chalk::IR::Node::PadAccess::symbol	read-unversioned:field=1
-chalk	@Chalk::IR::Node::PadAccess::targ	read-unversioned:field=1
+chalk	@Chalk::IR::Node::PadAccess::shared	
+chalk	@Chalk::IR::Node::PadAccess::sigil	
+chalk	@Chalk::IR::Node::PadAccess::symbol	
+chalk	@Chalk::IR::Node::PadAccess::targ	
 chalk	@Chalk::IR::Node::Parameter::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Parameter::__DEFAULT_12	
 chalk	@Chalk::IR::Node::Parameter::__DEFAULT_13	
 chalk	@Chalk::IR::Node::Parameter::content_hash	
-chalk	@Chalk::IR::Node::Parameter::default_when	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Parameter::index	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Parameter::name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Parameter::default_when	
+chalk	@Chalk::IR::Node::Parameter::index	
+chalk	@Chalk::IR::Node::Parameter::name	
 chalk	@Chalk::IR::Node::Parameter::operation	
-chalk	@Chalk::IR::Node::Parameter::sigil	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Parameter::sigil	
 chalk	@Chalk::IR::Node::Phi::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Phi::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Phi::content_hash	
 chalk	@Chalk::IR::Node::Phi::is_memory_version	
-chalk	@Chalk::IR::Node::Phi::memory	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Phi::memory	
 chalk	@Chalk::IR::Node::Phi::operation	
-chalk	@Chalk::IR::Node::Phi::predecessors	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Phi::region	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Phi::predecessors	
+chalk	@Chalk::IR::Node::Phi::region	
 chalk	@Chalk::IR::Node::Phi::set_backedge	
 chalk	@Chalk::IR::Node::Phi::staleness_kind	
 chalk	@Chalk::IR::Node::PostfixDeref::__DEFAULT_10	
@@ -1871,30 +1874,30 @@ chalk	@Chalk::IR::Node::PostfixDeref::__DEFAULT_15
 chalk	@Chalk::IR::Node::PostfixDeref::_may_reshape	
 chalk	@Chalk::IR::Node::PostfixDeref::_my_symbol	
 chalk	@Chalk::IR::Node::PostfixDeref::alias_element	
-chalk	@Chalk::IR::Node::PostfixDeref::copy	read-unversioned:field=1
-chalk	@Chalk::IR::Node::PostfixDeref::eval_id	read-unversioned:field=1
-chalk	@Chalk::IR::Node::PostfixDeref::file	read-unversioned:field=1
+chalk	@Chalk::IR::Node::PostfixDeref::copy	
+chalk	@Chalk::IR::Node::PostfixDeref::eval_id	
+chalk	@Chalk::IR::Node::PostfixDeref::file	
 chalk	@Chalk::IR::Node::PostfixDeref::identity_kind	
 chalk	@Chalk::IR::Node::PostfixDeref::is_array_deref	
-chalk	@Chalk::IR::Node::PostfixDeref::line	read-unversioned:field=1
+chalk	@Chalk::IR::Node::PostfixDeref::line	
 chalk	@Chalk::IR::Node::PostfixDeref::operation	
-chalk	@Chalk::IR::Node::PostfixDeref::package	read-unversioned:field=1
-chalk	@Chalk::IR::Node::PostfixDeref::sigil	read-unversioned:field=1
+chalk	@Chalk::IR::Node::PostfixDeref::package	
+chalk	@Chalk::IR::Node::PostfixDeref::sigil	
 chalk	@Chalk::IR::Node::PostfixDeref::staleness_kind	
-chalk	@Chalk::IR::Node::PostfixDeref::strict	read-unversioned:field=1
+chalk	@Chalk::IR::Node::PostfixDeref::strict	
 chalk	@Chalk::IR::Node::Power::identity_kind	
 chalk	@Chalk::IR::Node::Power::op_str	
 chalk	@Chalk::IR::Node::Power::operation	
 chalk	@Chalk::IR::Node::Power::staleness_kind	
 chalk	@Chalk::IR::Node::Print::__DEFAULT_9	
 chalk	@Chalk::IR::Node::Print::content_hash	
-chalk	@Chalk::IR::Node::Print::has_filehandle	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Print::has_filehandle	
 chalk	@Chalk::IR::Node::Print::is_fixed	
 chalk	@Chalk::IR::Node::Print::operation	
 chalk	@Chalk::IR::Node::Print::set_has_filehandle	
 chalk	@Chalk::IR::Node::Print::staleness_kind	
 chalk	@Chalk::IR::Node::Proj::content_hash	
-chalk	@Chalk::IR::Node::Proj::index	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Proj::index	
 chalk	@Chalk::IR::Node::Proj::operation	
 chalk	@Chalk::IR::Node::Proj::staleness_kind	
 chalk	@Chalk::IR::Node::Range::identity_kind	
@@ -1907,7 +1910,7 @@ chalk	@Chalk::IR::Node::Ref::__DEFAULT_12
 chalk	@Chalk::IR::Node::Ref::__DEFAULT_13	
 chalk	@Chalk::IR::Node::Ref::_guards	
 chalk	@Chalk::IR::Node::Ref::_nonnegative_constant	
-chalk	@Chalk::IR::Node::Ref::_reshaped	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Node::Ref::_reshaped	
 chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:204:37	
 chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:204:38	
 chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:209:51	
@@ -1917,12 +1920,12 @@ chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:219:82
 chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:219:84	
 chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:219:85	
 chalk	@Chalk::IR::Node::Ref::content_hash	
-chalk	@Chalk::IR::Node::Ref::each	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Ref::each	
 chalk	@Chalk::IR::Node::Ref::element_ref_unseen	
 chalk	@Chalk::IR::Node::Ref::element_ref_unsound	
 chalk	@Chalk::IR::Node::Ref::element_subscript	
-chalk	@Chalk::IR::Node::Ref::file	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Ref::fresh_each_pass	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Ref::file	
+chalk	@Chalk::IR::Node::Ref::fresh_each_pass	
 chalk	@Chalk::IR::Node::Ref::hash_element_ref_unsound	
 chalk	@Chalk::IR::Node::Ref::hash_element_subscript	
 chalk	@Chalk::IR::Node::Ref::identity_kind	
@@ -1930,7 +1933,7 @@ chalk	@Chalk::IR::Node::Ref::is_alias_ref
 chalk	@Chalk::IR::Node::Ref::is_element_ref	
 chalk	@Chalk::IR::Node::Ref::is_hash_element_ref	
 chalk	@Chalk::IR::Node::Ref::is_memory_version	
-chalk	@Chalk::IR::Node::Ref::line	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Ref::line	
 chalk	@Chalk::IR::Node::Ref::op_str	
 chalk	@Chalk::IR::Node::Ref::operation	
 chalk	@Chalk::IR::Node::Ref::set_site	
@@ -1945,13 +1948,13 @@ chalk	@Chalk::IR::Node::RefType::staleness_kind
 chalk	@Chalk::IR::Node::Regex::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Regex::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Regex::__DEFAULT_9	
-chalk	@Chalk::IR::Node::Regex::code_bodies	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Regex::code_bodies	
 chalk	@Chalk::IR::Node::Regex::content_hash	
-chalk	@Chalk::IR::Node::Regex::flags	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Regex::pattern	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Regex::flags	
+chalk	@Chalk::IR::Node::Regex::pattern	
 chalk	@Chalk::IR::Node::RegexCapture::content_hash	
 chalk	@Chalk::IR::Node::RegexCapture::identity_kind	
-chalk	@Chalk::IR::Node::RegexCapture::n	read-unversioned:field=1
+chalk	@Chalk::IR::Node::RegexCapture::n	
 chalk	@Chalk::IR::Node::RegexCapture::operation	
 chalk	@Chalk::IR::Node::RegexCapture::staleness_kind	
 chalk	@Chalk::IR::Node::RegexMatch::is_fixed	
@@ -1964,9 +1967,9 @@ chalk	@Chalk::IR::Node::RegexSubst::content_hash
 chalk	@Chalk::IR::Node::RegexSubst::is_fixed	
 chalk	@Chalk::IR::Node::RegexSubst::is_in_place	
 chalk	@Chalk::IR::Node::RegexSubst::operation	
-chalk	@Chalk::IR::Node::RegexSubst::pattern_is_input	read-unversioned:field=1
-chalk	@Chalk::IR::Node::RegexSubst::replacement	read-unversioned:field=1
-chalk	@Chalk::IR::Node::RegexSubst::replacement_body	read-unversioned:field=1
+chalk	@Chalk::IR::Node::RegexSubst::pattern_is_input	
+chalk	@Chalk::IR::Node::RegexSubst::replacement	
+chalk	@Chalk::IR::Node::RegexSubst::replacement_body	
 chalk	@Chalk::IR::Node::RegexSubst::staleness_kind	
 chalk	@Chalk::IR::Node::RegexSubstCount::op_str	
 chalk	@Chalk::IR::Node::RegexSubstCount::operation	
@@ -1975,12 +1978,12 @@ chalk	@Chalk::IR::Node::Region::__DEFAULT_11
 chalk	@Chalk::IR::Node::Region::__DEFAULT_12	
 chalk	@Chalk::IR::Node::Region::__DEFAULT_13	
 chalk	@Chalk::IR::Node::Region::__DEFAULT_9	
-chalk	@Chalk::IR::Node::Region::eval_entry	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Region::eval_id	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Region::eval_may_die	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Region::eval_want	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Region::eval_entry	
+chalk	@Chalk::IR::Node::Region::eval_id	
+chalk	@Chalk::IR::Node::Region::eval_may_die	
+chalk	@Chalk::IR::Node::Region::eval_want	
 chalk	@Chalk::IR::Node::Region::goes_on	
-chalk	@Chalk::IR::Node::Region::head	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Region::head	
 chalk	@Chalk::IR::Node::Region::operation	
 chalk	@Chalk::IR::Node::Region::out_regions	
 chalk	@Chalk::IR::Node::Region::reached_by	
@@ -2000,16 +2003,16 @@ chalk	@Chalk::IR::Node::Return::identity_kind
 chalk	@Chalk::IR::Node::Return::operation	
 chalk	@Chalk::IR::Node::Return::scalar_value	
 chalk	@Chalk::IR::Node::Return::staleness_kind	
-chalk	@Chalk::IR::Node::Return::synthetic	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Return::synthetic	
 chalk	@Chalk::IR::Node::Return::value	
-chalk	@Chalk::IR::Node::Return::valueless	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Return::valueless	
 chalk	@Chalk::IR::Node::RightShift::identity_kind	
 chalk	@Chalk::IR::Node::RightShift::op_str	
 chalk	@Chalk::IR::Node::RightShift::operation	
 chalk	@Chalk::IR::Node::RightShift::staleness_kind	
 chalk	@Chalk::IR::Node::Slice::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Slice::identity_kind	
-chalk	@Chalk::IR::Node::Slice::kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Slice::kind	
 chalk	@Chalk::IR::Node::Slice::operation	
 chalk	@Chalk::IR::Node::Slice::set_kind	
 chalk	@Chalk::IR::Node::Slice::staleness_kind	
@@ -2051,37 +2054,37 @@ chalk	@Chalk::IR::Node::StructRef::identity_kind
 chalk	@Chalk::IR::Node::StructRef::operation	
 chalk	@Chalk::IR::Node::StructRef::staleness_kind	
 chalk	@Chalk::IR::Node::SubDefined::__DEFAULT_11	
-chalk	@Chalk::IR::Node::SubDefined::answer	read-unversioned:field=1
+chalk	@Chalk::IR::Node::SubDefined::answer	
 chalk	@Chalk::IR::Node::SubDefined::content_hash	
 chalk	@Chalk::IR::Node::SubDefined::identity_kind	
-chalk	@Chalk::IR::Node::SubDefined::name	read-unversioned:field=1
+chalk	@Chalk::IR::Node::SubDefined::name	
 chalk	@Chalk::IR::Node::SubDefined::operation	
-chalk	@Chalk::IR::Node::SubDefined::unless	read-unversioned:field=1
+chalk	@Chalk::IR::Node::SubDefined::unless	
 chalk	@Chalk::IR::Node::Subscript::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Subscript::identity_kind	
 chalk	@Chalk::IR::Node::Subscript::is_arg_element	
-chalk	@Chalk::IR::Node::Subscript::kind	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Subscript::kind	
 chalk	@Chalk::IR::Node::Subscript::operation	
 chalk	@Chalk::IR::Node::Subscript::set_kind	
 chalk	@Chalk::IR::Node::Subtract::identity_kind	
 chalk	@Chalk::IR::Node::Subtract::op_str	
 chalk	@Chalk::IR::Node::Subtract::operation	
 chalk	@Chalk::IR::Node::Subtract::staleness_kind	
-chalk	@Chalk::IR::Node::TernaryExpr::const_choices	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Node::TernaryExpr::const_choices	
 chalk	@Chalk::IR::Node::TernaryExpr::identity_kind	
-chalk	@Chalk::IR::Node::TernaryExpr::is_alias_guard	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Node::TernaryExpr::is_alias_guard	
 chalk	@Chalk::IR::Node::TernaryExpr::operation	
 chalk	@Chalk::IR::Node::TernaryExpr::staleness_kind	
 chalk	@Chalk::IR::Node::Transliterate::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Transliterate::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Transliterate::__DEFAULT_9	
-chalk	@Chalk::IR::Node::Transliterate::flags	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Transliterate::from	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Transliterate::flags	
+chalk	@Chalk::IR::Node::Transliterate::from	
 chalk	@Chalk::IR::Node::Transliterate::is_fixed	
 chalk	@Chalk::IR::Node::Transliterate::is_in_place	
 chalk	@Chalk::IR::Node::Transliterate::operation	
 chalk	@Chalk::IR::Node::Transliterate::staleness_kind	
-chalk	@Chalk::IR::Node::Transliterate::to	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Transliterate::to	
 chalk	@Chalk::IR::Node::TransliterateCount::op_str	
 chalk	@Chalk::IR::Node::TransliterateCount::operation	
 chalk	@Chalk::IR::Node::TryCatch::is_fixed	
@@ -2090,7 +2093,7 @@ chalk	@Chalk::IR::Node::TryCatch::staleness_kind
 chalk	@Chalk::IR::Node::UnaryOp::__ADJUST_0	
 chalk	@Chalk::IR::Node::UnaryOp::__DEFAULT_9	
 chalk	@Chalk::IR::Node::UnaryOp::op_str	
-chalk	@Chalk::IR::Node::UnaryOp::operand	read-unversioned:field=1
+chalk	@Chalk::IR::Node::UnaryOp::operand	
 chalk	@Chalk::IR::Node::UnaryPlus::identity_kind	
 chalk	@Chalk::IR::Node::UnaryPlus::op_str	
 chalk	@Chalk::IR::Node::UnaryPlus::operation	
@@ -2098,11 +2101,11 @@ chalk	@Chalk::IR::Node::UnaryPlus::staleness_kind
 chalk	@Chalk::IR::Node::Unwind::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Unwind::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Unwind::__DEFAULT_9	
-chalk	@Chalk::IR::Node::Unwind::eval_id	read-unversioned:field=1
-chalk	@Chalk::IR::Node::Unwind::file	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Unwind::eval_id	
+chalk	@Chalk::IR::Node::Unwind::file	
 chalk	@Chalk::IR::Node::Unwind::identity_kind	
 chalk	@Chalk::IR::Node::Unwind::is_fixed	
-chalk	@Chalk::IR::Node::Unwind::line	read-unversioned:field=1
+chalk	@Chalk::IR::Node::Unwind::line	
 chalk	@Chalk::IR::Node::Unwind::operation	
 chalk	@Chalk::IR::Node::Unwind::set_eval_id	
 chalk	@Chalk::IR::Node::Unwind::set_site	
@@ -2114,7 +2117,7 @@ chalk	@Chalk::IR::Node::VarDecl::control
 chalk	@Chalk::IR::Node::VarDecl::init	
 chalk	@Chalk::IR::Node::VarDecl::name	
 chalk	@Chalk::IR::Node::VarDecl::operation	
-chalk	@Chalk::IR::Node::VarDecl::scope	read-unversioned:field=1
+chalk	@Chalk::IR::Node::VarDecl::scope	
 chalk	@Chalk::IR::Node::VarDecl::staleness_kind	
 chalk	@Chalk::IR::Node::Wantarray::operation	
 chalk	@Chalk::IR::Node::Wantarray::staleness_kind	
@@ -2134,20 +2137,20 @@ chalk	@Chalk::IR::Node::__DEFAULT_5
 chalk	@Chalk::IR::Node::__DEFAULT_6	
 chalk	@Chalk::IR::Node::__DEFAULT_7	
 chalk	@Chalk::IR::Node::__DEFAULT_8	
-chalk	@Chalk::IR::Node::_serialize_inputs	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Node::_serialize_inputs	
 chalk	@Chalk::IR::Node::add_consumer	
 chalk	@Chalk::IR::Node::all_made_the_same	
 chalk	@Chalk::IR::Node::class	
-chalk	@Chalk::IR::Node::compat_class	read-unversioned:field=1
+chalk	@Chalk::IR::Node::compat_class	
 chalk	@Chalk::IR::Node::const_choices	
 chalk	@Chalk::IR::Node::const_pattern	
-chalk	@Chalk::IR::Node::consumers	read-unversioned:field=1
+chalk	@Chalk::IR::Node::consumers	
 chalk	@Chalk::IR::Node::content_hash	
-chalk	@Chalk::IR::Node::control_in	read-unversioned:field=1
+chalk	@Chalk::IR::Node::control_in	
 chalk	@Chalk::IR::Node::flows_into_choice	
-chalk	@Chalk::IR::Node::id	read-unversioned:field=1
+chalk	@Chalk::IR::Node::id	
 chalk	@Chalk::IR::Node::identity_kind	
-chalk	@Chalk::IR::Node::inputs	read-unversioned:field=1
+chalk	@Chalk::IR::Node::inputs	
 chalk	@Chalk::IR::Node::is_arg_element	
 chalk	@Chalk::IR::Node::is_args_list_assign	
 chalk	@Chalk::IR::Node::is_argv	
@@ -2163,21 +2166,21 @@ chalk	@Chalk::IR::Node::is_package_scalar
 chalk	@Chalk::IR::Node::is_pinned	
 chalk	@Chalk::IR::Node::makes_a_string	
 chalk	@Chalk::IR::Node::makes_the_same	
-chalk	@Chalk::IR::Node::mem_in	read-unversioned:field=1
-chalk	@Chalk::IR::Node::mem_out	read-unversioned:field=1
+chalk	@Chalk::IR::Node::mem_in	
+chalk	@Chalk::IR::Node::mem_out	
 chalk	@Chalk::IR::Node::memory_operand	
 chalk	@Chalk::IR::Node::memory_phis	
 chalk	@Chalk::IR::Node::operation	
 chalk	@Chalk::IR::Node::reads_class	
 chalk	@Chalk::IR::Node::remove_consumer	
-chalk	@Chalk::IR::Node::schedule_data	read-unversioned:field=1
+chalk	@Chalk::IR::Node::schedule_data	
 chalk	@Chalk::IR::Node::set_control_in	
 chalk	@Chalk::IR::Node::set_mem_in	
 chalk	@Chalk::IR::Node::set_mem_out	
 chalk	@Chalk::IR::Node::set_schedule_data	
 chalk	@Chalk::IR::Node::set_stamp	
 chalk	@Chalk::IR::Node::staleness_kind	
-chalk	@Chalk::IR::Node::stamp	read-unversioned:field=1
+chalk	@Chalk::IR::Node::stamp	
 chalk	@Chalk::IR::Node::stored_whole_into	
 chalk	@Chalk::IR::Node::successors	
 chalk	@Chalk::IR::Node::successors_by_input	
@@ -2197,12 +2200,12 @@ chalk	@Chalk::IR::Program::__DEFAULT_1
 chalk	@Chalk::IR::Program::__DEFAULT_2	
 chalk	@Chalk::IR::Program::__DEFAULT_3	
 chalk	@Chalk::IR::Program::add_consumer	
-chalk	@Chalk::IR::Program::classes	read-unversioned:field=1
+chalk	@Chalk::IR::Program::classes	
 chalk	@Chalk::IR::Program::id	
-chalk	@Chalk::IR::Program::other_stmts	read-unversioned:field=1
-chalk	@Chalk::IR::Program::top_level_subs	read-unversioned:field=1
-chalk	@Chalk::IR::Program::use_decls	read-unversioned:field=1
-chalk	@Chalk::IR::ReferenceFlow::__ADJUST_0	read-unversioned:field=1
+chalk	@Chalk::IR::Program::other_stmts	
+chalk	@Chalk::IR::Program::top_level_subs	
+chalk	@Chalk::IR::Program::use_decls	
+chalk	@Chalk::IR::ReferenceFlow::__ADJUST_0	
 chalk	@Chalk::IR::ReferenceFlow::__ANON__::__ANON__:76:65	
 chalk	@Chalk::IR::ReferenceFlow::__DEFAULT_1	
 chalk	@Chalk::IR::ReferenceFlow::__DEFAULT_12	
@@ -2212,29 +2215,29 @@ chalk	@Chalk::IR::ReferenceFlow::_index
 chalk	@Chalk::IR::ReferenceFlow::_location_key	
 chalk	@Chalk::IR::ReferenceFlow::_plain_scalar	
 chalk	@Chalk::IR::ReferenceFlow::_site	
-chalk	@Chalk::IR::ReferenceFlow::_walk	read-unversioned:field=2,read-unversioned:through-ref=1
+chalk	@Chalk::IR::ReferenceFlow::_walk	
 chalk	@Chalk::IR::ReferenceFlow::_walk::__ANON__:162:9	
 chalk	@Chalk::IR::ReferenceFlow::scalar_deref_reached	
 chalk	@Chalk::IR::ReferenceFlow::scalar_deref_reached::__ANON__:153:8	
 chalk	@Chalk::IR::Schedule::Item::__DEFAULT_1	
 chalk	@Chalk::IR::Schedule::Item::__DEFAULT_2	
 chalk	@Chalk::IR::Schedule::Item::__DEFAULT_3	
-chalk	@Chalk::IR::Schedule::Item::form	read-unversioned:field=1
-chalk	@Chalk::IR::Schedule::Item::jump_keyword	read-unversioned:field=1
-chalk	@Chalk::IR::Schedule::Item::kind	read-unversioned:field=1
-chalk	@Chalk::IR::Schedule::Item::node	read-unversioned:field=1
+chalk	@Chalk::IR::Schedule::Item::form	
+chalk	@Chalk::IR::Schedule::Item::jump_keyword	
+chalk	@Chalk::IR::Schedule::Item::kind	
+chalk	@Chalk::IR::Schedule::Item::node	
 chalk	@Chalk::IR::Schedule::__DEFAULT_0	
 chalk	@Chalk::IR::Schedule::is_balanced	
-chalk	@Chalk::IR::Schedule::items	read-unversioned:field=1
+chalk	@Chalk::IR::Schedule::items	
 chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_elsif_chain	
-chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_if	read-unversioned:my-aggregate=1
-chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_loop	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_if	
+chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_loop	
 chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_node	
-chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_try	read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Scheduler::EagerPinning::_expand_try	
 chalk	@Chalk::IR::Scheduler::EagerPinning::_pick_outer_return	
 chalk	@Chalk::IR::Scheduler::EagerPinning::schedule	
-chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo	read-unversioned:my-aggregate=1
-chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo::__ANON__:371:59	read-unversioned:through-ref=1
+chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo	
+chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo::__ANON__:371:59	
 chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo::__ANON__:388:61	
 chalk	@Chalk::IR::Serialize::JSON::_extract_fields	
 chalk	@Chalk::IR::Serialize::JSON::_reachable_methods	
@@ -2280,13 +2283,13 @@ chalk	@Chalk::IR::SubInfo::__DEFAULT_3
 chalk	@Chalk::IR::SubInfo::__DEFAULT_4	
 chalk	@Chalk::IR::SubInfo::__DEFAULT_5	
 chalk	@Chalk::IR::SubInfo::add_consumer	
-chalk	@Chalk::IR::SubInfo::body	read-unversioned:field=1
-chalk	@Chalk::IR::SubInfo::graph	read-unversioned:field=1
-chalk	@Chalk::IR::SubInfo::has_signature	read-unversioned:field=1
+chalk	@Chalk::IR::SubInfo::body	
+chalk	@Chalk::IR::SubInfo::graph	
+chalk	@Chalk::IR::SubInfo::has_signature	
 chalk	@Chalk::IR::SubInfo::id	
-chalk	@Chalk::IR::SubInfo::name	read-unversioned:field=1
-chalk	@Chalk::IR::SubInfo::params	read-unversioned:field=1
-chalk	@Chalk::IR::SubInfo::scope	read-unversioned:field=1
+chalk	@Chalk::IR::SubInfo::name	
+chalk	@Chalk::IR::SubInfo::params	
+chalk	@Chalk::IR::SubInfo::scope	
 chalk	@Chalk::IR::Target::lower	
 chalk	@Chalk::IR::Transform::BackwardInference::_declared_slot_type	
 chalk	@Chalk::IR::Transform::BackwardInference::_is_backward_inferable	
@@ -2296,16 +2299,16 @@ chalk	@Chalk::IR::Transform::TypeInference::__DEFAULT_0
 chalk	@Chalk::IR::Transform::TypeInference::_count_unknown	
 chalk	@Chalk::IR::Transform::TypeInference::_infer	
 chalk	@Chalk::IR::Transform::TypeInference::_normalize_entry	
-chalk	@Chalk::IR::Transform::TypeInference::_stamp_snapshot	read-unversioned:my-aggregate=1
-chalk	@Chalk::IR::Transform::TypeInference::report	read-unversioned:field=1
+chalk	@Chalk::IR::Transform::TypeInference::_stamp_snapshot	
+chalk	@Chalk::IR::Transform::TypeInference::report	
 chalk	@Chalk::IR::Transform::TypeInference::run	
 chalk	@Chalk::IR::UseInfo::__DEFAULT_1	
 chalk	@Chalk::IR::UseInfo::__DEFAULT_2	
 chalk	@Chalk::IR::UseInfo::add_consumer	
-chalk	@Chalk::IR::UseInfo::args	read-unversioned:field=1
+chalk	@Chalk::IR::UseInfo::args	
 chalk	@Chalk::IR::UseInfo::id	
-chalk	@Chalk::IR::UseInfo::keyword	read-unversioned:field=1
-chalk	@Chalk::IR::UseInfo::name	read-unversioned:field=1
+chalk	@Chalk::IR::UseInfo::keyword	
+chalk	@Chalk::IR::UseInfo::name	
 chalk	@Chalk::Impl::INC::CLEAR	
 chalk	@Chalk::Impl::INC::DELETE	
 chalk	@Chalk::Impl::INC::EXISTS	
@@ -2336,7 +2339,7 @@ chalk	@Chalk::Impl::warn_handlers_do_nothing
 chalk	@Chalk::Impl::warn_handlers_do_nothing::__ANON__:109:20	
 chalk	@Chalk::Impl::warn_handlers_do_nothing::__ANON__:109:21	
 chalk	@Chalk::Impl::warnings_may_be_on	
-chalk	@Chalk::Impl::wire	read-unversioned:external=2,read-unversioned:through-ref=2
+chalk	@Chalk::Impl::wire	
 chalk	@Chalk::MOP::Class::CLEAR	
 chalk	@Chalk::MOP::Class::DELETE	
 chalk	@Chalk::MOP::Class::EXISTS	
@@ -2351,10 +2354,10 @@ chalk	@Chalk::MOP::Class::__DEFAULT_2
 chalk	@Chalk::MOP::Class::__DEFAULT_4	
 chalk	@Chalk::MOP::Class::_assert_unsealed	
 chalk	@Chalk::MOP::Class::_refuse	
-chalk	@Chalk::MOP::Class::adjust_blocks	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::all_nodes	read-unversioned:field=2,read-unversioned:my-aggregate=1
-chalk	@Chalk::MOP::Class::ancestors	read-unversioned:my-aggregate=1
-chalk	@Chalk::MOP::Class::class_scope_vars	read-unversioned:field=1
+chalk	@Chalk::MOP::Class::adjust_blocks	
+chalk	@Chalk::MOP::Class::all_nodes	
+chalk	@Chalk::MOP::Class::ancestors	
+chalk	@Chalk::MOP::Class::class_scope_vars	
 chalk	@Chalk::MOP::Class::declare_adjust	
 chalk	@Chalk::MOP::Class::declare_class_scope_var	
 chalk	@Chalk::MOP::Class::declare_field	
@@ -2365,27 +2368,27 @@ chalk	@Chalk::MOP::Class::declare_sub
 chalk	@Chalk::MOP::Class::declare_symbols	
 chalk	@Chalk::MOP::Class::declare_unloaded	
 chalk	@Chalk::MOP::Class::declare_use_constant	
-chalk	@Chalk::MOP::Class::fields	read-unversioned:field=1
+chalk	@Chalk::MOP::Class::fields	
 chalk	@Chalk::MOP::Class::find_method	
 chalk	@Chalk::MOP::Class::has_symbol	
-chalk	@Chalk::MOP::Class::imports	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::is_class	read-unversioned:field=1
+chalk	@Chalk::MOP::Class::imports	
+chalk	@Chalk::MOP::Class::is_class	
 chalk	@Chalk::MOP::Class::is_sealed	
 chalk	@Chalk::MOP::Class::knows_symbols	
-chalk	@Chalk::MOP::Class::methods	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::mop	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::name	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::parent_name	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::resolve_adjust_blocks	read-unversioned:my-aggregate=1
+chalk	@Chalk::MOP::Class::methods	
+chalk	@Chalk::MOP::Class::mop	
+chalk	@Chalk::MOP::Class::name	
+chalk	@Chalk::MOP::Class::parent_name	
+chalk	@Chalk::MOP::Class::resolve_adjust_blocks	
 chalk	@Chalk::MOP::Class::seal	
-chalk	@Chalk::MOP::Class::statements	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::subs	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::superclass	read-unversioned:field=1
+chalk	@Chalk::MOP::Class::statements	
+chalk	@Chalk::MOP::Class::subs	
+chalk	@Chalk::MOP::Class::superclass	
 chalk	@Chalk::MOP::Class::symbol	
 chalk	@Chalk::MOP::Class::symbol_names	
 chalk	@Chalk::MOP::Class::symbols_unknown	
-chalk	@Chalk::MOP::Class::unloaded	read-unversioned:field=1
-chalk	@Chalk::MOP::Class::use_constants	read-unversioned:field=1
+chalk	@Chalk::MOP::Class::unloaded	
+chalk	@Chalk::MOP::Class::use_constants	
 chalk	@Chalk::MOP::Field::__DEFAULT_10	
 chalk	@Chalk::MOP::Field::__DEFAULT_3	
 chalk	@Chalk::MOP::Field::__DEFAULT_4	
@@ -2394,44 +2397,44 @@ chalk	@Chalk::MOP::Field::__DEFAULT_6
 chalk	@Chalk::MOP::Field::__DEFAULT_7	
 chalk	@Chalk::MOP::Field::__DEFAULT_8	
 chalk	@Chalk::MOP::Field::__DEFAULT_9	
-chalk	@Chalk::MOP::Field::attributes	read-unversioned:through-ref=1
-chalk	@Chalk::MOP::Field::class	read-unversioned:field=1
-chalk	@Chalk::MOP::Field::default_unmodeled	read-unversioned:field=1
-chalk	@Chalk::MOP::Field::default_value	read-unversioned:field=1
-chalk	@Chalk::MOP::Field::fieldix	read-unversioned:field=1
+chalk	@Chalk::MOP::Field::attributes	
+chalk	@Chalk::MOP::Field::class	
+chalk	@Chalk::MOP::Field::default_unmodeled	
+chalk	@Chalk::MOP::Field::default_value	
+chalk	@Chalk::MOP::Field::fieldix	
 chalk	@Chalk::MOP::Field::has_attribute	
-chalk	@Chalk::MOP::Field::has_default	read-unversioned:field=1
+chalk	@Chalk::MOP::Field::has_default	
 chalk	@Chalk::MOP::Field::has_reader	
 chalk	@Chalk::MOP::Field::is_param	
-chalk	@Chalk::MOP::Field::is_reader	read-unversioned:field=1
-chalk	@Chalk::MOP::Field::name	read-unversioned:field=1
-chalk	@Chalk::MOP::Field::param_name	read-unversioned:field=1
-chalk	@Chalk::MOP::Field::sigil	read-unversioned:field=1
-chalk	@Chalk::MOP::Field::type	read-unversioned:field=1
+chalk	@Chalk::MOP::Field::is_reader	
+chalk	@Chalk::MOP::Field::name	
+chalk	@Chalk::MOP::Field::param_name	
+chalk	@Chalk::MOP::Field::sigil	
+chalk	@Chalk::MOP::Field::type	
 chalk	@Chalk::MOP::Import::__DEFAULT_2	
 chalk	@Chalk::MOP::Import::__DEFAULT_3	
-chalk	@Chalk::MOP::Import::args	read-unversioned:through-ref=1
-chalk	@Chalk::MOP::Import::class	read-unversioned:field=1
-chalk	@Chalk::MOP::Import::keyword	read-unversioned:field=1
-chalk	@Chalk::MOP::Import::module	read-unversioned:field=1
+chalk	@Chalk::MOP::Import::args	
+chalk	@Chalk::MOP::Import::class	
+chalk	@Chalk::MOP::Import::keyword	
+chalk	@Chalk::MOP::Import::module	
 chalk	@Chalk::MOP::Method::__DEFAULT_2	
 chalk	@Chalk::MOP::Method::__DEFAULT_3	
 chalk	@Chalk::MOP::Method::__DEFAULT_4	
 chalk	@Chalk::MOP::Method::__DEFAULT_5	
 chalk	@Chalk::MOP::Method::__DEFAULT_6	
-chalk	@Chalk::MOP::Method::body	read-unversioned:field=1
-chalk	@Chalk::MOP::Method::class	read-unversioned:field=1
-chalk	@Chalk::MOP::Method::graph	read-unversioned:field=1
-chalk	@Chalk::MOP::Method::lexical_bindings	read-unversioned:through-ref=1
-chalk	@Chalk::MOP::Method::name	read-unversioned:field=1
-chalk	@Chalk::MOP::Method::params	read-unversioned:field=1
-chalk	@Chalk::MOP::Method::return_type	read-unversioned:field=1
+chalk	@Chalk::MOP::Method::body	
+chalk	@Chalk::MOP::Method::class	
+chalk	@Chalk::MOP::Method::graph	
+chalk	@Chalk::MOP::Method::lexical_bindings	
+chalk	@Chalk::MOP::Method::name	
+chalk	@Chalk::MOP::Method::params	
+chalk	@Chalk::MOP::Method::return_type	
 chalk	@Chalk::MOP::Method::set_return_type	
-chalk	@Chalk::MOP::Phaser::Adjust::class	read-unversioned:field=1
+chalk	@Chalk::MOP::Phaser::Adjust::class	
 chalk	@Chalk::MOP::Phaser::__DEFAULT_0	
 chalk	@Chalk::MOP::Phaser::__DEFAULT_1	
-chalk	@Chalk::MOP::Phaser::graph	read-unversioned:field=1
-chalk	@Chalk::MOP::Phaser::source_position	read-unversioned:field=1
+chalk	@Chalk::MOP::Phaser::graph	
+chalk	@Chalk::MOP::Phaser::source_position	
 chalk	@Chalk::MOP::Sub::__DEFAULT_2	
 chalk	@Chalk::MOP::Sub::__DEFAULT_3	
 chalk	@Chalk::MOP::Sub::__DEFAULT_4	
@@ -2440,17 +2443,17 @@ chalk	@Chalk::MOP::Sub::__DEFAULT_6
 chalk	@Chalk::MOP::Sub::__DEFAULT_7	
 chalk	@Chalk::MOP::Sub::__DEFAULT_8	
 chalk	@Chalk::MOP::Sub::__DEFAULT_9	
-chalk	@Chalk::MOP::Sub::body	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::class	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::context	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::graph	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::lvalue	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::name	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::params	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::return_type	read-unversioned:field=1
+chalk	@Chalk::MOP::Sub::body	
+chalk	@Chalk::MOP::Sub::class	
+chalk	@Chalk::MOP::Sub::context	
+chalk	@Chalk::MOP::Sub::graph	
+chalk	@Chalk::MOP::Sub::lvalue	
+chalk	@Chalk::MOP::Sub::name	
+chalk	@Chalk::MOP::Sub::params	
+chalk	@Chalk::MOP::Sub::return_type	
 chalk	@Chalk::MOP::Sub::set_return_type	
-chalk	@Chalk::MOP::Sub::signature	read-unversioned:field=1
-chalk	@Chalk::MOP::Sub::uses_args	read-unversioned:field=1
+chalk	@Chalk::MOP::Sub::signature	
+chalk	@Chalk::MOP::Sub::uses_args	
 chalk	@Chalk::MOP::__ADJUST_0	
 chalk	@Chalk::MOP::__DEFAULT_1	
 chalk	@Chalk::MOP::__DEFAULT_2	
@@ -2458,13 +2461,13 @@ chalk	@Chalk::MOP::classes
 chalk	@Chalk::MOP::declare_class	
 chalk	@Chalk::MOP::find_method	
 chalk	@Chalk::MOP::for_class	
-chalk	@Chalk::MOP::graphs	read-unversioned:field=1
+chalk	@Chalk::MOP::graphs	
 chalk	@Chalk::MOP::is_sealed	
 chalk	@Chalk::MOP::mark_declared	
 chalk	@Chalk::MOP::register_graphs	
 chalk	@Chalk::MOP::seal	
 chalk	@Chalk::MOP::set_struct_promotion_schemas	
-chalk	@Chalk::MOP::struct_promotion_schemas	read-unversioned:field=1
+chalk	@Chalk::MOP::struct_promotion_schemas	
 chalk	@Chalk::MOP::was_declared	
 chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:117:8	
 chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:120:8	
@@ -2496,7 +2499,7 @@ chalk	@Chalk::Regex::Graph::_all_literal
 chalk	@Chalk::Regex::Graph::_any_ascii	
 chalk	@Chalk::Regex::Graph::_has_group	
 chalk	@Chalk::Regex::Graph::_may_be_empty	
-chalk	@Chalk::Regex::Graph::_tr_chars	read-unversioned:my-aggregate=1
+chalk	@Chalk::Regex::Graph::_tr_chars	
 chalk	@Chalk::Regex::Graph::accept	
 chalk	@Chalk::Regex::Graph::add	
 chalk	@Chalk::Regex::Graph::and_	
@@ -2571,7 +2574,7 @@ chalk	@Chalk::Regex::Graph::step::__ANON__:708:97
 chalk	@Chalk::Regex::Graph::step::__ANON__:709:98	
 chalk	@Chalk::Regex::Graph::step::__ANON__:716:114	
 chalk	@Chalk::Regex::Graph::step::__ANON__:716:115	
-chalk	@Chalk::Regex::Graph::stmt	read-unversioned:through-ref=1
+chalk	@Chalk::Regex::Graph::stmt	
 chalk	@Chalk::Regex::Graph::str_	
 chalk	@Chalk::Regex::Graph::sub_	
 chalk	@Chalk::Regex::Graph::switch_	
@@ -2599,41 +2602,41 @@ chalk	@Chalk::Regex::Pattern::without_inert_u
 chalk	@Chalk::Scheduler::EagerPinning::If::__DEFAULT_1	
 chalk	@Chalk::Scheduler::EagerPinning::If::__DEFAULT_2	
 chalk	@Chalk::Scheduler::EagerPinning::If::__DEFAULT_3	
-chalk	@Chalk::Scheduler::EagerPinning::If::else_stmts	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::If::is_loop_jump	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::If::then_stmts	read-unversioned:field=1
+chalk	@Chalk::Scheduler::EagerPinning::If::else_stmts	
+chalk	@Chalk::Scheduler::EagerPinning::If::is_loop_jump	
+chalk	@Chalk::Scheduler::EagerPinning::If::then_stmts	
 chalk	@Chalk::Scheduler::EagerPinning::Loop::__DEFAULT_1	
 chalk	@Chalk::Scheduler::EagerPinning::Loop::__DEFAULT_2	
 chalk	@Chalk::Scheduler::EagerPinning::Loop::__DEFAULT_3	
 chalk	@Chalk::Scheduler::EagerPinning::Loop::__DEFAULT_4	
 chalk	@Chalk::Scheduler::EagerPinning::Loop::__DEFAULT_5	
 chalk	@Chalk::Scheduler::EagerPinning::Loop::__DEFAULT_6	
-chalk	@Chalk::Scheduler::EagerPinning::Loop::body_stmts	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::Loop::for_init	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::Loop::for_step	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::Loop::is_for_style	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::Loop::iterator	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::Loop::list	read-unversioned:field=1
+chalk	@Chalk::Scheduler::EagerPinning::Loop::body_stmts	
+chalk	@Chalk::Scheduler::EagerPinning::Loop::for_init	
+chalk	@Chalk::Scheduler::EagerPinning::Loop::for_step	
+chalk	@Chalk::Scheduler::EagerPinning::Loop::is_for_style	
+chalk	@Chalk::Scheduler::EagerPinning::Loop::iterator	
+chalk	@Chalk::Scheduler::EagerPinning::Loop::list	
 chalk	@Chalk::Scheduler::EagerPinning::Phi::__DEFAULT_1	
-chalk	@Chalk::Scheduler::EagerPinning::Phi::emit_slot	read-unversioned:field=1
+chalk	@Chalk::Scheduler::EagerPinning::Phi::emit_slot	
 chalk	@Chalk::Scheduler::EagerPinning::TryCatch::__DEFAULT_1	
 chalk	@Chalk::Scheduler::EagerPinning::TryCatch::__DEFAULT_2	
 chalk	@Chalk::Scheduler::EagerPinning::TryCatch::__DEFAULT_3	
-chalk	@Chalk::Scheduler::EagerPinning::TryCatch::catch_stmts	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::TryCatch::catch_var	read-unversioned:field=1
-chalk	@Chalk::Scheduler::EagerPinning::TryCatch::try_stmts	read-unversioned:field=1
-chalk	@Chalk::Scheduler::ScheduleMeta::node	read-unversioned:field=1
-chalk	@Chalk::Target::LLVM::Builder::Args::_collect_positional_arg_reads	read-unversioned:my-aggregate=2,read-unversioned:through-ref=2
+chalk	@Chalk::Scheduler::EagerPinning::TryCatch::catch_stmts	
+chalk	@Chalk::Scheduler::EagerPinning::TryCatch::catch_var	
+chalk	@Chalk::Scheduler::EagerPinning::TryCatch::try_stmts	
+chalk	@Chalk::Scheduler::ScheduleMeta::node	
+chalk	@Chalk::Target::LLVM::Builder::Args::_collect_positional_arg_reads	
 chalk	@Chalk::Target::LLVM::Builder::Args::_is_args_array	
 chalk	@Chalk::Target::LLVM::Builder::Args::_may_write_topic	
 chalk	@Chalk::Target::LLVM::Builder::Args::_may_write_topic::__ANON__:25:13	
-chalk	@Chalk::Target::LLVM::Builder::_all_nodes	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::_all_nodes	
 chalk	@Chalk::Target::LLVM::Builder::_argv_element	
 chalk	@Chalk::Target::LLVM::Builder::_argv_may_be	
 chalk	@Chalk::Target::LLVM::Builder::_bit_inner	
 chalk	@Chalk::Target::LLVM::Builder::_bit_ops_of	
 chalk	@Chalk::Target::LLVM::Builder::_bit_readers	
-chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified	
 chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified::__ANON__:1342:50	
 chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified::__ANON__:1342:51	
 chalk	@Chalk::Target::LLVM::Builder::_cell_variable	
@@ -2647,7 +2650,7 @@ chalk	@Chalk::Target::LLVM::Builder::_fresh_arrays
 chalk	@Chalk::Target::LLVM::Builder::_glob_name	
 chalk	@Chalk::Target::LLVM::Builder::_glob_of	
 chalk	@Chalk::Target::LLVM::Builder::_hash_name	
-chalk	@Chalk::Target::LLVM::Builder::_head_aggregates	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::_head_aggregates	
 chalk	@Chalk::Target::LLVM::Builder::_is_feature_class	
 chalk	@Chalk::Target::LLVM::Builder::_is_list	phi-arity:eval-join=1
 chalk	@Chalk::Target::LLVM::Builder::_list_use	
@@ -2655,7 +2658,7 @@ chalk	@Chalk::Target::LLVM::Builder::_loop_scope
 chalk	@Chalk::Target::LLVM::Builder::_loop_test	
 chalk	@Chalk::Target::LLVM::Builder::_made_in_scope	
 chalk	@Chalk::Target::LLVM::Builder::_needs_unmade_phi	
-chalk	@Chalk::Target::LLVM::Builder::_never_numified	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::_never_numified	
 chalk	@Chalk::Target::LLVM::Builder::_never_numified::__ANON__:647:11	
 chalk	@Chalk::Target::LLVM::Builder::_of_args	
 chalk	@Chalk::Target::LLVM::Builder::_only_counted	
@@ -2666,9 +2669,9 @@ chalk	@Chalk::Target::LLVM::Builder::_pattern_parts
 chalk	@Chalk::Target::LLVM::Builder::_pattern_parts::__ANON__:409:8	
 chalk	@Chalk::Target::LLVM::Builder::_pkg_agg_name	
 chalk	@Chalk::Target::LLVM::Builder::_read_as_a_number	
-chalk	@Chalk::Target::LLVM::Builder::_refs_each_item	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::_refs_each_item	
 chalk	@Chalk::Target::LLVM::Builder::_refs_each_item::__ANON__:171:13	
-chalk	@Chalk::Target::LLVM::Builder::_refs_made_of_made	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::_refs_made_of_made	
 chalk	@Chalk::Target::LLVM::Builder::_rests_on_settled	
 chalk	@Chalk::Target::LLVM::Builder::_rx_arm	
 chalk	@Chalk::Target::LLVM::Builder::_scalar_ref_of	
@@ -2688,7 +2691,7 @@ chalk	@Chalk::Target::LLVM::Builder::_written_off_memory::__ANON__:235:8
 chalk	@Chalk::Target::LLVM::Builder::agg_home	
 chalk	@Chalk::Target::LLVM::Builder::agg_home_here	
 chalk	@Chalk::Target::LLVM::Builder::agg_made_here	
-chalk	@Chalk::Target::LLVM::Builder::agg_versions	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::agg_versions	
 chalk	@Chalk::Target::LLVM::Builder::alias_list	
 chalk	@Chalk::Target::LLVM::Builder::alias_list::__ANON__:797:38	
 chalk	@Chalk::Target::LLVM::Builder::alias_list::__ANON__:797:39	
@@ -2697,40 +2700,40 @@ chalk	@Chalk::Target::LLVM::Builder::alias_list::__ANON__:802:42
 chalk	@Chalk::Target::LLVM::Builder::alias_saves	
 chalk	@Chalk::Target::LLVM::Builder::alias_saves::__ANON__:1008:9	
 chalk	@Chalk::Target::LLVM::Builder::args_array	
-chalk	@Chalk::Target::LLVM::Builder::args_assign	read-unversioned:through-ref=1
-chalk	@Chalk::Target::LLVM::Builder::args_elem	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::args_assign	
+chalk	@Chalk::Target::LLVM::Builder::args_elem	
 chalk	@Chalk::Target::LLVM::Builder::args_rest	
 chalk	@Chalk::Target::LLVM::Builder::arith_type	
-chalk	@Chalk::Target::LLVM::Builder::array_of	read-unversioned:through-ref=1
-chalk	@Chalk::Target::LLVM::Builder::array_stmt	read-unversioned:my-aggregate=2
+chalk	@Chalk::Target::LLVM::Builder::array_of	
+chalk	@Chalk::Target::LLVM::Builder::array_stmt	
 chalk	@Chalk::Target::LLVM::Builder::array_var	
 chalk	@Chalk::Target::LLVM::Builder::as	
 chalk	@Chalk::Target::LLVM::Builder::as_list	
-chalk	@Chalk::Target::LLVM::Builder::assign	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::assign	
 chalk	@Chalk::Target::LLVM::Builder::bit_flag	
 chalk	@Chalk::Target::LLVM::Builder::bit_numified	
 chalk	@Chalk::Target::LLVM::Builder::build	
 chalk	@Chalk::Target::LLVM::Builder::builtin_emitter	
 chalk	@Chalk::Target::LLVM::Builder::builtin_type	
-chalk	@Chalk::Target::LLVM::Builder::builtin_value	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::builtin_value	
 chalk	@Chalk::Target::LLVM::Builder::call	
 chalk	@Chalk::Target::LLVM::Builder::call_refs_args	
 chalk	@Chalk::Target::LLVM::Builder::call_writes_args	
 chalk	@Chalk::Target::LLVM::Builder::captured	
 chalk	@Chalk::Target::LLVM::Builder::class_reads_settled	
 chalk	@Chalk::Target::LLVM::Builder::class_reads_settled::__ANON__:59:5	
-chalk	@Chalk::Target::LLVM::Builder::close_eval	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::close_eval	
 chalk	@Chalk::Target::LLVM::Builder::code_bodies	
 chalk	@Chalk::Target::LLVM::Builder::code_call	
 chalk	@Chalk::Target::LLVM::Builder::code_ref	
-chalk	@Chalk::Target::LLVM::Builder::code_value	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::code_value	
 chalk	@Chalk::Target::LLVM::Builder::const_data	
 chalk	@Chalk::Target::LLVM::Builder::const_ref	
 chalk	@Chalk::Target::LLVM::Builder::const_str	
 chalk	@Chalk::Target::LLVM::Builder::construct	
 chalk	@Chalk::Target::LLVM::Builder::construct::__ANON__:402:29	
 chalk	@Chalk::Target::LLVM::Builder::construct::__ANON__:402:31	
-chalk	@Chalk::Target::LLVM::Builder::construct_with	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::construct_with	
 chalk	@Chalk::Target::LLVM::Builder::deref_at	
 chalk	@Chalk::Target::LLVM::Builder::elem_restore	
 chalk	@Chalk::Target::LLVM::Builder::element_store	
@@ -2752,7 +2755,7 @@ chalk	@Chalk::Target::LLVM::Builder::global_named
 chalk	@Chalk::Target::LLVM::Builder::global_of	
 chalk	@Chalk::Target::LLVM::Builder::hash_of	
 chalk	@Chalk::Target::LLVM::Builder::hash_var	
-chalk	@Chalk::Target::LLVM::Builder::impl_call	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::impl_call	
 chalk	@Chalk::Target::LLVM::Builder::impl_global	
 chalk	@Chalk::Target::LLVM::Builder::inc_registry	
 chalk	@Chalk::Target::LLVM::Builder::io_value	
@@ -2761,21 +2764,21 @@ chalk	@Chalk::Target::LLVM::Builder::is_topic
 chalk	@Chalk::Target::LLVM::Builder::isa_write	
 chalk	@Chalk::Target::LLVM::Builder::item_refs	
 chalk	@Chalk::Target::LLVM::Builder::item_refs::__ANON__:1016:30	
-chalk	@Chalk::Target::LLVM::Builder::list_args_assign	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::list_args_assign	
 chalk	@Chalk::Target::LLVM::Builder::list_choice	
 chalk	@Chalk::Target::LLVM::Builder::list_choice::__ANON__:1217:32	
 chalk	@Chalk::Target::LLVM::Builder::list_only	phi-arity:eval-join=1
 chalk	@Chalk::Target::LLVM::Builder::location	
-chalk	@Chalk::Target::LLVM::Builder::loop	read-unversioned:my-aggregate=1
-chalk	@Chalk::Target::LLVM::Builder::loop_breaks	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::loop	
+chalk	@Chalk::Target::LLVM::Builder::loop_breaks	
 chalk	@Chalk::Target::LLVM::Builder::loop_edge	
 chalk	@Chalk::Target::LLVM::Builder::loop_exit	
 chalk	@Chalk::Target::LLVM::Builder::loop_jump	
 chalk	@Chalk::Target::LLVM::Builder::loop_type	
 chalk	@Chalk::Target::LLVM::Builder::lvalue_sub_store	
-chalk	@Chalk::Target::LLVM::Builder::make_constant_arrays	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::make_constant_arrays	
 chalk	@Chalk::Target::LLVM::Builder::may_write_args	
-chalk	@Chalk::Target::LLVM::Builder::method_by_name	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::method_by_name	
 chalk	@Chalk::Target::LLVM::Builder::method_call	
 chalk	@Chalk::Target::LLVM::Builder::new_block	
 chalk	@Chalk::Target::LLVM::Builder::number_phi_type	
@@ -2786,7 +2789,7 @@ chalk	@Chalk::Target::LLVM::Builder::phi_input
 chalk	@Chalk::Target::LLVM::Builder::phi_type	
 chalk	@Chalk::Target::LLVM::Builder::pkg_agg	
 chalk	@Chalk::Target::LLVM::Builder::plain_anon	
-chalk	@Chalk::Target::LLVM::Builder::pos_cells	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::pos_cells	
 chalk	@Chalk::Target::LLVM::Builder::pos_reset	
 chalk	@Chalk::Target::LLVM::Builder::print_to_handle	
 chalk	@Chalk::Target::LLVM::Builder::printf_stmt	
@@ -2813,7 +2816,7 @@ chalk	@Chalk::Target::LLVM::Builder::special_containers
 chalk	@Chalk::Target::LLVM::Builder::special_hash	
 chalk	@Chalk::Target::LLVM::Builder::special_key	
 chalk	@Chalk::Target::LLVM::Builder::special_scalar	
-chalk	@Chalk::Target::LLVM::Builder::sprintf_value	read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::sprintf_value	
 chalk	@Chalk::Target::LLVM::Builder::sprintf_value::__ANON__:1460:23	
 chalk	@Chalk::Target::LLVM::Builder::sprintf_value::__ANON__:1460:26	
 chalk	@Chalk::Target::LLVM::Builder::subst_call	
@@ -2827,7 +2830,7 @@ chalk	@Chalk::Target::LLVM::Builder::truth
 chalk	@Chalk::Target::LLVM::Builder::type_of	
 chalk	@Chalk::Target::LLVM::Builder::uv_bits	
 chalk	@Chalk::Target::LLVM::Builder::value	
-chalk	@Chalk::Target::LLVM::Builder::value_readers	read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Builder::value_readers	
 chalk	@Chalk::Target::LLVM::Builder::warn_value	
 chalk	@Chalk::Target::LLVM::Builder::whole_deref	
 chalk	@Chalk::Target::LLVM::Builder::whole_hash	
@@ -2836,7 +2839,7 @@ chalk	@Chalk::Target::LLVM::Lower::_choose
 chalk	@Chalk::Target::LLVM::Lower::_default_num_repr	
 chalk	@Chalk::Target::LLVM::Lower::_narrow_node	
 chalk	@Chalk::Target::LLVM::Lower::llvm_type_for	
-chalk	@Chalk::Target::LLVM::Lower::lower_program	phi-arity:eval-join=3,read-unversioned:through-ref=1
+chalk	@Chalk::Target::LLVM::Lower::lower_program	phi-arity:eval-join=3
 chalk	@Chalk::Target::LLVM::Lower::narrow_graphs	
 chalk	@Chalk::Target::LLVM::Lower::narrow_num	
 chalk	@Chalk::Target::LLVM::Node::AAppend::to_ll	
@@ -3050,12 +3053,12 @@ chalk	@Chalk::Target::LLVM::Node::_cstr
 chalk	@Chalk::Target::LLVM::Node::_gep	
 chalk	@Chalk::Target::LLVM::Node::_n	
 chalk	@Chalk::Target::LLVM::Node::_void	
-chalk	@Chalk::Target::LLVM::Node::attr	read-unversioned:field=1
-chalk	@Chalk::Target::LLVM::Node::inputs	read-unversioned:field=1
-chalk	@Chalk::Target::LLVM::Node::name	read-unversioned:field=1
-chalk	@Chalk::Target::LLVM::Node::op	read-unversioned:field=1
+chalk	@Chalk::Target::LLVM::Node::attr	
+chalk	@Chalk::Target::LLVM::Node::inputs	
+chalk	@Chalk::Target::LLVM::Node::name	
+chalk	@Chalk::Target::LLVM::Node::op	
 chalk	@Chalk::Target::LLVM::Node::set_name	
-chalk	@Chalk::Target::LLVM::Node::type	read-unversioned:field=1
+chalk	@Chalk::Target::LLVM::Node::type	
 chalk	@Chalk::Target::LLVM::Printer::_c	
 chalk	@Chalk::Target::LLVM::Printer::_c::__SUBSTREPL__:1	
 chalk	@Chalk::Target::LLVM::Printer::_double	
@@ -3078,23 +3081,23 @@ chalk	@Cwd::_os2_cwd
 chalk	@Cwd::_perl_getcwd	
 chalk	@Cwd::_qnx_abs_path	
 chalk	@Cwd::_qnx_cwd	
-chalk	@Cwd::_vms_abs_path	read-unversioned:external=3
+chalk	@Cwd::_vms_abs_path	
 chalk	@Cwd::_vms_cwd	
 chalk	@Cwd::_vms_efs	
 chalk	@Cwd::_vms_unix_rpt	
 chalk	@Cwd::_win32_cwd	
 chalk	@Cwd::_win32_cwd_simple	
 chalk	@Cwd::chdir	
-chalk	@Cwd::chdir_init	read-unversioned:external=4
+chalk	@Cwd::chdir_init	
 chalk	@Cwd::cwd	
-chalk	@Cwd::fast_abs_path	read-unversioned:external=5
-chalk	@Cwd::fast_realpath	read-unversioned:external=5
-chalk	@Cwd::fastcwd_	read-unversioned:external=3
+chalk	@Cwd::fast_abs_path	
+chalk	@Cwd::fast_realpath	
+chalk	@Cwd::fastcwd_	
 chalk	@Cwd::fastgetcwd	
 chalk	@Digest::SHA::_addfile	
 chalk	@Digest::SHA::_bail	
 chalk	@Digest::SHA::_istext	
-chalk	@Digest::SHA::addfile	read-unversioned:external=2
+chalk	@Digest::SHA::addfile	
 chalk	@Digest::SHA::dump	
 chalk	@Digest::SHA::load	
 chalk	@Digest::base::add_bits	
@@ -3103,10 +3106,10 @@ chalk	@Digest::base::b64digest
 chalk	@Digest::base::base64_padded_digest	
 chalk	@Digest::base::hexdigest	
 chalk	@Digest::base::reset	
-chalk	@DynaLoader::bootstrap	phi-arity:eval-join=1,read-unversioned:external=3,read-unversioned:package=2,read-unversioned:package-aggregate-literal=1,record=1
+chalk	@DynaLoader::bootstrap	phi-arity:eval-join=1,record=1
 chalk	@DynaLoader::bootstrap_inherit	record=1
 chalk	@DynaLoader::croak	
-chalk	@DynaLoader::dl_expandspec	read-unversioned:external=1
+chalk	@DynaLoader::dl_expandspec	
 chalk	@DynaLoader::dl_find_symbol_anywhere	
 chalk	@DynaLoader::dl_load_flags	
 chalk	@Exporter::as_heavy	
@@ -3117,10 +3120,10 @@ chalk	@File::Basename::fileparse_set_fstype
 chalk	@File::Path::__is_arg	
 chalk	@File::Path::_error	
 chalk	@File::Path::_is_subdir	
-chalk	@File::Path::_mkpath	read-unversioned:external=3,read-unversioned:my-aggregate=1
+chalk	@File::Path::_mkpath	
 chalk	@File::Path::_slash_lc	
-chalk	@File::Path::mkpath	read-unversioned:through-ref=2
-chalk	@File::Spec::Unix::_cache_tmpdir	read-unversioned:args=1,read-unversioned:package=1
+chalk	@File::Path::mkpath	
+chalk	@File::Spec::Unix::_cache_tmpdir	
 chalk	@File::Spec::Unix::_cached_tmpdir	
 chalk	@File::Spec::Unix::_collapse	
 chalk	@File::Spec::Unix::_pp_catdir	
@@ -3149,9 +3152,9 @@ chalk	@JSON::PP::IncrParser::incr_skip
 chalk	@JSON::PP::IncrParser::incr_text	
 chalk	@JSON::PP::IncrParser::new	
 chalk	@JSON::PP::PP_decode_box	
-chalk	@JSON::PP::PP_decode_json	read-unversioned:through-ref=3
+chalk	@JSON::PP::PP_decode_json	
 chalk	@JSON::PP::PP_encode_box	
-chalk	@JSON::PP::PP_encode_json	read-unversioned:through-ref=2
+chalk	@JSON::PP::PP_encode_json	
 chalk	@JSON::PP::PP_encode_json::__ANON__:359:34	
 chalk	@JSON::PP::PP_encode_json::__ANON__:364:36	
 chalk	@JSON::PP::_decode_surrogates	
@@ -3181,7 +3184,7 @@ chalk	@JSON::PP::false
 chalk	@JSON::PP::filter_json_object	
 chalk	@JSON::PP::filter_json_single_key_object	
 chalk	@JSON::PP::from_json	
-chalk	@JSON::PP::get_boolean_values	read-unversioned:through-ref=1
+chalk	@JSON::PP::get_boolean_values	
 chalk	@JSON::PP::get_core_bools	
 chalk	@JSON::PP::get_indent_length	
 chalk	@JSON::PP::get_max_depth	

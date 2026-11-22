@@ -334,3 +334,36 @@ What stage 7 and later should know:
 4. **`wire=2` is accepted** by B::SoN (it changes nothing); `SON_WIRE` still passes through the harnesses. Any other `wire=` is refused by name.
 5. **The :lvalue call of corpus 398** is the one sub call L5 lets off both chains: the place its Assign stores through.
 6. **Stage 7's text names `t/wire-verify.t`** for the V6 hard rule; that file (v1's rules) is gone, its v2 cases are in `t/wire-verify-v2.t`, and the counts are `t/wire-verify-ratchet.t`'s.
+
+## 13. After stage 7
+
+Heads: producer `v2-s7` (ad8080f to the commit that adds this section, on bfa4d40), chalk `v2-s7` (f95685ee to 27c376e2 and the wire-verify commit after it, on 22685dbf). Lessons: docs/memory/every-read-names-a-version.md.
+
+V6 (`read-unversioned:C`) per class, before (stage 6's rows; chalk's lib the most one wire counts, summed over its graphs at 22685dbf with bfa4d40's producer) and after:
+
+| class | corpus | probes | chalk lib (per-graph sum) |
+|---|---|---|---|
+| field | 5 -> 0 | 0 -> 0 | 309 -> 0 |
+| my-aggregate | 24 -> 0 | 2 -> 0 | 96 -> 0 |
+| through-ref | 35 -> 0 | 1 -> 0 | 50 -> 0 |
+| package | 7 -> 0 | 4 -> 0 | 3 -> 0 |
+| package-aggregate-literal | 0 -> 0 | 5 -> 0 | 1 -> 0 |
+| external | 14 -> 0 | 14 -> 0 | 33 -> 0 |
+| args | 0 -> 0 | 1 -> 0 | 1 -> 0 |
+| cell | 0 -> 0 | 1 -> 0 | 0 -> 0 |
+
+(chalk's lib by every violation listed, not per graph, at base: field 3813, my-aggregate 369, through-ref 215, external 87, package 5, args 3, package-aggregate-literal 1.) The probes' denominators are 542 wires and 799 graphs (ag34-ag43 and rv1-rv13 added). V6 is hard now: `t/wire-verify-ratchet.t` (corpus, probes, chalk's lib) and chalk's `t/bootstrap/ir/wire-verify.t` fail on any; the rows are deleted from both baselines and from `t/data/wire-verify-chalk-graphs.tsv`.
+
+Probes (chalk, against 22685dbf): fk7, lo14, nv1, nv4, nv5, nv7, nv8 REFUSED -> SAME; rv1-rv13 new (rv8, rv9, rv10, rv12 WRONG at base; rv4 REFUSED by name). LOUD 2, REFUSED 105, SAME 424, WRONG 0. WireCheck's W10 is deleted (with it off the probes were the same).
+
+What later stages should know:
+
+1. **A read of an aggregate at a version is a copy** in chalk (`is_versioned_read`, the EntryDef and FieldAccess branches of `_value`): reads_before makes it before the next store.
+2. **V6 asks "is the value used, and not as a place"**: a dead consumer, a record's targets, a list slice, pos()'s operand and the items of an alias list (foreach/map/grep, a Phi or `?:` of an aggregate's bindings) are not reads. A new consumer kind that only holds places belongs in `$is_place_use`.
+3. **Not done here:** a scalar-context list assign of a builtin's list or an aggregate (`while (my ($k, $v) = each %h)`) is still the Assign; `rand` is an external read, not a write (Q13); `my $a = rand();` is an INTERNAL ERROR in B::SoN at base too; `if (C) { @l = @x }` with the copy alone in the arm forks control (V9; chalk refuses it by name).
+
+The gates at the stage's last commits:
+
+```
+GATES_PENDING
+```
