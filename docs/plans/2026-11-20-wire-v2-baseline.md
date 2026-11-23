@@ -479,3 +479,19 @@ probes          PASS  LOUD=4 REFUSED=164 SAME=653; WRONG 0, SAME lost 0, changed
 ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 4 [31m46s]
                 PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m21s]
 ```
+
+## 18. The goal's last gaps closed (branch `goal-close`)
+
+Heads: producer `goal-close` 78f9182 (from 9e40d47), chalk `goal-close` 48c36bd6 (from c959f983). Probes pl13 and a/aun17f (a list assignment to package scalars that is its sub's value, held as V7 `record`) are SAME: the aassign handler marks the one made in the caller's context, by position, into package scalars, and the sub's Return carries its two readings -- the targets read after the stores, the right side's count made before them -- the `[list, scalar]` shape `return @a` already had and chalk T2 already read (f7ebc16, chalk 48c36bd6). `_list_count` counts an aggregate by its sigil (`sub f { my $n = () = @x; $n }` gave 1 for 3: a silent wrong answer at the base). The chalk-suite gate misses unless chalk's `t/bootstrap/ir/wire-verify.t` ran tests (audit risk 10; 78f9182: it ran 3 here). The probe verdict compares the exit status, not only success (audit risk 11; chalk c4033db6): every probe re-run, none changed by it. Held by name: a/aun6 and a/aun5d (open, as in section 17).
+
+`tools/gates.sh` at producer 78f9182, chalk 48c36bd6:
+
+```
+producer-suite  PASS  787 files, 0 failing [10m44s]
+chalk-suite     PASS  934 files, 0 failing [95m55s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [2m11s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [5m28s]
+probes          PASS  LOUD=4 REFUSED=162 SAME=655; WRONG 0, SAME lost 0, changed 0 [2m45s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [33m31s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [8m07s]
+```
