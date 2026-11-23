@@ -801,6 +801,24 @@ class SoN::FromOptree 0.01 {
     # The bits: B gives a COP's warnings as a string when they are not one of
     # perl's three shared sets (all, none, default); each category has two
     # bits, and the odd one is FATAL.
+    # A `state` VARIABLE WITH NO INITIALISER keeps its value between runs of
+    # its scope; the walk binds it as a `my`, so `sub c { state $n; $n .= "x";
+    # $n } c(); print c()` printed x for perl's xx (re-audit 2026-11-23,
+    # class D). Reached once -- the program's straight line -- it is a `my`.
+    # (An initialised one is a `once` op, whose own refusal is $ONCE_GAP.)
+    sub _refuse_bare_state ($root, $is_program) {
+        return unless $root && $$root;
+        for my $op (_subtree_ops($root)) {
+            next unless $op->name =~ /\Apad[ash]v\z/ && ($op->private & 192) == 192;   # OPpLVAL_INTRO|OPpPAD_STATE
+            next if $is_program && _in_straight_line($op);
+            my $p = $op->parent;
+            $p = $p->parent while $$p && $p->name !~ /\A(?:once|leavesub|leave)\z/;
+            next if $$p && $p->name eq 'once';
+            die "GAP: a `state` variable with no initialiser, where it can be reached more than once, is"
+              . " not yet lowered -- it keeps its value between runs, and the walk makes it a `my`\n";
+        }
+    }
+
     sub _refuse_fatal_warnings ($root) {
         return unless $root && $$root;
         for my $cop (grep { $_->name eq 'nextstate' || $_->name eq 'dbstate' } _subtree_ops($root)) {
@@ -2724,6 +2742,7 @@ class SoN::FromOptree 0.01 {
         # what it would have died of it has)
         _refuse_fatal_warnings(defined $program_root ? B::main_root() : eval { $cv->ROOT })
             unless !defined $program_root && ( eval { $cv->GV->NAME } // '' ) eq 'BEGIN';
+        _refuse_bare_state(defined $program_root ? B::main_root() : eval { $cv->ROOT }, defined $program_root);
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
