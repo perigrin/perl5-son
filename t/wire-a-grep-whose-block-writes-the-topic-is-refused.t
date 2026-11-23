@@ -25,6 +25,7 @@ my %refused = (
     'a chop'                => 'my @a=("ab","cd"); my @g = grep { chop } @a; print "@a|@g\n";',
     'a callee writing $_[0]' => 'my @a=(1,2,3); sub w { $_[0]*=2; 1 } my @g = grep { w($_) } @a; print "@a|@g\n";',
     'a method writing $_[1]' => 'package O; sub new{bless{},shift} sub w { $_[1]*=2; 1 } package main; my $o=O->new; my @a=(1,2,3); my @g = grep { $o->w($_) } @a; print "@a|@g\n";',
+    'an invocant written'  => 'package O; sub z { $_[0] = 0; 1 } package main; my @a=(bless({},"O")); my @g = grep { $_->z } @a; print scalar(@g), " $a[0]\n";',
 );
 like warnings_of($refused{$_}), $GAP, "refused: $_" for sort keys %refused;
 
@@ -32,5 +33,8 @@ unlike warnings_of('my @a=(1,2,3); my $n = grep { $_ *= 2 } @a; print "@a|$n\n";
     qr/GAP: a grep/, 'a grep counted is not refused';
 unlike warnings_of('my @a=(1,2,3); my @g = grep { $_ > 1 } @a; print "@g\n";'),
     qr/GAP: a grep/, 'a grep that only reads $_ is not refused';
+
+unlike warnings_of('use Scalar::Util qw(blessed); my @a=(bless({},"X"),1); my @g = grep { blessed($_) } @a; print scalar(@g), "\n";'),
+    qr/GAP: a grep/, 'a grep passing $_ to a builtin that stores nothing (EffectTable) is not refused';
 
 done_testing;

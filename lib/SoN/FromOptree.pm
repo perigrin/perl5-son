@@ -1406,25 +1406,38 @@ class SoN::FromOptree 0.01 {
             return $gv->NAME eq '_' && $gv->STASH->NAME eq 'main';
         };
         for my $o (_subtree_ops($list)) {
-            my $n = $o->name;
-            # (OPf_MOD; a call's argument only where the callee may write it)
-            return 1 if $is_topic->($o) && ($o->flags & 32) && !( _is_call_argument_op($o) && !_call_may_write_an_argument($cv, _enclosing_entersub($o)) );
-            return 1 if $n =~ /\A(?:subst|trans)\z/ && !($o->flags & 64);         # (no =~ target)
-            return 1 if $n =~ /\As?chom?p\z/ && ($o->flags & 4) && $is_topic->($o->first);
+            # (what the op itself stores: ModSets, as the alias rules ask it)
+            return 1 if grep { $_->{loc} eq q{N:$main::_} } SoN::FromOptree::ModSets::_stores($cv, $o);
+            # ($_ handed to a call whose callee may store through an argument)
+            return 1 if $o->name eq q{entersub} && _call_may_write_an_argument($cv, $o)
+                && grep { $is_topic->($_) } _entersub_args_and_invocant($o);
         }
         return 0;
     }
-    sub _enclosing_entersub ($op) {
-        my $p = $op->parent;
-        $p = $p->parent while $$p && $p->name ne q{entersub};
-        return $p;
+    # (a method's invocant is $_[0] to it, as an argument is)
+    sub _entersub_args_and_invocant ($call) {
+        my $l = $call->first;
+        my $k = $l->name eq q{pushmark} ? $l->sibling : $$l && ($l->flags & 4) ? $l->first : undef;
+        my @a;
+        for (; $k && $$k; $k = $k->sibling) { push @a, $k unless $k->name eq q{pushmark} }
+        pop @a;    # (the callee)
+        return @a;
     }
     # _call_may_write_an_argument($cv, $entersub) -> false only when every sub
     # the call may reach (a method: every sub of its name) stores through no
     # argument, transitively (ModSets: no 'P', no 'U').
     sub _call_may_write_an_argument ($cv, $call) {
         return 1 unless $$call;
-        my ($cvs) = SoN::FromOptree::ModSets::_callees($cv, $call) or return 1;
+        my ($cvs) = SoN::FromOptree::ModSets::_callees($cv, $call);
+        # (a sub outside the program, Scalar::Util's `blessed`: EffectTable's row)
+        unless ($cvs) {
+            my $gv = _entersub_callee_gv($cv, $call) or return 1;
+            my $code = $gv->CV;
+            return 1 if $code && $$code && ${ $code->ROOT };
+            my $n = $gv->NAME;
+            return B::SoN::EffectTable::known($n) && !B::SoN::EffectTable::writes($n)
+                && !B::SoN::EffectTable::stores_operands($n) ? 0 : 1;
+        }
         return scalar grep {
             grep { $_->{loc} eq q{P} || $_->{loc} eq q{U} } SoN::FromOptree::ModSets::summary($_)->@*
         } $cvs->@*;
@@ -24142,6 +24155,7 @@ class SoN::FromOptree 0.01 {
         # _elem_alias_plan's (read again, guarded by whether it existed).
         # ponytail: for a DIRECT store, two references to one array are two
         # containers here.
+        my %UNREFERENCED_PAD;    # key => 1: a `my` aggregate no reference reaches
         my $elem_key = sub ($o) {
             return undef unless $o && $$o;
             $o = $o->first while $o->name eq 'null' && ( $o->flags & B::OPf_KIDS ) && ${ $o->first };
@@ -24164,6 +24178,8 @@ class SoN::FromOptree 0.01 {
                 return undef unless $c && $$c;
                 if ( $c->name =~ /\Apad[ah]v\z/ ) {
                     my ( $sg, $sy ) = _padparts( $cv, $c->targ );
+                    $UNREFERENCED_PAD{ '$' . $sy . $open } = 1
+                        unless $REFERENCED->{ $c->targ } || $MUTATED_SLOTS && ( $MUTATED_SLOTS->{ $c->targ } // '' ) =~ /\Aref/;
                     return '$' . $sy . $open;
                 }
                 return undef unless $c->name =~ /\Arv2[ah]v\z/ && ( $c->flags & B::OPf_KIDS );
@@ -24189,9 +24205,18 @@ class SoN::FromOptree 0.01 {
         # vivifies `$_[0]`). So the target is found from the op that stores:
         # the last kid of an sassign, the first of an `op=` or `++`/`--`, any
         # element in a list assign's left side, an s///, tr/// or chomp's.
+        # TWO NAMES, ONE CONTAINER: a store through a reference (`$r->[0] =
+        # 2`) may be into a `my` aggregate a reference reaches or a package
+        # one -- `my $r = \@a; ($a[0], ($r->[0] = 2), $a[0])` is 2 2 2 in perl
+        # (re-audit 2026-11-23, class G). Only a `my` aggregate no reference
+        # reaches is told apart.
         my $names = sub ( $t, $key ) {
             return 0 unless $t && $$t;
-            return ( $elem_key->($t) // '' ) eq $key ? 1 : 0;
+            my $k = $elem_key->($t) // return 0;
+            return 1 if $k eq $key;
+            my ( $open_a, $open_b ) = map { substr $_, -1 } $k, $key;
+            return 0 unless $open_a eq $open_b && ( $k =~ /->/ || $key =~ /->/ );
+            return !grep { $UNREFERENCED_PAD{$_} } $k, $key;
         };
         $elem_stored = sub ( $o, $key ) {
             return 0 unless $o && $$o;
@@ -24249,6 +24274,22 @@ class SoN::FromOptree 0.01 {
             my $key = $var->($kid);
             # A statement in void context is not an operand.
             undef $key if ( $kid->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;
+            # THE VARIABLE BY ANOTHER NAME (re-audit 2026-11-23, class G): a
+            # pre-increment's result is the variable, not a copy -- `(++$x,
+            # ++$x)` is 7 7 -- and a store through a reference reaches a `my`
+            # scalar one points at, or a package scalar: `$x + ($$r = 5)` is 10.
+            # Neither is read again here.
+            {
+                my $inc = $kid->name eq q{null} && ( $kid->flags & B::OPf_KIDS ) ? $kid->first : $kid;
+                my $ikey = $inc->name =~ /\A(?:i_)?pre(?:inc|dec)\z/ && ( $inc->flags & B::OPf_KIDS )
+                    && ( $kid->flags & B::OPf_WANT ) != B::OPf_WANT_VOID ? $var->( $inc->first ) : undef;
+                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                    if defined $ikey && grep { $stores->($_, $ikey) } _later_siblings($kid);
+                die "GAP: a scalar operand is read by alias and a later operand stores it"
+                  . " through a reference\n"
+                    if defined $key && ( $key =~ /\Ag/ || $key =~ /\Ap(\d+)\z/ && $REFERENCED->{$1} )
+                    && grep { _stores_through_a_reference($_) } _later_siblings($kid);
+            }
             if ( defined $key
                 && grep { $stores->($_, $key) } _later_siblings($kid) ) {
                 # The op that read it: padsv, gvsv, rv2sv over its gv, or the
@@ -24276,6 +24317,16 @@ class SoN::FromOptree 0.01 {
             ( $kid, $first ) = ( $kid->sibling, 0 );
         }
         return;
+    }
+
+    # _stores_through_a_reference($op) -> true when $op's subtree may store a
+    # scalar through a reference: `$$r` in an lvalue place (OPf_MOD, which a
+    # call's argument also is: its callee may store it).
+    sub _stores_through_a_reference ($op) {
+        return scalar grep {
+            $_->name eq q{rv2sv} && ( $_->flags & B::OPf_MOD ) && ( $_->flags & B::OPf_KIDS )
+                && $_->first->name ne q{gv}
+        } _subtree_ops($op);
     }
 
     sub _elem_reader ($k) {
