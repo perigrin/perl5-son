@@ -1,0 +1,63 @@
+lw1.pl: SAME 
+lw2.pl: SAME 
+lw3.pl: SAME 
+lw4.pl: SAME 
+lw5.pl: SAME 
+lw6.pl: SAME 
+lw7.pl: REFUSED GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+lw8.pl: REFUSED no program graph
+lw9.pl: SAME 
+lw10.pl: SAME 
+lw11.pl: SAME 
+lw12.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
+lw13.pl: SAME 
+lw14.pl: SAME 
+lw15.pl: SAME 
+lw16.pl: SAME 
+lw17.pl: SAME 
+lw18.pl: SAME 
+lw19.pl: SAME 
+lw20.pl: REFUSED GAP: T2: out of its slices (Call builtin splice)
+lw21.pl: SAME 
+lw22.pl: SAME 
+lw23.pl: SAME 
+lw24.pl: SAME 
+lw25.pl: REFUSED GAP: T2: out of its slices (a slice of an array B::SoN reads at no version, aliased where it may be written)
+lw26.pl: REFUSED GAP: T2: out of its slices (a local)
+lw27.pl: REFUSED GAP: T2: out of its slices (a local)
+lw28.pl: SAME 
+lw29.pl: SAME 
+lw30.pl: SAME 
+lw31.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash)
+lw32.pl: SAME 
+lw33.pl: SAME 
+lw34.pl: SAME 
+lw35.pl: SAME 
+lw36.pl: SAME 
+lw37.pl: SAME 
+lw38.pl: SAME 
+lw39.pl: SAME 
+lw40.pl: SAME 
+lw41.pl: REFUSED GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+lw42.pl: SAME 
+lw43.pl: SAME 
+lw44.pl: SAME 
+lw45.pl: SAME 
+lw46.pl: SAME 
+lw47.pl: SAME 
+lw48.pl: SAME 
+lw49.pl: SAME 
+lw50.pl: SAME 
+lw51.pl: SAME 
+lw52.pl: SAME 
+lw53.pl: REFUSED no program graph
+lw54.pl: SAME 
+lw55.pl: SAME 
+lw56.pl: SAME 
+lw57.pl: SAME 
+lw58.pl: SAME 
+lw59.pl: SAME 
+lw60.pl: WRONG got=[1,2 1x,2x 1x,2x ] want=[1,2 1x,2x 1xx,2x ]
+lw61.pl: SAME 
+lw62.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
+REFUSED=11 SAME=50 WRONG=1
