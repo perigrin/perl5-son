@@ -1,27 +1,28 @@
 ---
 name: pending-bug-mutated-literals-keyed-by-node-id
-description: "OPEN (found in wire v2 stage 9b's proof): %MUTATED_LITERALS is keyed by node id, ids are per graph (`ArrayLiteral#12`), and the table lives for a whole compilation unit -- a literal mutated in one sub marks an unrelated node of another; conservative (a pinned PostfixDeref '@' for a flattened read), never a wrong answer seen"
+description: "CLOSED (branch id-collide): %MUTATED_LITERALS was keyed by node id, ids are per graph, the table per compilation unit -- one sub's mark pinned another's read; keyed by the node now (refaddr => node), and the 9b proof re-run row by row"
 metadata:
   type: project
 ---
 
-OPEN, found 2026-11-22 by tools/wire-braun-proof.pl over chalk's lib.
+CLOSED 2026-11-23, branch `id-collide`. Found 2026-11-22 by
+tools/wire-braun-proof.pl over chalk's lib.
 
-`%SoN::FromOptree::MUTATED_LITERALS` records aggregate literals mutated in
-place by node id (`$node->id`), and is cleared once per compilation unit
-(lib/B/SoN.pm, `_translate_program`). Node ids come from the sub's own
-NodeFactory (`"${op}#${cfg_counter}"`), so two subs of one file share ids:
-a literal mutated in one sub marks the node of that id in every sub after it.
+`%SoN::FromOptree::MUTATED_LITERALS` recorded aggregate literals mutated in
+place by `$node->id`, and lives for a compilation unit (cleared in
+lib/B/SoN.pm `_translate_program`). Ids come from each sub's NodeFactory
+(`"${op}#${cfg_counter}"`), so `sub a { my @a=(1,2); $a[0]=5; ... }` marked
+`sub b { my @b=(1,2); join(",", @b) }`'s literal and b's join read @b through a
+pinned `PostfixDeref '@'`. Conservative, no wrong answer; but a sub's wire
+depended on the subs before it, and both sides of the 9b proof were noisy.
 
-What it does: the flattened-read shortcut is refused where it was safe -- a
-list read becomes `PostfixDeref '@'` pinned to memory (JSON::PP::object_to_json's
-`join(',', @results)`, Ref::stores_through's `grep ... @nodes`). Conservative;
-no wrong answer found. What it costs: wires depend on which subs came before
-in the file (the 9a and 9b wires of one sub differ by it, the counters having
-moved), so per-graph comparisons across producers are noisy.
+Fix: the table is `refaddr => node`. Holding the node keeps its address from
+being reused while the mark stands (a refaddr-keyed table that does not hold
+its key can collide the same way after a free). Test:
+t/from-optree-a-mutated-literal-is-marked-in-its-own-sub.t.
 
-Fix when it is next in the way: key the table by `refaddr` of the node (or
-by graph and id), with %MUTATED_LITERALS' forward-following (stage 9b, at
-`_braun_seal`) kept. Then re-record what moves.
+The proof re-run with the fix on both sides is baseline section 19: of the
+17 rows, 6 were this collision; the rest were two 9a scout marks and three
+departures of Braun's scan, one of which hid a silent wrong answer.
 
-Related: [[a-loop-is-walked-once]].
+Related: [[a-loop-is-walked-once]], [[a-proof-base-needs-the-fix-too]].

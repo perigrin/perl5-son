@@ -88,3 +88,17 @@ translated again (`_translate_from`). Depth 14: 28 s -> well under 2 s.
 
 Related: [[a-loop-goes-round-by-an-edge]], [[a-new-binding-can-refreeze-a-loop]],
 [[a-written-package-scalar-is-never-carried]].
+
+ADDENDUM (2026-11-23, branch `id-collide`, baseline section 19). Three
+departures of the walk-once header from the 9a wire, fixed:
+`_loop_cycle_ops` went round an ENCLOSING loop (an inner loop's exit goes on
+round the outer body and back in) -- an inner Phi for every slot the outer
+body writes, and a method call on `my $f = F->new` lost its class_name;
+`_may_write_targs` took a grep's or map's list for a rebinding (it is
+aliased); and an array the body passes to a call was marked only where the
+walk reached the call, so a list read before it flattened the literal on the
+next pass -- a silent wrong answer the 9a scouts' walk had hidden (it set the
+slot's mark first). What the scouts' walk left in shared state, the header
+must know where it decides a value (`$ctx->{mutated_aggregate}` for an
+array passed to a call); where it decides only a shape (`$REFERENCED_SLOTS`:
+an If or a select for `@c = ... if C`) the walk-once answer is the precise one.

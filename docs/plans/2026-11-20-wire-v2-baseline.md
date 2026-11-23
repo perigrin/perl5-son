@@ -446,6 +446,8 @@ The Braun proof holds over the corpus and the probes (SAME up to the listed stam
 
 The Braun proof is retired from `tools/gates.sh` in stage 10. It was a one-time check of the 9b producer against the 9a producer's wire (006b485), and this section records its result. Its 17 chalk-lib rows were judged leftovers of the 9a wire, not departures of Braun's: each is a place where the 9a scouts made the wire less precise (a `PostfixDeref '@'` pinned by a `%MUTATED_LITERALS` node-id collision or a scout's `mutated_aggregate` mark, and check_nodes' `@controls = ... if ...` built as an If with no Phi for a `my @a`), the 9b wire is the more precise of the two, and no gate found a wrong answer on either side. What the proof was for -- that Braun's walk builds the 9a graph up to trivial Phis -- is shown on the corpus and the probes; chalk's lib needs no proof against a wire that was the imprecise one. `tools/wire-braun-proof.pl` stays in `tools/` as the script that made this record.
 
+Section 19 re-runs the proof with `%MUTATED_LITERALS` keyed by the node on both sides and accounts for each row: that judgment held for 8 of the 17 rows (the collision, two 9a scout marks); the other 9 were Braun's scan (three departures, fixed there), and behind them was a silent wrong answer of Braun's, fixed too.
+
 ## 16. After stage 10
 
 Heads: producer `v2-s10` 4a3019c (no profile; every rule hard, held by name; Braun proof retired), c17f570 (census pin); chalk `v2-s10` 1cd20654 (loader refuses `profile`; L1-L9 on every wire; wire-verify.t all hard), 287e5da1 (chalk's grammar refuses an interpolated postfix deref: the refusal message joins). Held by name: probes pl13 `main::sw`, chalk's lib DynaLoader::bootstrap and bootstrap_inherit (V7 `record`); LocalAlias out of V2's store kinds (SoN::Verify, with its reason). The verifier over chalk's lib: 221 wires in the gated run, the two held its only violations (25158 graphs in a run before it, on the lib bar 287e5da1's one line).
@@ -494,4 +496,44 @@ corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json 
 probes          PASS  LOUD=4 REFUSED=162 SAME=655; WRONG 0, SAME lost 0, changed 0 [2m45s]
 ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [33m31s]
                 PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [8m07s]
+```
+
+## 19. The Braun proof re-run, with node identity fixed (branch `id-collide`)
+
+Section 15 put the 17 chalk-lib rows of stage 9b's proof down to the 9a wire's leftovers, without a row-by-row account. This section is that account. First the bug that polluted both sides was fixed: `%MUTATED_LITERALS` was keyed by `$node->id`, a per-graph counter, while the table lives for a compilation unit, so one sub's mark fell on another sub's node of the same id (`ArrayLiteral#4` in every sub that builds one fourth). It is keyed by the node now (refaddr => node; holding the node keeps its address from being reused): `t/from-optree-a-mutated-literal-is-marked-in-its-own-sub.t`.
+
+**The comparison.** `tools/wire-braun-proof.pl` (as at 6fdb254), base = throwaway branch `ic-proof-base` (006b485, stage 9a, + the fix: 2d551a6), head = throwaway branch `ic-proof-head` (6fdb254, the end of stage 9b: Braun fde4976, scouts deleted 15cc7f9, 5d55bde, 6fdb254; + the fix: 0d901ec). 6fdb254 rather than fde4976: it is the 9b point section 15's 17 rows came from, so each row maps to one of them; stage 10 and later change the wire on purpose and are left out. Inputs: the corpus, the probes, and chalk's lib at daaf243f (the lib section 15's run read). A file stops at its first differing graph in the proof; every graph of every row was also compared (`--list`, no stop).
+
+**Run 1 (the fix on both sides).** corpus SAME 427, SAME-BUT-STAMPS 4; probes SAME 541, SAME-BUT-STAMPS 2, GAINED 1 (ev8); chalk SAME 193, SAME-BUT-STAMPS 16, DIFFERS 12. Six of section 15's rows go (they were the collision); one row appears (WireCheck.pm, where the collision had pinned the read on both sides alike).
+
+| row (section 15) | graph(s) that differ | cause | kind | evidence |
+|---|---|---|---|---|
+| StructPromotion.pm, SemanticAction.pm, Grammar/BNF/Actions.pm, NodeFactory.pm | Concat::const_choices, Ref::stores_through | node-id collision in `%MUTATED_LITERALS` | (a) | SAME or SAME-BUT-STAMPS with the fix on both sides (run 1) |
+| Impl.pm | JSON::PP::object_to_json | node-id collision | (a) | SAME-BUT-STAMPS in run 1 |
+| Builder/Values.pm | Builder::_bit_source_numified | node-id collision | (a) | SAME in run 1 |
+| DefinedOrFold.pm, IR/Analysis.pm, Serialize/JSON.pm, LLVM/Lower.pm, LLVM.pm | Analysis::_answer_sub_defined; Builder::_common_memo, full_jump; WireCheck::_unread_derefs; part of _propagate_computed_reprs | Braun's scan took a grep's list (OPf_MOD, for its `$_` alias) for a rebinding: the read in the body was the header Phi, so the in-loop guard of a mutated slot (FromOptree's padav read: `@LOOP_STACK && $MUTATED_SLOTS`) and a mark on the list's node saw no literal; the 9a wire pinned `PostfixDeref '@'` there | (b) fixed | each graph equal once a PostfixDeref '@' over a literal or Phi is taken out of both sides (`norm2.pl`); traced (`padav-read ... lit=Phi` in 9b, `lit=ArrayLiteral ... ml=1` in 9a); gone with the fix |
+| the same five, Analysis::_insert_str_coercions, _narrow_unknown_coercions | method Call without `class_name` | `_loop_cycle_ops` went round an enclosing loop (an inner loop's exit goes on round the outer body and back in), so the inner header had a Phi for every slot the outer body writes; `my $factory = ...->new` read through one lost its class | (b) fixed | the only node difference is `class_name`; repro (`$factory` declared in the outer body, called in the inner) loses it at 6fdb254 and keeps it at 006b485; gone with the fix |
+| Perl/Target/C.pm, Perl/Target/EmitHelpers.pm | EmitHelpers::_repair_stale_merge | the grep-list Phi again, over a memory-held `@keys`: read as a PostfixDeref of the PadAccess where 9a wrapped it in an ArrayLiteral | (b) fixed | gone with the fix |
+| Builder/Args.pm | Args::_collect_positional_arg_reads | the grep-list Phi over `@shifts` (as above); the rest stamps (an Assign Unknown in 9a, Scalar in 9b) | (b) fixed | SAME-BUT-STAMPS with the fix |
+| Builder/Control.pm | Builder::_common_memo, full_jump | the grep-list Phi | (b) fixed | gone with the fix |
+| (none in section 15: hidden by the collision) | the in-loop read of an array a call is passed later in the body | a SILENT WRONG ANSWER since 9b: the callee may write `$_[0]`, and on the next pass the read before the call flattened the literal as first built: `1,2 1,2` for perl's `1,2 1x,2` (SAME at 006b485; WRONG at 6fdb254 and at 9e40d47). The 9a scouts' walk set the slot's mark (`$ctx->{mutated_aggregate}`, an array passed to a call) before the real walk read it | (b) fixed | found reading `_propagate_computed_reprs`' 9a trace (`@reprs` marked by a scout from `_join_repr(..., @reprs)`); probe through chalk WRONG -> SAME; the Braun header marks the slot now |
+| Perl/Actions.pm | Actions::AssignmentExpression | a 9a scout's walk of the rest of the body marked `@names` mutated (`\@names`, two statements on) in the shared `$ctx->{mutated_aggregate}` before the real walk read it at `grep { !defined } @names`; `@names` is a `my` of the pass, so the later reference cannot reach that read | (a) | trace: `MA targ=15 scout=1` before the real walk's `PFD targ=15 ctx=1`; equal once the PostfixDeref is taken out |
+| IR/Graph/TypedInvariant.pm | TypedInvariant::check_nodes | `@controls = $controls[0]->@* if ...` an If in 9a, a select (TernaryExpr) in 9b: the arm walker's `_arm_advances_control` asks whether any slot is referenced yet (`$REFERENCED_SLOTS`, filled as the walk lowers `\@x`); the first 9a scout walked the whole body (its `\@violations`) and the second scout and the real walk saw it non-empty. No reference reaches `@controls` | (a) | trace: `ARM-AND ... ac=0 refslots=` (first scout), `ac=1 refslots=6,77` (second scout, real walk); the select is the producer's shape for this statement outside a loop too, and its may-die arm is not run when the guard fails (a scratch probe of the shape, through chalk: SAME) |
+
+The fix of the three (b) rows, test first (`t/loop-header-knows-what-its-own-body-does.t`): `_loop_cycle_ops` keeps only the ops under the loop's own `leaveloop`/`grepwhile`/`mapwhile`; `_may_write_targs` takes a grep's or map's list as aliased, as a foreach's; `_braun_phis` marks, at the header, each array the body passes to a call.
+
+**Run 2 (the fix and the three Braun fixes on the head, 6fdb254 + 0d901ec + 5e4aac0).** corpus SAME 427, SAME-BUT-STAMPS 4; probes SAME 541, SAME-BUT-STAMPS 2, GAINED 1 (ev8); chalk SAME 201, SAME-BUT-STAMPS 18, DIFFERS 2 -- AssignmentExpression and check_nodes, the two (a) rows above, every other graph of both files equal. `_propagate_computed_reprs` is equal too: the header's mark of `@reprs` (passed to `_join_repr` later in the body) is the 9a scout's mark, made where the header is. The SAME-BUT-STAMPS rows are the proof's pass class (a stamp or a line the walk knows from the real binding); there are 18 where section 15 had 11 because files that differed there hid their other graphs behind the first. Nothing unexplained.
+
+**Still open, not Braun's.** A foreach write-back later in a loop body is not seen by a list read earlier in the body on the next pass: `for my $i (1..2) { push @r, join(",", @a); for (@a) { $_ .= "x" } }` prints `1,2 1,2` for perl's `1,2 1x,2x` -- WRONG at 006b485 and 6fdb254 alike, and today (docs/memory/pending-bug-foreach-write-back-later-in-a-loop-body.md).
+
+`tools/gates.sh` at producer `id-collide` 52ebf77 (on 246a7f7), chalk `id-collide` 48c36bd6 (no chalk change):
+
+```
+producer-suite  PASS  789 files, 0 failing [10m46s]
+chalk-suite     PASS  934 files, 0 failing [78m06s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m59s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [5m12s]
+probes          PASS  LOUD=4 REFUSED=162 SAME=655; WRONG 0, SAME lost 0, changed 0 [2m24s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [32m27s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m12s]
 ```
