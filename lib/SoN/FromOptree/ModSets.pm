@@ -266,7 +266,8 @@ sub _stores ( $cv, $o ) {
     push @e, _lex_effects( $cv, $o->targ, 0 ) if $o->targ && _target_my($o);
     push @e, _target_effects( $cv, $kids[0] ) if $n =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/;
     push @e, _target_effects( $cv, $kids[0] )
-        if $o->isa('B::BINOP') && ( $o->flags & B::OPf_STACKED ) && $n ne 'sassign';   # op=
+        if $o->isa('B::BINOP') && ( $o->flags & B::OPf_STACKED ) && $n ne 'sassign'
+        && !$o->isa('B::PMOP');   # op= (a PMOP's STACKED is its =~ target: subst is below, a match stores nothing)
     push @e, _target_effects( $cv, $kids[-1] ), _target_effects( $cv, $kids[0] )
         if $n eq 'multiconcat' && ( $o->flags & B::OPf_STACKED );
     if ( $n =~ /\A(?:subst|trans)\z/ ) {
