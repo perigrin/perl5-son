@@ -60,7 +60,7 @@ my %CONSUMED_BY_OPENER = map { $_ => 1 } qw(
 # is the point: each is a KNOWN hole, not an oversight, and the list should
 # shrink. A new op appearing here is a new hole and fails the test below.
 my %UNREACHED = map { $_ => 1 } qw(
-    break cmpchain_dup dump pushdefer
+    break cmpchain_dup dump
 );
 
 # The three inputs, computed ONCE. Both subtests need them and both were
