@@ -14311,7 +14311,10 @@ class SoN::FromOptree 0.01 {
 
     # _loop_cycle_ops($start) -- the ops on a loop's cycle: reachable from its
     # first op by `next` / `other`, and reaching it again (`next` and `redo`
-    # are edges back to it; `last`, `return` and `die` leave).
+    # are edges back to it; `last`, `return` and `die` leave). Only the loop's
+    # own ops: an inner loop's exit goes on round the OUTER loop and back in,
+    # and its header had a Phi for every slot the outer body writes (a
+    # constructor's object read through one lost its class).
     sub _loop_cycle_ops ($start) {
         my ( %fwd, %pred, @q );
         @q = ($start);
@@ -14329,7 +14332,10 @@ class SoN::FromOptree 0.01 {
         my ( %back, @b );
         @b = ($$start);
         while ( defined( my $a = shift @b ) ) { next if $back{$a}++; push @b, ( $pred{$a} // [] )->@* }
-        return map { $fwd{$_} } grep { $back{$_} } keys %fwd;
+        my $own = $start;
+        $own = eval { $own->parent } while $own && $$own && $own->name !~ /\A(?:leaveloop|grepwhile|mapwhile)\z/;
+        my %in = $own && $$own ? map { ( $$_ => 1 ) } _subtree_ops($own) : ();
+        return map { $fwd{$_} } grep { $back{$_} && ( !%in || $in{$_} ) } keys %fwd;
     }
 
     # (a builtin that changes an aggregate in place, its slot bound as it was)
@@ -14367,8 +14373,10 @@ class SoN::FromOptree 0.01 {
             # sub's argument: those change memory, not what the slot is bound
             # to, and a Phi for them only stands where the walk reads the
             # binding's class (a literal's element stamp, a known sub).
-            # (nor a foreach's list: its elements are aliased, not its slot)
+            # (nor a foreach's list, or a grep's or map's: its elements are
+            # aliased, not its slot)
             $pname = 'enteriter' if $pname eq 'null' && $up->parent && ${ $up->parent } && $up->parent->name eq 'enteriter';
+            $pname = 'enteriter' if $pname =~ /\A(?:grepstart|mapstart)\z/;
             # (A `my @a` or `my %h` the pass declares is a fresh aggregate
             # each pass, never carried -- a Phi for it made `$h{$k} //= []`
             # into it "an aggregate rebound inside the loop", refused. A `my`
@@ -14443,6 +14451,18 @@ class SoN::FromOptree 0.01 {
     # (and is bound before the loop), each bound in the sim.
     sub _braun_phis ($factory, $sim, $loop_node, $start, $pre_scope, $hint, @skip) {
         my $w = _may_write_targs($start);
+        # AN ARRAY THE BODY PASSES TO A CALL may have its elements written by
+        # the callee, on a pass before a read walked ahead of the call: the
+        # walk marks the slot only where it reaches the call, and the read had
+        # flattened the literal (`1,2 1,2` for perl's `1,2 1x,2`). The
+        # scouts' walk marked it first; the header does now. (The other marks
+        # of a slot are the sub-wide scan's, $MUTATED_SLOTS.)
+        if ($MUTATED_AGGREGATE) {
+            $MUTATED_AGGREGATE->{ $_->targ } = 1 for grep {
+                $_->name eq 'padav' && $_->targ
+                    && _operand_consumer( $_->parent->name eq 'aelem' ? $_->parent : $_ ) eq 'entersub'
+            } _loop_cycle_ops($start);
+        }
         my %skip = map { $_ => 1 } @skip;
         # A SHARED AGGREGATE IS BOUND TO ITS CONTAINER before the body and
         # after it, whatever the body stores there: no value to carry.
