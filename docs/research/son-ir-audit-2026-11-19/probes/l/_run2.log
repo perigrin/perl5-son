@@ -57,7 +57,41 @@ lw56.pl: SAME
 lw57.pl: SAME 
 lw58.pl: SAME 
 lw59.pl: SAME 
-lw60.pl: WRONG got=[1,2 1x,2x 1x,2x ] want=[1,2 1x,2x 1xx,2x ]
+lw60.pl: SAME 
 lw61.pl: SAME 
 lw62.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
-REFUSED=11 SAME=50 WRONG=1
+lw63.pl: SAME 
+lw64.pl: SAME 
+lw65.pl: SAME 
+lw66.pl: SAME 
+lw67.pl: SAME 
+lw68.pl: SAME 
+lw69.pl: SAME 
+lw70.pl: SAME 
+lw71.pl: REFUSED no program graph
+lw72.pl: SAME 
+lw73.pl: SAME 
+lw74.pl: REFUSED no program graph
+lw75.pl: SAME 
+lw76.pl: REFUSED GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+lw77.pl: SAME 
+lw78.pl: SAME 
+lw79.pl: REFUSED no program graph
+lw80.pl: SAME 
+lw81.pl: REFUSED no program graph
+lw82.pl: REFUSED no program graph
+lw83.pl: REFUSED no program graph
+lw84.pl: REFUSED no program graph
+lw85.pl: REFUSED no program graph
+lw86.pl: SAME 
+lw87.pl: SAME 
+lw88.pl: SAME 
+lw89.pl: SAME 
+lw90.pl: REFUSED no program graph
+lw91.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
+lw92.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
+lw93.pl: SAME 
+lw94.pl: REFUSED GAP: T2: out of its slices (PadAccess)
+lw95.pl: SAME 
+lw96.pl: REFUSED no program graph
+REFUSED=25 SAME=71

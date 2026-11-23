@@ -60,4 +60,38 @@ lw59.pl: WRONG got=[1,2 1,2 ] want=[1,2 1x,2x ]
 lw60.pl: WRONG got=[1,2 1,2 1,2 ] want=[1,2 1x,2x 1xx,2x ]
 lw61.pl: WRONG got=[1,2,3 1,2,3 ] want=[1,2,3 1,2,3y ]
 lw62.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
-REFUSED=11 SAME=29 WRONG=22
+lw63.pl: WRONG got=[1x 2x ] want=[1xx 2x ]
+lw64.pl: WRONG got=[1x 2x ] want=[1xx 2x ]
+lw65.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw66.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw67.pl: WRONG got=[1x 2x; 1x 2x ] want=[1xx 2x; 1xx 2x ]
+lw68.pl: SAME 
+lw69.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw70.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw71.pl: REFUSED no program graph
+lw72.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw73.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw74.pl: REFUSED no program graph
+lw75.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw76.pl: REFUSED GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+lw77.pl: SAME 
+lw78.pl: WRONG got=[1 2;1x 2; ] want=[1x 2;1x 2x; ]
+lw79.pl: REFUSED no program graph
+lw80.pl: WRONG got=[1,2;1x,2; 1x 2 ] want=[1x,2;1x,2x; 1x 2x ]
+lw81.pl: REFUSED no program graph
+lw82.pl: REFUSED no program graph
+lw83.pl: REFUSED no program graph
+lw84.pl: REFUSED no program graph
+lw85.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw86.pl: WRONG got=[1 2 ] want=[1x 2 ]
+lw87.pl: WRONG got=[1 2 1 2 ] want=[1x 2 1x 2x ]
+lw88.pl: WRONG got=[1 2 ] want=[10 2 ]
+lw89.pl: SAME 
+lw90.pl: REFUSED no program graph
+lw91.pl: WRONG got=[1y2y|q 2y ] want=[q2y|q 2y ]
+lw92.pl: WRONG got=[1y2y|q 2y ] want=[q2y|q 2y ]
+lw93.pl: SAME 
+lw94.pl: REFUSED GAP: T2: out of its slices (PadAccess)
+lw95.pl: SAME 
+lw96.pl: WRONG got=[1y2y|q 2y ] want=[q2y|q 2y ]
+REFUSED=21 SAME=34 WRONG=41
