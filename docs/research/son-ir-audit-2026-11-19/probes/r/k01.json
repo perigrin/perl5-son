@@ -1,0 +1,260 @@
+{
+   "classes" : {
+      "main" : {
+         "adjusts" : [],
+         "fields" : [],
+         "methods" : {},
+         "name" : "main",
+         "parent" : null,
+         "symbols" : {
+            "\\" : {
+               "scalar" : 1
+            }
+         },
+         "symbols_unknown" : [
+            "\u0005",
+            "\b",
+            "\fAST_FH",
+            "\rAX_NESTED_EVAL_BEGIN_BLOCKS",
+            "\u000f",
+            "\u0012",
+            "\u0012E_COMPILE_RECURSION_LIMIT",
+            "\u0012E_TRIE_MAXBUF",
+            "\u0016",
+            "\u0017",
+            "\u0017ARNING_BITS",
+            "\u0018",
+            "!",
+            "\"",
+            ",",
+            ".",
+            "/",
+            "0",
+            "1",
+            "2",
+            "3",
+            "@",
+            "ARGV",
+            "B::",
+            "BEGIN",
+            "CORE::",
+            "Carp::",
+            "Config::",
+            "DB::",
+            "DynaLoader::",
+            "ENV",
+            "Encode::",
+            "Exporter::",
+            "INC",
+            "IO::",
+            "Internals::",
+            "JSON::",
+            "List::",
+            "Math::",
+            "O::",
+            "PerlIO::",
+            "Regexp::",
+            "SIG",
+            "STDERR",
+            "STDIN",
+            "STDOUT",
+            "Scalar::",
+            "SoN::",
+            "Sub::",
+            "Tie::",
+            "UNIVERSAL::",
+            "XSLoader::",
+            "]",
+            "_",
+            "builtin::",
+            "bytes::",
+            "constant::",
+            "experimental::",
+            "feature::",
+            "main::",
+            "mro::",
+            "overload::",
+            "overloading::",
+            "re::",
+            "stderr",
+            "stdin",
+            "stdout",
+            "strict::",
+            "threads::",
+            "utf8::",
+            "vars::",
+            "version::",
+            "warnings::"
+         ]
+      }
+   },
+   "dowarn" : {
+      "all_off" : false,
+      "all_on" : false,
+      "on" : false
+   },
+   "methods" : {
+      "main::__PROGRAM__" : {
+         "nodes" : [
+            {
+               "id" : 0,
+               "inputs" : [],
+               "op" : "Start"
+            },
+            {
+               "fields" : {
+                  "const_type" : "undef",
+                  "value" : null
+               },
+               "id" : 1,
+               "inputs" : [],
+               "op" : "Constant",
+               "stamp" : "Undef"
+            },
+            {
+               "fields" : {
+                  "const_type" : "string",
+                  "value" : "a"
+               },
+               "id" : 2,
+               "inputs" : [],
+               "op" : "Constant",
+               "stamp" : "Str"
+            },
+            {
+               "fields" : {
+                  "const_type" : "integer",
+                  "value" : "1"
+               },
+               "id" : 3,
+               "inputs" : [],
+               "op" : "Constant",
+               "stamp" : "Int"
+            },
+            {
+               "fields" : {
+                  "sigil" : "%",
+                  "symbol" : "h"
+               },
+               "id" : 4,
+               "inputs" : [
+                  2,
+                  3
+               ],
+               "op" : "HashLiteral",
+               "stamp" : "Hash"
+            },
+            {
+               "fields" : {
+                  "kind" : "hash"
+               },
+               "id" : 5,
+               "inputs" : [
+                  4,
+                  2
+               ],
+               "op" : "Subscript",
+               "stamp" : "Int"
+            },
+            {
+               "fields" : {
+                  "const_type" : "integer",
+                  "value" : "2"
+               },
+               "id" : 6,
+               "inputs" : [],
+               "op" : "Constant",
+               "stamp" : "Int"
+            },
+            {
+               "id" : 7,
+               "inputs" : [],
+               "op" : "MemStart"
+            },
+            {
+               "control_in" : 0,
+               "id" : 8,
+               "inputs" : [
+                  5,
+                  6
+               ],
+               "mem_in" : 7,
+               "mem_out" : true,
+               "op" : "Assign",
+               "stamp" : "Int"
+            },
+            {
+               "fields" : {
+                  "kind" : "hash"
+               },
+               "id" : 9,
+               "inputs" : [
+                  4,
+                  2
+               ],
+               "mem_in" : 8,
+               "op" : "Subscript",
+               "stamp" : "Int"
+            },
+            {
+               "fields" : {
+                  "from_repr" : "Unknown",
+                  "to_repr" : "Str"
+               },
+               "id" : 10,
+               "inputs" : [
+                  9
+               ],
+               "op" : "Coerce",
+               "stamp" : "Str"
+            },
+            {
+               "fields" : {
+                  "const_type" : "string",
+                  "value" : "\n"
+               },
+               "id" : 11,
+               "inputs" : [],
+               "op" : "Constant",
+               "stamp" : "Str"
+            },
+            {
+               "id" : 12,
+               "inputs" : [
+                  10,
+                  11
+               ],
+               "op" : "Concat",
+               "stamp" : "Str"
+            },
+            {
+               "control_in" : 8,
+               "id" : 13,
+               "inputs" : [
+                  12
+               ],
+               "op" : "Print",
+               "stamp" : "Maybe[Boolean]"
+            },
+            {
+               "control_in" : 13,
+               "fields" : {
+                  "implicit" : true
+               },
+               "id" : 14,
+               "inputs" : [
+                  1
+               ],
+               "mem_in" : 8,
+               "op" : "Return"
+            }
+         ],
+         "returns" : [
+            14
+         ],
+         "start" : 0
+      }
+   },
+   "source" : null,
+   "version" : 2
+}

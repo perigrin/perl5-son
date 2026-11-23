@@ -1,0 +1,917 @@
+ag1                            SAME     
+ag10                           SAME     
+ag11                           SAME     
+ag12                           SAME     
+ag13                           SAME     
+ag14                           SAME     
+ag15                           SAME     
+ag16                           REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+ag17                           SAME     
+ag18                           SAME     
+ag19                           SAME     
+ag2                            SAME     
+ag20                           SAME     
+ag21                           SAME     
+ag22                           SAME     
+ag23                           SAME     
+ag24                           SAME     
+ag25                           SAME     
+ag26                           SAME     
+ag27                           SAME     
+ag28                           SAME     
+ag29                           SAME     
+ag3                            SAME     
+ag30                           SAME     
+ag31                           REFUSED  GAP: T2: out of its slices (a read through a reference waiting across a call)
+ag32                           SAME     
+ag33                           SAME     
+ag34                           SAME     
+ag35                           SAME     
+ag36                           SAME     
+ag37                           SAME     
+ag38                           SAME     
+ag39                           SAME     
+ag4                            REFUSED  GAP: T2: out of its slices (a sprintf of a list)
+ag40                           SAME     
+ag41                           SAME     
+ag42                           REFUSED  no program graph
+ag43                           SAME     
+ag5                            SAME     
+ag6                            SAME     
+ag7                            SAME     
+ag8                            SAME     
+ag9                            SAME     
+al1                            REFUSED  GAP: T2: out of its slices (PadAccess)
+al10                           SAME     
+al11                           SAME     
+al12                           SAME     
+al13                           SAME     
+al14                           SAME     
+al15                           SAME     
+al16                           SAME     
+al17                           SAME     
+al18                           SAME     
+al19                           SAME     
+al2                            REFUSED  GAP: T2: out of its slices (PadAccess)
+al20                           SAME     
+al21                           SAME     
+al22                           SAME     
+al23                           SAME     
+al24                           SAME     
+al25                           SAME     
+al26                           SAME     
+al27                           SAME     
+al28                           SAME     
+al29                           SAME     
+al3                            REFUSED  GAP: T2: out of its slices (PadAccess)
+al30                           REFUSED  GAP: T2: out of its slices (a list perl may alias (Phi) passed where a sub writes @_)
+al4                            SAME     
+al5                            SAME     
+al6                            SAME     
+al7                            SAME     
+al8                            SAME     
+al9                            SAME     
+ar1                            SAME     
+ar10                           SAME     
+ar11                           SAME     
+ar12                           REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+ar13                           REFUSED  GAP: T2: out of its slices (sub main::f reads @_ other than by shifts, $_[N] or a signature)
+ar14                           SAME     
+ar15                           SAME     
+ar16                           REFUSED  GAP: T2: out of its slices (a list assignment to a slice of @_)
+ar17                           LOUD     chalk: refused at run time: a hash element read through no HASH reference
+ar18                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+ar19                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+ar2                            SAME     
+ar20                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+ar21                           REFUSED  load: from_json failed: GAP: a captured variable passed to a sub that writes its argument ($_[N] is the caller's variable; the closure would not see the write) (the c
+ar22                           REFUSED  load: from_json failed: GAP: a captured variable passed to a sub that writes its argument ($_[N] is the caller's variable; the closure would not see the write) (the c
+ar3                            SAME     
+ar4                            REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+ar5                            REFUSED  GAP: T2: out of its slices (an argument perl aliases (PostfixDeref) passed where a sub writes @_)
+ar6                            SAME     
+ar7                            SAME     
+ar8                            REFUSED  GAP: T2: out of its slices (an argument perl aliases (Subscript) passed where a sub writes @_)
+ar9                            SAME     
+aue1                           REFUSED  no program graph
+aue2                           REFUSED  GAP: T2: out of its slices (a statement Call builtin sleep)
+aue3                           SAME     
+aue4                           REFUSED  GAP: T2: out of its slices (a statement Call builtin srand)
+aue5                           REFUSED  GAP: T2: out of its slices (an each in a program with a keys or values (which reset it, B::SoN places them nowhere))
+auk1                           SAME     
+auk10                          REFUSED  GAP: T2: out of its slices (an array first made in an arm or a loop body)
+auk11                          SAME     
+auk12                          SAME     
+auk13                          SAME     
+auk14                          SAME     
+auk15                          REFUSED  GAP: T2: out of its slices (a loop body that ends neither going round nor leaving)
+auk16                          SAME     
+auk17                          SAME     
+auk18                          SAME     
+auk2                           SAME     
+auk3                           SAME     
+auk4                           SAME     
+auk5                           SAME     
+auk6                           SAME     
+auk7                           SAME     
+auk8                           SAME     
+auk9                           SAME     
+aum1                           SAME     
+aum10                          REFUSED  GAP: T2: out of its slices (a phi stamped List)
+aum11                          REFUSED  GAP: T2: out of its slices (a phi stamped List)
+aum12                          REFUSED  no program graph
+aum13                          SAME     
+aum14                          REFUSED  GAP: T2: out of its slices (a phi stamped List)
+aum15                          SAME     
+aum16                          REFUSED  GAP: T2: out of its slices (a phi stamped List)
+aum17                          SAME     
+aum18                          SAME     
+aum19                          SAME     
+aum2                           SAME     
+aum20                          SAME     
+aum21                          SAME     
+aum22                          SAME     
+aum23                          SAME     
+aum24                          REFUSED  no program graph
+aum25                          SAME     
+aum26                          SAME     
+aum3                           SAME     
+aum30                          SAME     
+aum31                          SAME     
+aum32                          SAME     
+aum33                          SAME     
+aum34                          SAME     
+aum35                          SAME     
+aum36                          SAME     
+aum37                          SAME     
+aum38                          SAME     
+aum4                           SAME     
+aum40                          REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+aum41                          SAME     
+aum42                          REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+aum43                          REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+aum44                          SAME     
+aum45                          REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+aum46                          REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+aum5                           REFUSED  no program graph
+aum50                          SAME     
+aum51                          REFUSED  GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+aum52                          SAME     
+aum53                          SAME     
+aum54                          REFUSED  GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+aum55                          SAME     
+aum56                          SAME     
+aum57                          SAME     
+aum58                          SAME     
+aum6                           SAME     
+aum60                          REFUSED  load: from_json failed: GAP: a DESTROY method (main::AUTOLOAD), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aum61                          REFUSED  load: from_json failed: GAP: a DESTROY method (P::AUTOLOAD), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aum62                          REFUSED  load: from_json failed: GAP: a DESTROY method (B1::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aum63                          REFUSED  load: from_json failed: GAP: a DESTROY method (B1::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aum64                          REFUSED  load: from_json failed: GAP: a DESTROY method (B2::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aum7                           SAME     
+aum70                          SAME     
+aum71                          SAME     
+aum72                          SAME     
+aum73                          SAME     
+aum74                          SAME     
+aum75                          SAME     
+aum76                          SAME     
+aum77                          SAME     
+aum78                          SAME     
+aum79                          SAME     
+aum8                           SAME     
+aum9                           SAME     
+aun1                           REFUSED  no program graph
+aun10                          SAME     
+aun100                         SAME     
+aun101                         SAME     
+aun102                         SAME     
+aun103                         SAME     
+aun104                         SAME     
+aun105                         SAME     
+aun106                         SAME     
+aun107                         REFUSED  GAP: T2: out of its slices (a read through a reference waiting across a hash store)
+aun108                         SAME     
+aun110                         SAME     
+aun111                         SAME     
+aun112                         SAME     
+aun113                         SAME     
+aun114                         SAME     
+aun115                         SAME     
+aun116                         REFUSED  GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+aun117                         SAME     
+aun118                         SAME     
+aun119                         SAME     
+aun12                          SAME     
+aun120                         SAME     
+aun121                         SAME     
+aun122                         SAME     
+aun123                         SAME     
+aun124                         SAME     
+aun125                         SAME     
+aun126                         REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+aun127                         SAME     
+aun128                         SAME     
+aun129                         SAME     
+aun12a                         SAME     
+aun12b                         SAME     
+aun12c                         SAME     
+aun12d                         SAME     
+aun12e                         REFUSED  GAP: T2: out of its slices (a slice taken as a scalar (Coerce))
+aun12f                         SAME     
+aun13                          SAME     
+aun130                         SAME     
+aun131                         SAME     
+aun132                         SAME     
+aun133                         REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+aun134                         SAME     
+aun135                         REFUSED  GAP: T2: out of its slices (a list assignment to a slice of @_)
+aun136                         SAME     
+aun137                         REFUSED  GAP: T2: out of its slices (sub main::m1 reads @_ other than by shifts, $_[N] or a signature)
+aun138                         SAME     
+aun139                         REFUSED  GAP: T2: out of its slices (PadAccess)
+aun14                          SAME     
+aun140                         SAME     
+aun141                         SAME     
+aun142                         SAME     
+aun143                         SAME     
+aun144                         SAME     
+aun145                         SAME     
+aun146                         SAME     
+aun147                         SAME     
+aun148                         SAME     
+aun149                         SAME     
+aun15                          SAME     
+aun150                         SAME     
+aun151                         SAME     
+aun152                         SAME     
+aun153                         SAME     
+aun154                         SAME     
+aun155                         SAME     
+aun156                         SAME     
+aun16                          REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+aun160                         REFUSED  load: from_json failed: GAP: a DESTROY method (E::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aun161                         REFUSED  load: from_json failed: GAP: a DESTROY method (main::AUTOLOAD), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aun162                         SAME     
+aun163                         SAME     
+aun164                         REFUSED  load: from_json failed: GAP: a dereference nothing reads, which may still die (of undef, under strict refs) (in main::__PROGRAM__)
+aun165                         SAME     
+aun166                         SAME     
+aun167                         SAME     
+aun168                         SAME     
+aun169                         SAME     
+aun16a                         SAME     
+aun16b                         SAME     
+aun16c                         SAME     
+aun16d                         REFUSED  load: from_json failed: GAP: a DESTROY method (main::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aun16e                         REFUSED  load: from_json failed: GAP: a DESTROY method (T::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aun16f                         REFUSED  load: from_json failed: GAP: a DESTROY method (T::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+aun17                          SAME     
+aun170                         SAME     
+aun171                         SAME     
+aun172                         SAME     
+aun173                         REFUSED  no program graph
+aun174                         REFUSED  no program graph
+aun175                         REFUSED  no program graph
+aun176                         SAME     
+aun177                         REFUSED  GAP: T2: out of its slices (an each in a program with a keys or values (which reset it, B::SoN places them nowhere))
+aun178                         SAME     
+aun179                         SAME     
+aun17a                         SAME     
+aun17b                         REFUSED  GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+aun17c                         SAME     
+aun17d                         SAME     
+aun17e                         REFUSED  no program graph
+aun17f                         SAME     
+aun18                          SAME     
+aun19                          SAME     
+aun2                           SAME     
+aun20                          SAME     
+aun21                          SAME     
+aun22                          SAME     
+aun23                          SAME     
+aun24                          SAME     
+aun25                          SAME     
+aun26                          SAME     
+aun27                          SAME     
+aun28                          SAME     
+aun29                          SAME     
+aun3                           SAME     
+aun30                          SAME     
+aun31                          SAME     
+aun33                          SAME     
+aun34                          SAME     
+aun35                          SAME     
+aun36                          SAME     
+aun37                          REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+aun38                          SAME     
+aun4                           SAME     
+aun40                          SAME     
+aun41                          LOUD     a method named at run time by other than a plain name: stopped (chalk, T2)
+aun42                          SAME     
+aun43                          SAME     
+aun44                          SAME     
+aun45                          SAME     
+aun46                          SAME     
+aun47                          SAME     
+aun48                          REFUSED  GAP: T2: out of its slices (Call builtin splice)
+aun49                          SAME     
+aun5                           SAME     
+aun50                          SAME     
+aun51                          REFUSED  no program graph
+aun52                          SAME     
+aun53                          SAME     
+aun55                          SAME     
+aun56                          SAME     
+aun57                          SAME     
+aun58                          SAME     
+aun59                          SAME     
+aun5a                          SAME     
+aun5b                          SAME     
+aun5c                          SAME     
+aun5d                          SAME     
+aun6                           SAME     
+aun60                          SAME     
+aun61                          SAME     
+aun62                          SAME     
+aun63                          SAME     
+aun64                          SAME     
+aun7                           SAME     
+aun70                          REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::t)
+aun71                          SAME     
+aun72                          SAME     
+aun73                          REFUSED  GAP: T2: out of its slices (a local of an element where a die may unwind past it)
+aun74                          SAME     
+aun75                          SAME     
+aun76                          REFUSED  GAP: T2: out of its slices (a die in an eval where the wire gives it no way out (EntryWrite))
+aun77                          SAME     
+aun78                          SAME     
+aun79                          REFUSED  GAP: T2: out of its slices (a phi stamped List)
+aun8                           SAME     
+aun80                          REFUSED  GAP: T2: out of its slices (a require of No/Such/Mod.pm, not compiled in)
+aun81                          REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+aun82                          REFUSED  GAP: T2: out of its slices (an eval whose body returns)
+aun83                          REFUSED  GAP: T2: out of its slices (an open of a file (or of what is not a reference to a constant string))
+aun84                          SAME     
+aun85                          SAME     
+aun87                          SAME     
+aun88                          SAME     
+aun89                          SAME     
+aun9                           SAME     
+aun90                          SAME     
+aun91                          SAME     
+aun92                          REFUSED  GAP: T2: out of its slices (a phi stamped List)
+aun93                          SAME     
+aun94                          SAME     
+aun95                          REFUSED  no program graph
+aun96                          SAME     
+aun97                          SAME     
+aun98                          SAME     
+aun99                          SAME     
+aux1                           REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+aux10                          SAME     
+aux11                          REFUSED  GAP: T2: out of its slices (a die in an eval where the wire gives it no way out (EntryWrite))
+aux12                          SAME     
+aux2                           REFUSED  GAP: T2: out of its slices (a statement Call builtin sqrt)
+aux3                           REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+aux4                           REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+aux5                           REFUSED  GAP: T2: out of its slices (an eval whose body returns)
+aux6                           REFUSED  GAP: T2: out of its slices (a phi stamped List)
+aux7                           LOUD     chalk: refused at run time: a call of what is not a code value (T2)
+aux8                           SAME     
+aux9                           SAME     
+bless1                         SAME     
+bless2                         SAME     
+bt1                            SAME     
+ca1                            SAME     
+ca10                           SAME     
+ca11                           SAME     
+ca12                           REFUSED  load: from_json failed: GAP: a DESTROY method (A::AUTOLOAD), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+ca13                           SAME     
+ca14                           SAME     
+ca15                           SAME     
+ca16                           SAME     
+ca17                           REFUSED  GAP: T2: out of its slices (a slice taken as a scalar (Coerce))
+ca18                           SAME     
+ca19                           SAME     
+ca2                            REFUSED  GAP: T2: out of its slices (wantarray in a sub (T2 has no void context))
+ca20                           SAME     
+ca21                           SAME     
+ca22                           SAME     
+ca23                           SAME     
+ca24                           SAME     
+ca25                           SAME     
+ca26                           SAME     
+ca27                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+ca28                           SAME     
+ca29                           REFUSED  load: from_json failed: GAP: a DESTROY method (main::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+ca3                            SAME     
+ca30                           SAME     
+ca4                            SAME     
+ca5                            SAME     
+ca6                            SAME     
+ca7                            SAME     
+ca8                            SAME     
+ca9                            SAME     
+chop1                          SAME     
+chop2                          REFUSED  no program graph
+chop3                          REFUSED  no program graph
+cl1                            SAME     
+cl10                           SAME     
+cl11                           SAME     
+cl12                           SAME     
+cl13                           SAME     
+cl14                           REFUSED  no program graph
+cl15                           SAME     
+cl16                           SAME     
+cl17                           SAME     
+cl18                           REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+cl19                           SAME     
+cl2                            SAME     
+cl20                           SAME     
+cl21                           SAME     
+cl22                           SAME     
+cl23                           REFUSED  load: from_json failed: GAP: a captured variable passed to a sub that writes its argument ($_[N] is the caller's variable; the closure would not see the write) (the c
+cl24                           REFUSED  GAP: T2: out of its slices (a conversion %Slot* -> %Slot)
+cl25                           SAME     
+cl3                            SAME     
+cl4                            SAME     
+cl5                            SAME     
+cl6                            SAME     
+cl7                            SAME     
+cl8                            REFUSED  no program graph
+cl9                            REFUSED  no program graph
+cr1                            SAME     
+cr10                           SAME     
+cr2                            SAME     
+cr3                            SAME     
+cr4                            SAME     
+cr5                            SAME     
+cr6                            SAME     
+cr7                            SAME     
+cr8                            SAME     
+cr9                            SAME     
+dyn1                           SAME     
+dyn2                           SAME     
+ef1                            SAME     
+ef10                           SAME     
+ef11                           SAME     
+ef12                           SAME     
+ef13                           SAME     
+ef14                           SAME     
+ef15                           SAME     
+ef16                           SAME     
+ef17                           SAME     
+ef18                           SAME     
+ef19                           SAME     
+ef2                            SAME     
+ef20                           SAME     
+ef21                           REFUSED  GAP: T2: out of its slices (EntryDef)
+ef22                           REFUSED  GAP: T2: out of its slices (a variable a handle writes, read other than after a close)
+ef23                           SAME     
+ef24                           SAME     
+ef25                           REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+ef26                           SAME     
+ef27                           REFUSED  GAP: T2: out of its slices (a reference to what is not an array)
+ef28                           REFUSED  GAP: T2: out of its slices (a local aggregate restored with no save made)
+ef3                            REFUSED  GAP: T2: out of its slices (a statement Call builtin unlink)
+ef30                           SAME     
+ef31                           REFUSED  GAP: T2: out of its slices (the match variable $0 (B::SoN ties it to no match))
+ef4                            SAME     
+ef5                            SAME     
+ef6                            REFUSED  GAP: T2: out of its slices (an each in a program with a keys or values (which reset it, B::SoN places them nowhere))
+ef7                            SAME     
+ef8                            SAME     
+ef9                            SAME     
+ev1                            SAME     
+ev10                           SAME     
+ev11                           SAME     
+ev12                           SAME     
+ev13                           SAME     
+ev14                           SAME     
+ev15                           SAME     
+ev16                           SAME     
+ev17                           REFUSED  GAP: T2: out of its slices (an eval closed at another depth)
+ev18                           REFUSED  no program graph
+ev2                            SAME     
+ev3                            SAME     
+ev4                            SAME     
+ev5                            SAME     
+ev6                            SAME     
+ev7                            SAME     
+ev8                            SAME     
+ev9                            SAME     
+ex1                            SAME     
+ex2                            SAME     
+ex3                            SAME     
+ex4                            SAME     
+fk1                            SAME     
+fk2                            SAME     
+fk3                            SAME     
+fk4                            SAME     
+fk5                            SAME     
+fk6                            SAME     
+fk7                            SAME     
+fl1                            SAME     
+fl10                           SAME     
+fl11                           SAME     
+fl12                           SAME     
+fl13                           REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+fl14                           REFUSED  no program graph
+fl2                            SAME     
+fl20                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+fl3                            SAME     
+fl4                            SAME     
+fl5                            REFUSED  load: from_json failed: GAP: a dereference nothing reads, which may still die (of undef, under strict refs) (in main::__PROGRAM__)
+fl6                            SAME     
+fl7                            SAME     
+fl8                            REFUSED  no program graph
+fl9                            SAME     
+go1                            SAME     
+go2                            SAME     
+go3                            REFUSED  no program graph
+go4                            REFUSED  GAP: T2: out of its slices (an if whose arms do not meet)
+hc1                            SAME     
+hc2                            SAME     
+hc3                            SAME     
+hs1                            SAME     
+hs2                            SAME     
+hs3                            SAME     
+hs4                            SAME     
+hs5                            REFUSED  GAP: T2: out of its slices (a slice taken as a scalar (Coerce))
+hs6                            SAME     
+hs7                            SAME     
+hs8                            SAME     
+hs9                            SAME     
+ht1                            SAME     
+ht2                            SAME     
+im1                            REFUSED  load: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program)
+im10                           REFUSED  GAP: T2: out of its slices ($" written)
+im11                           REFUSED  GAP: T2: out of its slices (EntryDef)
+im12                           REFUSED  GAP: T2: out of its slices (a capture read where its match may have failed (perl reads the last match that succeeded))
+im13                           SAME     
+im14                           SAME     
+im15                           SAME     
+im16                           SAME     
+im17                           SAME     
+im18                           SAME     
+im19                           SAME     
+im2                            REFUSED  load: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program)
+im20                           SAME     
+im21                           SAME     
+im22                           SAME     
+im23                           LOUD     chalk: refused at run time: a store through an undefined scalar reference
+im24                           SAME     
+im25                           SAME     
+im26                           SAME     
+im27                           SAME     
+im28                           SAME     
+im29                           SAME     
+im3                            REFUSED  load: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program)
+im30                           SAME     
+im4                            REFUSED  GAP: T2: out of its slices (a tie of a scalar)
+im5                            SAME     
+im6                            REFUSED  load: from_json failed: GAP: a DESTROY method (D::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+im7                            SAME     
+im8                            SAME     
+im9                            SAME     
+io1                            REFUSED  GAP: T2: out of its slices (a variable a handle writes, read other than after a close)
+io10                           REFUSED  GAP: T2: out of its slices (a statement EntryWrite)
+io2                            REFUSED  GAP: T2: out of its slices (a variable a handle writes, read other than after a close)
+io3                            REFUSED  GAP: T2: out of its slices (a four-argument select of handles or a wait)
+io4                            REFUSED  GAP: T2: out of its slices (a statement Call builtin sleep)
+io5                            REFUSED  GAP: T2: out of its slices (a four-argument select of handles or a wait)
+io6                            REFUSED  GAP: T2: out of its slices (an open of a file (or of what is not a reference to a constant string))
+io7                            REFUSED  GAP: T2: out of its slices (a variable a handle writes, read other than after a close)
+io8                            SAME     
+io9                            SAME     
+la1                            SAME     
+la2                            SAME     
+la3                            SAME     
+la30                           SAME     
+la31                           SAME     
+la32                           SAME     
+la33                           SAME     
+la4                            SAME     
+la5                            SAME     
+la6                            SAME     
+la7                            SAME     
+lo1                            SAME     
+lo10                           SAME     
+lo11                           SAME     
+lo12                           SAME     
+lo13                           SAME     
+lo14                           SAME     
+lo15                           REFUSED  GAP: T2: out of its slices (EntryDef)
+lo16                           SAME     
+lo2                            SAME     
+lo20                           SAME     
+lo21                           SAME     
+lo22                           SAME     
+lo23                           SAME     
+lo3                            SAME     
+lo4                            SAME     
+lo5                            REFUSED  GAP: T2: out of its slices (a local)
+lo6                            SAME     
+lo7                            SAME     
+lo8                            REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+lo9                            REFUSED  no program graph
+lp1                            SAME     
+lp10                           SAME     
+lp11                           SAME     
+lp12                           SAME     
+lp13                           SAME     
+lp14                           SAME     
+lp15                           SAME     
+lp16                           SAME     
+lp17                           SAME     
+lp18                           SAME     
+lp19                           SAME     
+lp2                            SAME     
+lp20                           SAME     
+lp21                           SAME     
+lp22                           SAME     
+lp23                           SAME     
+lp24                           SAME     
+lp25                           SAME     
+lp26                           REFUSED  no program graph
+lp27                           SAME     
+lp28                           REFUSED  GAP: T2: out of its slices (an array through an element read whole)
+lp3                            REFUSED  no program graph
+lp4                            SAME     
+lp5                            SAME     
+lp6                            SAME     
+lp7                            SAME     
+lp8                            REFUSED  no program graph
+lp9                            REFUSED  no program graph
+lw1                            SAME     
+lw10                           SAME     
+lw11                           SAME     
+lw12                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+lw13                           SAME     
+lw14                           SAME     
+lw15                           SAME     
+lw16                           SAME     
+lw17                           SAME     
+lw18                           SAME     
+lw19                           SAME     
+lw2                            SAME     
+lw20                           REFUSED  GAP: T2: out of its slices (Call builtin splice)
+lw21                           SAME     
+lw22                           SAME     
+lw23                           SAME     
+lw24                           SAME     
+lw25                           REFUSED  GAP: T2: out of its slices (a slice of an array B::SoN reads at no version, aliased where it may be written)
+lw26                           REFUSED  GAP: T2: out of its slices (a local)
+lw27                           REFUSED  GAP: T2: out of its slices (a local)
+lw28                           SAME     
+lw29                           SAME     
+lw3                            SAME     
+lw30                           SAME     
+lw31                           REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+lw32                           SAME     
+lw33                           SAME     
+lw34                           SAME     
+lw35                           SAME     
+lw36                           SAME     
+lw37                           SAME     
+lw38                           SAME     
+lw39                           SAME     
+lw4                            SAME     
+lw40                           SAME     
+lw41                           REFUSED  GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+lw42                           SAME     
+lw43                           SAME     
+lw44                           SAME     
+lw45                           SAME     
+lw46                           SAME     
+lw47                           SAME     
+lw48                           SAME     
+lw49                           SAME     
+lw5                            SAME     
+lw50                           SAME     
+lw51                           SAME     
+lw52                           SAME     
+lw53                           REFUSED  no program graph
+lw54                           SAME     
+lw55                           SAME     
+lw56                           SAME     
+lw57                           SAME     
+lw58                           SAME     
+lw59                           SAME     
+lw6                            SAME     
+lw60                           SAME     
+lw61                           SAME     
+lw62                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+lw63                           SAME     
+lw64                           SAME     
+lw65                           SAME     
+lw66                           SAME     
+lw67                           SAME     
+lw68                           SAME     
+lw69                           SAME     
+lw7                            REFUSED  GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+lw70                           SAME     
+lw71                           REFUSED  no program graph
+lw72                           SAME     
+lw73                           SAME     
+lw74                           REFUSED  no program graph
+lw75                           SAME     
+lw76                           REFUSED  GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+lw77                           SAME     
+lw78                           SAME     
+lw79                           REFUSED  no program graph
+lw8                            REFUSED  no program graph
+lw80                           SAME     
+lw81                           REFUSED  no program graph
+lw82                           REFUSED  no program graph
+lw83                           REFUSED  no program graph
+lw84                           REFUSED  no program graph
+lw85                           REFUSED  no program graph
+lw86                           SAME     
+lw87                           SAME     
+lw88                           SAME     
+lw89                           SAME     
+lw9                            SAME     
+lw90                           REFUSED  no program graph
+lw91                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+lw92                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+lw93                           SAME     
+lw94                           REFUSED  GAP: T2: out of its slices (PadAccess)
+lw95                           SAME     
+lw96                           REFUSED  no program graph
+m4                             SAME     
+nv1                            SAME     
+nv10                           SAME     
+nv11                           SAME     
+nv12                           SAME     
+nv13                           SAME     
+nv14                           SAME     
+nv2                            SAME     
+nv3                            SAME     
+nv4                            SAME     
+nv5                            SAME     
+nv6                            SAME     
+nv7                            SAME     
+nv8                            SAME     
+nv9                            SAME     
+pa1                            SAME     
+pa2                            SAME     
+pa3                            SAME     
+pa4                            SAME     
+pg1                            SAME     
+pg10                           SAME     
+pg11                           REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+pg12                           SAME     
+pg13                           SAME     
+pg14                           REFUSED  GAP: T2: out of its slices (a reference to what is not an array)
+pg15                           SAME     
+pg16                           SAME     
+pg1b                           SAME     
+pg2                            SAME     
+pg20                           SAME     
+pg21                           SAME     
+pg22                           SAME     
+pg3                            SAME     
+pg4                            SAME     
+pg5                            SAME     
+pg6                            REFUSED  no program graph
+pg7                            SAME     
+pg8                            SAME     
+pg9                            SAME     
+pl1                            SAME     
+pl10                           SAME     
+pl11                           SAME     
+pl12                           REFUSED  no program graph
+pl13                           SAME     
+pl14                           SAME     
+pl15                           SAME     
+pl2                            SAME     
+pl3                            SAME     
+pl4                            SAME     
+pl5                            SAME     
+pl6                            SAME     
+pl7                            SAME     
+pl8                            SAME     
+pl9                            REFUSED  no program graph
+rn1                            REFUSED  no program graph
+rn10                           SAME     
+rn2                            REFUSED  GAP: T2: out of its slices (a statement Call builtin srand)
+rn3                            SAME     
+rn4                            SAME     
+rn5                            SAME     
+rn6                            SAME     
+rn7                            SAME     
+rn8                            REFUSED  GAP: T2: out of its slices (an open for writing of a file (or of what is not a `my` scalar))
+rn9                            REFUSED  GAP: T2: out of its slices (a require of Cwd.pm, not compiled in)
+rv1                            SAME     
+rv10                           SAME     
+rv11                           SAME     
+rv12                           SAME     
+rv13                           SAME     
+rv14                           SAME     
+rv15                           SAME     
+rv2                            SAME     
+rv3                            SAME     
+rv4                            REFUSED  GAP: T2: out of its slices (a value stamped List (Assign))
+rv5                            SAME     
+rv6                            SAME     
+rv7                            SAME     
+rv8                            SAME     
+rv9                            SAME     
+sg1                            SAME     
+slice1                         SAME     
+slice2                         SAME     
+slice3                         SAME     
+sm1                            SAME     
+sm2                            SAME     
+sm3                            SAME     
+sm4                            SAME     
+sr1                            REFUSED  no program graph
+st1                            REFUSED  GAP: T2: out of its slices (a hash element of a named hash)
+st10                           SAME     
+st11                           SAME     
+st12                           SAME     
+st13                           SAME     
+st14                           SAME     
+st15                           SAME     
+st16                           SAME     
+st17                           SAME     
+st2                            SAME     
+st3                            REFUSED  no program graph
+st4                            SAME     
+st5                            REFUSED  load: from_json failed: GAP: `defined &main::foo` may change as the program runs (main::__PROGRAM__ may run)
+st6                            SAME     
+st7                            SAME     
+st8                            SAME     
+st9                            SAME     
+swap1                          SAME     
+swap2                          SAME     
+swap3                          SAME     
+tp1                            SAME     
+tp10                           SAME     
+tp11                           SAME     
+tp12                           SAME     
+tp2                            SAME     
+tp3                            SAME     
+tp4                            SAME     
+tp5                            SAME     
+tp6                            SAME     
+tp7                            REFUSED  no program graph
+tp8                            SAME     
+tp9                            SAME     
+vp1                            SAME     
+vp10                           REFUSED  no program graph
+vp11                           SAME     
+vp12                           SAME     
+vp13                           REFUSED  GAP: T2: out of its slices (a slice taken as a scalar (Coerce))
+vp14                           SAME     
+vp15                           SAME     
+vp16                           SAME     
+vp17                           SAME     
+vp18                           SAME     
+vp19                           SAME     
+vp2                            SAME     
+vp20                           SAME     
+vp21                           REFUSED  no program graph
+vp22                           SAME     
+vp3                            SAME     
+vp4                            SAME     
+vp5                            REFUSED  no program graph
+vp6                            SAME     
+vp7                            SAME     
+vp8                            SAME     
+vp9                            SAME     
+w1lib1                         SAME     
+w1lib2                         SAME     
+w1lib3                         SAME     
+w1lib4                         SAME     
+w1lib5                         SAME     
+w1lib6                         SAME     
+wa1                            SAME     
+wa10                           SAME     
+wa11                           SAME     
+wa12                           SAME     
+wa13                           SAME     
+wa14                           SAME     
+wa15                           SAME     
+wa16                           SAME     
+wa17                           SAME     
+wa18                           SAME     
+wa19                           REFUSED  GAP: T2: out of its slices (Call builtin splice)
+wa2                            SAME     
+wa20                           SAME     
+wa21                           SAME     
+wa22                           SAME     
+wa23                           SAME     
+wa24                           SAME     
+wa25                           SAME     
+wa26                           SAME     
+wa3                            SAME     
+wa4                            SAME     
+wa5                            SAME     
+wa6                            SAME     
+wa7                            SAME     
+wa8                            SAME     
+wa9                            SAME     

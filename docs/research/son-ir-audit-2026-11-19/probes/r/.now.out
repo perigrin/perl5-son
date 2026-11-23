@@ -1,0 +1,493 @@
+a01                            SAME     
+a02                            SAME     
+a03                            SAME     
+a04                            SAME     
+a05                            SAME     
+a06                            SAME     
+a07                            SAME     
+a08                            SAME     
+a09                            SAME     
+a10                            SAME     
+a11                            REFUSED  no program graph
+a12                            SAME     
+a13                            SAME     
+a14                            SAME     
+a15                            SAME     
+a16                            SAME     
+a17                            SAME     
+a18                            SAME     
+a19                            SAME     
+a20                            SAME     
+a21                            SAME     
+a22                            SAME     
+a23                            SAME     
+a24                            SAME     
+a25                            SAME     
+a26                            SAME     
+a27                            SAME     
+a28                            SAME     
+a29                            SAME     
+a30                            SAME     
+a31                            SAME     
+a32                            SAME     
+a33                            SAME     
+a34                            SAME     
+a35                            SAME     
+a36                            SAME     
+a37                            SAME     
+a38                            SAME     
+a39                            SAME     
+a40                            SAME     
+b01                            SAME     
+b02                            REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+b03                            SAME     
+b04                            SAME     
+b05                            SAME     
+b06                            REFUSED  no program graph
+b07                            SAME     
+b08                            SAME     
+b09                            SAME     
+b10                            SAME     
+b11                            SAME     
+b12                            SAME     
+b13                            SAME     
+b14                            SAME     
+b15                            SAME     
+b16                            SAME     
+b17                            SAME     
+b18                            SAME     
+b19                            SAME     
+b20                            SAME     
+b21                            SAME     
+b22                            SAME     
+b23                            SAME     
+b24                            SAME     
+b25                            SAME     
+b26                            REFUSED  no program graph
+b27                            REFUSED  no program graph
+b28                            SAME     
+b29                            SAME     
+b30                            WRONG    got=[12 ] want=[123 ]
+b31                            SAME     
+b32                            SAME     
+b33                            WRONG    got=[2 1 ] want=[1 1 ]
+b34                            SAME     
+b35                            SAME     
+b36                            SAME     
+b37                            SAME     
+b38                            SAME     
+b39                            REFUSED  no program graph
+b40                            SAME     
+c01                            WRONG    got=[2 ] want=[1 ]
+c02                            SAME     
+c03                            SAME     
+c04                            REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+c05                            SAME     
+c06                            REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+c07                            REFUSED  GAP: T2: out of its slices (a statement Call builtin sqrt)
+c08                            REFUSED  GAP: T2: out of its slices (Call builtin splice)
+c09                            WRONG    got=[2 3 ] want=[1 ]
+c10                            REFUSED  GAP: T2: out of its slices (a local of an element where a die may unwind past it)
+c11                            WRONG    got=[2 ] want=[1 ]
+c12                            WRONG    got=[2 ] want=[1 ]
+c13                            WRONG    got=[22 ] want=[11 ]
+c14                            LOUD     substr outside of string (perl warns): stopped (chalk, T2)
+c15                            WRONG    got=[2 ] want=[1 ]
+c16                            SAME     
+c17                            WRONG    got=[2 Illegal division by zero at /tmp/claude-0/-home-user-repo/adb6f1fb-b446-5864-9f34-e919755b5de6/scratchpad/reaudit/c17.pl line 1. ] want=[1 Illegal divisi
+c18                            WRONG    got=[3 ] want=[1 ]
+c19                            WRONG    got=[7 ] want=[t ]
+c20                            WRONG    got=[e 2 2 ] want=[e 2 1 ]
+d01                            WRONG    got=[1 ] want=[13 ]
+d02                            WRONG    got=[1 ] want=[fin 1 ]
+d03                            REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+d04                            SAME     
+d05                            REFUSED  GAP: T2: out of its slices (a value an eval made, read past its end)
+d06                            SAME     
+d07                            SAME     
+d08                            LOUD     o
+e01                            SAME     
+e02                            REFUSED  GAP: T2: out of its slices (an array B::SoN reads at no version, aliased where it may be written)
+e03                            REFUSED  GAP: T2: out of its slices (PadAccess)
+e04                            REFUSED  GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+e05                            REFUSED  GAP: T2: out of its slices (a slice of an array B::SoN reads at no version, aliased where it may be written)
+e06                            REFUSED  GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+e07                            SAME     
+e08                            REFUSED  no program graph
+e09                            SAME     
+e10                            SAME     
+e11                            WRONG    got=[0 1 2|2 3 ] want=[0 1 2|1 2 ]
+e12                            SAME     
+e13                            REFUSED  no program graph
+e14                            SAME     
+e15                            REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+e16                            SAME     
+e17                            SAME     
+e18                            SAME     
+e19                            SAME     
+e20                            SAME     
+e21                            SAME     
+e22                            SAME     
+e23                            SAME     
+e24                            SAME     
+e25                            SAME     
+e26                            SAME     
+e27                            SAME     
+e28                            REFUSED  GAP: T2: out of its slices (PadAccess)
+e29                            SAME     
+e30                            WRONG    got=[ ] want=[1 ]
+e31                            WRONG    got=[5 ] want=[1 ]
+e32                            REFUSED  no program graph
+e33                            SAME     
+e34                            REFUSED  GAP: T2: out of its slices (a list perl may alias (Phi) passed where a sub writes @_)
+e35                            REFUSED  GAP: T2: out of its slices (a list perl may alias (Phi) passed where a sub writes @_)
+e36                            SAME     
+e37                            REFUSED  no program graph
+e38                            SAME     
+e39                            SAME     
+e40                            SAME     
+f01                            SAME     
+f02                            SAME     
+f03                            SAME     
+f04                            SAME     
+f05                            SAME     
+f06                            SAME     
+f07                            SAME     
+f08                            SAME     
+f09                            SAME     
+f10                            SAME     
+f11                            SAME     
+f12                            SAME     
+f13                            SAME     
+f14                            SAME     
+f15                            SAME     
+f16                            SAME     
+f17                            SAME     
+f18                            SAME     
+f19                            SAME     
+f20                            SAME     
+f21                            SAME     
+f22                            SAME     
+f23                            SAME     
+f24                            SAME     
+f25                            SAME     
+g01                            SAME     
+g02                            SAME     
+g03                            SAME     
+g04                            SAME     
+g05                            SAME     
+g06                            SAME     
+g07                            SAME     
+g08                            SAME     
+g09                            SAME     
+g10                            SAME     
+g11                            SAME     
+g12                            SAME     
+g13                            SAME     
+g14                            SAME     
+g15                            SAME     
+g16                            SAME     
+g17                            SAME     
+g18                            SAME     
+g19                            SAME     
+g20                            SAME     
+h01                            SAME     
+h02                            SAME     
+h03                            SAME     
+h04                            SAME     
+h05                            SAME     
+h06                            LOUD     chalk: refused at run time: a hash element read through no HASH reference
+h07                            SAME     
+h08                            SAME     
+h09                            SAME     
+h10                            SAME     
+h11                            SAME     
+h12                            SAME     
+h13                            SAME     
+h14                            REFUSED  GAP: T2: out of its slices (a list assignment to a slice whose indices are a list made at run time)
+h15                            SAME     
+h16                            SAME     
+h17                            SAME     
+h18                            SAME     
+h19                            REFUSED  GAP: T2: out of its slices (Call builtin splice)
+h20                            SAME     
+h21                            SAME     
+h22                            SAME     
+h23                            SAME     
+h24                            SAME     
+h25                            REFUSED  GAP: T2: out of its slices (the value of a list assignment to scalars)
+h26                            SAME     
+h27                            REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+h28                            SAME     
+h29                            REFUSED  GAP: T2: out of its slices (PadAccess)
+h30                            REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+i01                            SAME     
+i02                            SAME     
+i03                            SAME     
+i04                            SAME     
+i05                            SAME     
+i06                            SAME     
+i07                            SAME     
+i08                            SAME     
+i09                            SAME     
+i10                            REFUSED  no program graph
+i11                            REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+i12                            SAME     
+i13                            SAME     
+i14                            SAME     
+i15                            REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+i16                            REFUSED  no program graph
+i17                            SAME     
+i18                            SAME     
+i19                            SAME     
+i20                            SAME     
+j01                            SAME     
+j02                            SAME     
+j03                            SAME     
+j04                            SAME     
+j05                            REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+j06                            SAME     
+j07                            SAME     
+j08                            SAME     
+j09                            SAME     
+j10                            SAME     
+j11                            SAME     
+j12                            SAME     
+j13                            SAME     
+j14                            SAME     
+j15                            SAME     
+j16                            SAME     
+j17                            SAME     
+j18                            SAME     
+j19                            SAME     
+j20                            SAME     
+j21                            REFUSED  GAP: T2: out of its slices (Call builtin splice)
+j22                            SAME     
+j23                            SAME     
+j24                            SAME     
+j25                            WRONG    got=[22 ] want=[12 ]
+j26                            SAME     
+j27                            REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+j28                            SAME     
+j29                            SAME     
+j30                            SAME     
+j31                            REFUSED  GAP: T2: out of its slices (wantarray in a sub (T2 has no void context))
+j32                            SAME     
+j33                            WRONG    got=[12 7 ] want=[13 7 ]
+j34                            SAME     
+j35                            SAME     
+j36                            SAME     
+j37                            SAME     
+j38                            SAME     
+j39                            SAME     
+j40                            SAME     
+j41                            SAME     
+j42                            SAME     
+j43                            REFUSED  no program graph
+j44                            SAME     
+j45                            SAME     
+j46                            REFUSED  no program graph
+j47                            SAME     
+j48                            SAME     
+j49                            WRONG    got=[1 2 2 ] want=[2 2 2 ]
+j50                            SAME     
+k01                            WRONG    got=[2 ] want=[1 ]
+k02                            SAME     
+k03                            WRONG    got=[2 ] want=[1 ]
+k04                            WRONG    got=[2 ] want=[1 ]
+k05                            WRONG    got=[2 ] want=[1 ]
+k06                            SAME     
+k07                            SAME     
+k08                            WRONG    got=[2 ] want=[1 ]
+k09                            WRONG    got=[n ] want=[y ]
+k10                            SAME     
+k11                            SAME     
+k12                            SAME     
+k13                            WRONG    got=[2 2 ] want=[1 2 ]
+k14                            WRONG    got=[333 ] want=[113 ]
+k15                            SAME     
+k16                            WRONG    got=[a9,b2 ] want=[a1,b2 ]
+k17                            WRONG    got=[xy ] want=[x ]
+k18                            SAME     
+k19                            WRONG    got=[2 ] want=[1 ]
+k20                            WRONG    got=[2 ] want=[1 ]
+l01                            SAME     
+l02                            REFUSED  GAP: T2: out of its slices (Phi)
+l03                            SAME     
+l04                            SAME     
+l05                            SAME     
+l06                            REFUSED  no program graph
+l07                            SAME     
+l08                            SAME     
+l09                            SAME     
+l10                            SAME     
+l11                            SAME     
+l12                            SAME     
+l13                            REFUSED  no program graph
+l14                            SAME     
+l15                            SAME     
+l16                            SAME     
+l17                            SAME     
+l18                            SAME     
+l19                            SAME     
+l20                            REFUSED  GAP: T2: out of its slices (an array through an element read whole)
+m01                            SAME     
+m02                            SAME     
+m03                            SAME     
+m04                            SAME     
+m05                            SAME     
+m06                            SAME     
+m07                            SAME     
+m08                            REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+m09                            LOUD     Can't locate object method "get" via package "C" (perhaps you forgot to load "C"?)
+m10                            SAME     
+m11                            SAME     
+m12                            SAME     
+m13                            SAME     
+m14                            REFUSED  GAP: T2: out of its slices (sub main::mod returns a list as one value)
+m15                            REFUSED  GAP: T2: out of its slices (sub main::mod returns a list as one value)
+m16                            SAME     
+m17                            SAME     
+m18                            SAME     
+m19                            WRONG    got=[22 ] want=[21 ]
+m20                            SAME     
+n01                            SAME     
+n02                            SAME     
+n03                            SAME     
+n04                            SAME     
+n05                            SAME     
+n06                            SAME     
+n07                            WRONG    got=[2 ] want=[1 ]
+n08                            SAME     
+n09                            WRONG    got=[2 ] want=[1 ]
+n10                            WRONG    got=[2 ] want=[1 ]
+n11                            SAME     
+n12                            SAME     
+n13                            SAME     
+n14                            SAME     
+n15                            SAME     
+n16                            SAME     
+n17                            SAME     
+n18                            REFUSED  GAP: T2: out of its slices (Call builtin splice)
+n19                            SAME     
+n20                            SAME     
+n21                            SAME     
+n22                            WRONG    got=[a5,b6 ] want=[a1 ]
+n23                            WRONG    got=[a,z ] want=[a ]
+n24                            WRONG    got=[2 ] want=[1 ]
+n25                            WRONG    got=[2 ] want=[1 ]
+n26                            REFUSED  GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+n27                            WRONG    got=[22 ] want=[11 ]
+n28                            SAME     
+n29                            WRONG    got=[V V ] want=[v V ]
+n30                            WRONG    got=[blue blue ] want=[red blue ]
+n31                            SAME     
+n32                            SAME     
+n33                            SAME     
+n34                            SAME     
+n35                            REFUSED  GAP: T2: out of its slices (a value stamped List (Assign))
+o01                            REFUSED  no program graph
+o02                            REFUSED  GAP: T2: out of its slices (a statement Call builtin sleep)
+o03                            REFUSED  no program graph
+o04                            REFUSED  GAP: T2: out of its slices (EntryDef)
+o05                            REFUSED  GAP: T2: out of its slices (a hash element of a named hash)
+o06                            SAME     
+o07                            REFUSED  GAP: T2: out of its slices (a statement Call builtin sqrt)
+o08                            REFUSED  GAP: T2: out of its slices (EntryDef)
+o09                            REFUSED  GAP: T2: out of its slices ($" written)
+o10                            SAME     
+o11                            SAME     
+o12                            SAME     
+o13                            SAME     
+o14                            SAME     
+o15                            SAME     
+o16                            SAME     
+o17                            SAME     
+o18                            SAME     
+o19                            SAME     
+o20                            SAME     
+o21                            SAME     
+o22                            SAME     
+o23                            REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+o24                            WRONG    got=[1 ] want=[2 ]
+o25                            SAME     
+o26                            SAME     
+o27                            REFUSED  GAP: T2: out of its slices (Call builtin aeach)
+o28                            REFUSED  GAP: T2: out of its slices (a value stamped List (Assign))
+o29                            SAME     
+o30                            SAME     
+o31                            SAME     
+o32                            SAME     
+o33                            SAME     
+o34                            SAME     
+o35                            SAME     
+o36                            SAME     
+o37                            SAME     
+o38                            SAME     
+o39                            SAME     
+o40                            SAME     
+p01                            SAME     
+p02                            SAME     
+p03                            SAME     
+p04                            SAME     
+p05                            SAME     
+p06                            SAME     
+p07                            SAME     
+p08                            SAME     
+p09                            REFUSED  GAP: T2: out of its slices (a phi stamped List)
+p10                            REFUSED  GAP: T2: out of its slices (a phi stamped List)
+p11                            REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+p12                            REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+p13                            SAME     
+p14                            SAME     
+p15                            REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+p16                            REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+p17                            REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+p18                            SAME     
+p19                            SAME     
+p20                            REFUSED  load: from_json failed: GAP: a DESTROY method (B1::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+p21                            REFUSED  load: from_json failed: GAP: a DESTROY method (P::AUTOLOAD), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+p22                            SAME     
+p23                            SAME     
+p24                            SAME     
+p25                            SAME     
+q01                            WRONG    got=[1 ] want=[2 ]
+q02                            WRONG    got=[x ] want=[xx ]
+q03                            REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+q04                            REFUSED  no program graph
+q05                            REFUSED  no program graph
+q06                            WRONG    got=[c ] want=[cf ]
+q07                            REFUSED  GAP: T2: out of its slices (PadAccess)
+q08                            WRONG    got=[11 ] want=[15 ]
+q09                            REFUSED  GAP: T2: out of its slices (PadAccess)
+q10                            REFUSED  GAP: T2: out of its slices (PadAccess)
+q11                            WRONG    got=[11 ] want=[12 ]
+q12                            REFUSED  GAP: T2: out of its slices (a package scalar read of no one version)
+q13                            SAME     
+q14                            WRONG    got=[2 4 6|1 2 3 ] want=[2 4 6|2 4 6 ]
+q15                            WRONG    got=[1 2 3 4 ] want=[2 2 3 4 ]
+q16                            WRONG    got=[2 3 ] want=[1 2 ]
+q17                            SAME     
+q18                            SAME     
+q19                            SAME     
+q20                            SAME     
+q21                            WRONG    got=[42 ] want=[49 ]
+q22                            WRONG    got=[6 7 ] want=[7 7 ]
+q23                            WRONG    got=[6 6 ] want=[7 6 ]
+q24                            WRONG    got=[66 ] want=[76 ]
+q25                            WRONG    got=[6 ] want=[10 ]
+q26                            WRONG    got=[12 ] want=[22 ]
+q27                            WRONG    got=[1 2 2 ] want=[2 2 2 ]
+q28                            LOUD     Can't locate object method "get" via package "C" (perhaps you forgot to load "C"?)
+q29                            SAME     
+q30                            REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+q31                            LOUD     chalk: refused at run time: a hash element read through no HASH reference
+q32                            REFUSED  GAP: T2: out of its slices (sub main::f returns a list as one value)
+q33                            LOUD     chalk: refused at run time: a hash element read through no HASH reference
+q34                            WRONG    got=[2 ] want=[1 ]
+q35                            REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+q36                            WRONG    got=[2 ] want=[1 ]
+q37                            WRONG    got=[122 ] want=[111 ]
+q38                            WRONG    got=[2 ] want=[1 ]
+q39                            WRONG    got=[2 ] want=[1 ]
+q40                            SAME     
