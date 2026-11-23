@@ -14,9 +14,11 @@ caught 2. Every wrong answer the audit found also verified clean.
   that floated off both chains was a record by construction. V7 then asked
   only whether a record's targets were SSA scalars, and on v2 a `my` scalar
   kept in memory has `mem_in` and no inputs -- it looked SSA. Now a target
-  with a `mem_in`, or one another read in the graph names a version for, is
-  in memory, and V7 refuses the record (M1); a read of such a scalar with no
-  `mem_in` is V6's (M4).
+  with a `mem_in` of its own is in memory, and V7 refuses the record (M1).
+  A read with no `mem_in` of a name another read versions is V6's (M4) --
+  unless a record binds that name too, or the read is a list assign's
+  target: the wire has no pad slot, and `($min, $max)` stored on one path
+  and bound on another is right (the gated run found that in chalk's lib).
 - **"Every write is a version" was asked only of nodes that already said
   mem_out.** An Assign or a sub Call that follows memory and is no version
   is now V2's (M2, M10), and `push` and its kin are versions in the

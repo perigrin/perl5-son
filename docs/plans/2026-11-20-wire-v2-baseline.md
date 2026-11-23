@@ -461,3 +461,21 @@ probes          PASS  LOUD=2 REFUSED=97 SAME=434; WRONG 0, SAME lost 0, changed 
 ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 3 [28m40s]
                 PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [2m47s]
 ```
+
+## 17. After the goal audit's fixes (branch `audit-fix`)
+
+Heads: producer `audit-fix` bfdfe43 (from 2d67c84), chalk `audit-fix` 98b69cb5 (from 287e5da1). What the independent audit (docs/research/2026-11-22-memory-model-goal-audit.md) found and this branch closed: a `die` ending a loop body is on the wire (risk 1); an eval that ends puts its `local`s back (risk 2); the verifier rejects 11 of the audit's 12 hand-broken wires rebuilt from fresh wires (`t/wire-verify-rejects-hand-broken-wires.t`; M5, a read naming an older version, is another program, not a broken wire) -- on the audit's own saved wires 10 of 12, M9 there being indistinguishable from a program with no `local` (risk 3); T2 makes every read at a node's `mem_in` before that node, outside an eval's body (risk 4); a read through an element vivifies it (W9), a foreach's alias of `$_` is a memory version (LocalAlias in V2's store kinds), no builtin is pure by default (EffectTable: `log`/`sqrt` pinned, an unknown name refused). Refused by name by class: W8 (any bless beside a DESTROY or AUTOLOAD), W10 (a shared `my` aggregate flattened beside a sub call). The DynaLoader hold is traced (compiled before peep is off; `aelemfast` refused) and gone. Held by name: probes pl13 and a/aun17f (a list assign that is its sub's value: a design), a/aun6 (a symbolic-ref compound assign reads at no version: open), a/aun5d (a division after `next unless` floats: open).
+
+The audit's 288 probes are `probes/a/au*` here and `t/data/audit-probes/au*` in chalk: at the base LOUD 2, REFUSED 55, SAME 176, WRONG 55; at these heads LOUD 2, REFUSED 68, SAME 218, WRONG 0 (`probes/a/_run1.log`, `_run2.log`). Of the 533 before them: fl11 REFUSED -> SAME, no other verdict changed. The corpus gate's 222 is one under section 16's 223: R8 (nested array ref deref) keeps its behaviour and loses its recorded shape, the read now going through the vivifying `DefinedOr`. chalk's t1 intervals oracle re-recorded for five cases whose node ids the wire changes moved (cbe45923).
+
+`tools/gates.sh` at producer bfdfe43, chalk 98b69cb5:
+
+```
+producer-suite  PASS  786 files, 0 failing [10m23s]
+chalk-suite     PASS  933 files, 0 failing [70m46s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m43s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [5m06s]
+probes          PASS  LOUD=4 REFUSED=164 SAME=653; WRONG 0, SAME lost 0, changed 1 [2m15s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 4 [31m46s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m21s]
+```
