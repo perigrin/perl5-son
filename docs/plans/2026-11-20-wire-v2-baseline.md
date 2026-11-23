@@ -537,3 +537,27 @@ probes          PASS  LOUD=4 REFUSED=162 SAME=655; WRONG 0, SAME lost 0, changed
 ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [32m27s]
                 PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m12s]
 ```
+
+## 20. A loop body writing an aggregate after reading it (branch `loop-writeback`)
+
+Heads: producer `loop-writeback` 732eec4 (from d142906: cc4e0db, 2430ead; probes fd3eb53, 732eec4), chalk `loop-writeback` a8057fb6 (from 48c36bd6: probes and BASELINE.tsv fff90e52, oracle a8057fb6). Two silent wrong answers, both at d142906, closed as classes; their probes are `docs/research/son-ir-audit-2026-11-19/probes/l/lw1-lw96` (copied to chalk's `t/data/audit-probes`), `_run1.log` at d142906, `_run2.log` at 732eec4.
+
+**A read early in a loop body flattened a literal the body wrote later** (the pending note of section 19). The kinds of write probed (lw1-lw62): a foreach alias, direct, named, through a callee's `$_` or `$_[0]`; an element store, push, pop, shift, unshift, splice, delete, `$#a`; slices; `local`; list assignment; references written through; map and grep writing `$_`; sort and reverse in place; nested loops; and the read as a join, `"@a"`, a copy, an element, a count, a return. WRONG at d142906: the foreach alias kinds (lw1-6, lw9), a slice store (lw23), map/grep `$_` (lw39-40), nested loops (lw44, 47, 48, 57), other read shapes (lw49, 54-56, 58, 59, 61). The fix is the walk's own mark, checked at sealing: each list or void read of a literal in a loop is recorded in every enclosing loop frame; a literal bound before the loop that the walk has since marked is learned (`$hint->{mutated}`), the sub walked again, and `_braun_phis` marks the slot (cc4e0db; t/loop-header-marks-an-aggregate-its-body-writes-later.t). An op scan of the kinds was not the fix: `$e .= "x"` has no padsv op (TARGMY), `$_ .= "x"` no MOD flag.
+
+**A foreach's write-back was lost on a pass left early**, found probing beside the first. The alias write was stored at the pass end: `last if`, a `last` in an arm, a return, a conditional `next` or `last` naming an outer loop, and a callee's `$_[0]` write before a `last` all lost it (`1 2` for perl's `1x 2`); a callee reading the array mid-pass saw the element before the write. Decision (the user's): the write is a store to the element where it stands. `StackSim::define` runs the iterator's `%ON_DEFINE` hook, set by the foreach walker for the body walk; the pass's element read is pinned at its top; a demoted iterator is stored after each call passed it; the arm scan counts a hooked write as a store (2430ead; t/loop-a-foreach-alias-write-is-a-store-where-it-stands.t, RED at d142906). Refused by name where the alias read after the write would be the walk's binding and not the element: an element store, a store through a reference or a call whose MOD set may reach the array (`ModSets::array_place`), after an alias write (lw91, 92, 96: WRONG at d142906); a reference to the iterator in a pass that may be left early (lw85). Unconditional `last`, `next LABEL` and `redo` stay refused: their refusals are of the control shape. Four deparse tests that held the stale-read refusal now round trip (the element read is bound at the pass top) or name the new refusal.
+
+Probes lw1-lw96: at d142906 SAME 34, REFUSED 21, WRONG 41; at 732eec4 SAME 71, REFUSED 25, WRONG 0. Every other probe kept its verdict. chalk's integer-interval oracle is keyed by node ids: chalk-found-gaps:160's `C::f` gained the after-call store of its demoted iterator, and its four proofs are renumbered (a8057fb6; the first gate run missed on it, chalk-suite 1 failing). Compile time: no cost seen -- census 1m34s, ratchet 28m26s, the deparser's round trip 2m44s, producer suite 9m41s, against 1m59s, 32m27s, 3m12s and 10m46s in section 19 (the second walk is made only for a loop that learned a slot).
+
+`tools/gates.sh` at producer 732eec4, chalk a8057fb6:
+
+```
+producer-suite  PASS  791 files, 0 failing [9m41s]
+chalk-suite     PASS  934 files, 0 failing [64m02s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m34s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [4m46s]
+probes          PASS  LOUD=4 REFUSED=187 SAME=726; WRONG 0, SAME lost 0, changed 0 [2m12s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [28m26s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [2m44s]
+```
+
+(The run read the producer at 732eec4 with this section's draft and the notes uncommitted: docs only.)
