@@ -4517,6 +4517,16 @@ class SoN::FromOptree 0.01 {
         # dropped, so caller(1) read as caller on the wire.
         return ($op->flags & 4) ? 1 : 0 if $name eq 'caller';
 
+        # rand and srand TAKE AN OPTIONAL ARGUMENT, the same shape (`rand()`
+        # is `rand s*`, no child); mkdir one or two, and its private says
+        # which (`mkdir $d` vK/1, `mkdir $d, 0755` vK/2; a bare one pushes
+        # $_ itself). At OpMap's fixed count `rand()` underflowed (audit
+        # 2026-11-22, risk 9: probes rn1, aue1) or took an operand that was
+        # someone else's: `5 + rand()`.
+        return ($op->flags & 4) ? 1 : 0 if $name eq 'rand' || $name eq 'srand';
+        return $op->private if $name eq 'mkdir' && $op->can('private')
+                            && $op->private >= 1 && $op->private <= 2;
+
         # `exit` TAKES AN OPTIONAL STATUS, defaulting to 0 -- effectively
         # `sub exit($status = 0)`. So its arity is 0 OR 1 and the op says
         # which, in its child count:
