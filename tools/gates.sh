@@ -45,11 +45,16 @@ ROUNDTRIP_MIN=426
 DEPARSE_MIN=430
 GATE_GREEN_MIN=222
 GATES="producer-suite chalk-suite census corpus-gate probes ratchet"
+# A FILE THAT MUST RUN ITS TESTS: chalk's wire verifier is `plan skip_all`
+# without B::SoN, as every producer-dependent chalk test is, and prove calls a
+# skip a success. A gate it passed by skipping checked nothing (audit
+# 2026-11-22, risk 10): the chalk-suite gate misses unless it ran a test.
+CHALK_MUST_RUN="t/bootstrap/ir/wire-verify.t"
 
 list() {
     cat <<EOF
 producer-suite  every t/**/*.t under prove -l: 0 failing files
-chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files
+chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files, and $CHALK_MUST_RUN ran its tests (not skipped)
 census          tools/corpus-llvm-roundtrip.pl: ROUNDTRIP >= $ROUNDTRIP_MIN, DIFFERS 0, LLI_FAIL 0
 corpus-gate     chalk t/bootstrap/corpus/son-corpus-wide.t: passes, gate-green >= $GATE_GREEN_MIN, paad/worklist.json untouched
 probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else
@@ -88,8 +93,9 @@ C=$OUT/snap/chalk
 # ---------------------------------------------------------------- the summary
 # One line per gate: PASS, MISS (it finished and is short of its limit) or
 # PEND (not finished). Reads only the files under $OUT.
-suite_line() {    # name dir
-    local name=$1 d=$OUT/$2 total done fail
+suite_line() {    # name dir [must-run file...]
+    local name=$1 d=$OUT/$2 total done fail f n notrun=""
+    shift 2
     [ -f "$d/all.txt" ] || { printf '%-15s PEND  not started\n' "$name"; return 1; }
     total=$(wc -l < "$d/all.txt")
     done=$(ls "$d/rc" 2>/dev/null | wc -l)
@@ -97,12 +103,17 @@ suite_line() {    # name dir
     if [ "$done" -lt "$total" ]; then
         printf '%-15s PEND  %d of %d files, %d failing\n' "$name" "$done" "$total" "$fail"; return 1
     fi
-    if [ "$fail" -gt 0 ]; then
-        printf '%-15s MISS  %d files, %d failing%s:\n' "$name" "$total" "$fail" "$(secs "$2")"
+    for f in "$@"; do
+        n=$(cat "$d/tests/$(echo "$f" | sed 's/\//__/g')" 2>/dev/null)
+        [ "${n:-0}" -gt 0 ] || notrun="$notrun $f"
+    done
+    if [ "$fail" -gt 0 ] || [ -n "$notrun" ]; then
+        printf '%-15s MISS  %d files, %d failing%s:\n' "$name" "$total" "$fail" "$(secs "$(basename "$d")")"
         for f in $(grep -Lx 0 "$d"/rc/* | head -12); do echo "                  $(basename "$f" | sed 's/__/\//g')"; done
+        for f in $notrun; do echo "                  $f ran no tests (skipped, or not in the suite)"; done
         return 1
     fi
-    printf '%-15s PASS  %d files, 0 failing%s\n' "$name" "$total" "$(secs "$2")"
+    printf '%-15s PASS  %d files, 0 failing%s\n' "$name" "$total" "$(secs "$(basename "$d")")"
 }
 
 census_line() {
@@ -181,7 +192,7 @@ summary() {
     local miss=0
     echo "gates: producer $(cat "$OUT/producer.at" 2>/dev/null)  chalk $(cat "$OUT/chalk.at" 2>/dev/null)  ($OUT)"
     wanted producer-suite && { suite_line producer-suite producer-suite || miss=1; }
-    wanted chalk-suite    && { suite_line chalk-suite chalk-suite       || miss=1; }
+    wanted chalk-suite    && { suite_line chalk-suite chalk-suite $CHALK_MUST_RUN || miss=1; }
     wanted census         && { census_line      || miss=1; }
     wanted corpus-gate    && { corpus_gate_line || miss=1; }
     wanted probes         && { probes_line      || miss=1; }
@@ -226,13 +237,15 @@ ulimit -v 4000000
 
 # ----------------------------------------------------------------- the gates
 # one_test(dir, inc, file): prove one file in the current directory; its exit
-# status goes to DIR/rc/<file>, its output to DIR/log/<file> when it failed.
+# status goes to DIR/rc/<file>, its output to DIR/log/<file> when it failed,
+# and how many tests it ran to DIR/tests/<file> (0 when it skipped).
 one_test() {
     local d=$1 inc=$2 f=$3 key
     key=$(echo "$f" | sed 's/\//__/g')
     [ -f "$d/rc/$key" ] && return 0
     timeout "$TEST_TIMEOUT" prove $inc "$f" > "$d/run.$$.$key" 2>&1
     local rc=$?
+    grep -o 'Tests=[0-9]*' "$d/run.$$.$key" | tail -1 | cut -d= -f2 > "$d/tests/$key"
     if [ $rc -ne 0 ]; then mv "$d/run.$$.$key" "$d/log/$key"; else rm -f "$d/run.$$.$key"; fi
     echo $rc > "$d/rc/$key.tmp" && mv "$d/rc/$key.tmp" "$d/rc/$key"
 }
@@ -244,7 +257,7 @@ export TEST_TIMEOUT=${GATES_TEST_TIMEOUT:-5400}
 
 suite() {    # name tree inc jobs skip-regex
     local d=$OUT/$1
-    mkdir -p "$d/rc" "$d/log"
+    mkdir -p "$d/rc" "$d/log" "$d/tests"
     rm -f "$d"/run.*
     [ -f "$d/all.txt" ] || ( cd "$2" && find t -name '*.t' | sort | grep -Ev "$5" > "$d/all.txt.tmp" && mv "$d/all.txt.tmp" "$d/all.txt" )
     ( cd "$2" && xargs -a "$d/all.txt" -P "$4" -I{} bash -c 'one_test "$@"' _ "$d" "$3" {} )
