@@ -1343,6 +1343,50 @@ class SoN::FromOptree 0.01 {
         return \%slot;
     }
 
+    # _foreach_body_writes_its_scalar($cv, $enteriter, $ctx) -> true when the
+    # foreach's list names a scalar variable (`for my $y ($x)`) its body may
+    # write: an lvalue use of the same variable, or -- for a package scalar, or
+    # a `my` one a reference or a sub reaches -- any call or store through a
+    # reference. The iterator is perl's alias of the variable and the walk
+    # binds it to the value: `my $x=5; for my $y ($x) { $x=1; print $y }`
+    # printed 5 for perl's 1 (re-audit 2026-11-23, class E).
+    sub _foreach_body_writes_its_scalar ($cv, $iter, $ctx) {
+        my $loop = $iter->parent;
+        return 0 unless $$loop && $loop->name eq 'leaveloop';
+        return 0 if $iter->flags & 64;    # OPf_STACKED: a range or an array, no scalar alias
+        my $list = $iter->first;
+        $list = $list->sibling while $$list && !($list->name eq q{null} && ($list->flags & 4));
+        my @items = $$list && $list->name eq 'null' && ($list->flags & 4) ? _subtree_ops($list) : ();
+        my $gv_name = sub ($rv2sv) {
+            my $k = $rv2sv->first;
+            return undef unless $$k && $k->name eq 'gv';
+            my $gv = _op_gv($cv, $k) or return undef;
+            return $gv->STASH->NAME . '::' . $gv->NAME;
+        };
+        my (%pad, %pkg);
+        for my $o (@items) {
+            next unless ${ $o->parent } == $$list;    # (the list's own items)
+            $pad{ $o->targ } = 1 if $o->name eq 'padsv' && $o->targ && !($o->private & 128);
+            if ($o->name eq 'rv2sv') { my $n = $gv_name->($o); $pkg{$n} = 1 if defined $n }
+        }
+        return 0 unless %pad || %pkg;
+        my %in_iter = map { $$_ => 1 } _subtree_ops($iter);
+        my @body = grep { !$in_iter{$$_} } _subtree_ops($loop);
+        my $reachable = %pkg || grep {
+            ( $ADDR_TAKEN && $ADDR_TAKEN->{$_} ) || $ctx->{shared_lexicals}{$_}
+        } keys %pad;
+        for my $o (@body) {
+            my $n = $o->name;
+            return 1 if $n eq 'padsv' && $pad{ $o->targ } && ($o->flags & 32);   # OPf_MOD
+            if ($n eq 'rv2sv' && ($o->flags & 32)) {
+                my $g = $gv_name->($o);
+                return 1 if defined $g ? $pkg{$g} : $reachable;    # (a store through a reference)
+            }
+            return 1 if $reachable && $n eq 'entersub';
+        }
+        return 0;
+    }
+
     # `state $x = V` is a `once` op whose ->other is the store: the store runs
     # the first time the statement is reached and never again. The program's
     # own straight line is reached once, so the main walk lowers it there as
@@ -11040,6 +11084,9 @@ class SoN::FromOptree 0.01 {
         # yet). Non-constant bounds are refused: the synthesized
         # continuation condition needs high+1 at translation time.
         if ($name eq 'enteriter') {
+            die "GAP: a foreach over a scalar variable its body may write is not yet lowered -- the"
+              . " iterator is perl's alias of the variable, and the walk binds it to the value\n"
+                if _foreach_body_writes_its_scalar($cv, $op, $ctx);
             local $CONTINUE_START = _continue_start($op);
             # The iteration variable's pad slot rides on the enteriter op
             # itself (LVINTRO). Implicit $_ and package-var iterators have
