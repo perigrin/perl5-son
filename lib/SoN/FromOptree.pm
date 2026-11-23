@@ -1387,6 +1387,49 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    # _grep_block_writes_topic($grepstart) -> true when a grep read as a list
+    # (not counted, not in void) has a block that writes $_ itself: an lvalue
+    # $_, or a s///, tr///, chop or chomp with no target. Its results are the
+    # elements, aliases, and the walk read each before the block wrote it:
+    # `my @g = grep { $_ *= 2 } @a` gave 1 2 3 for perl's 2 4 6 (re-audit
+    # 2026-11-23, class F).
+    sub _grep_block_writes_topic ($cv, $start) {
+        my $while = $start->next;
+        return 0 unless $$while && $while->name eq 'grepwhile';
+        return 0 if ($while->flags & 3) == 1 || ($while->flags & 3) == 2;   # void, scalar
+        my $list = $start->first;
+        $list = $list->sibling while $$list && $list->name eq 'pushmark';
+        return 0 unless $$list;
+        my $is_topic = sub ($o) {
+            return 0 unless $$o && $o->name eq 'rv2sv' && ($o->flags & 4) && $o->first->name eq 'gv';
+            my $gv = _op_gv($cv, $o->first) or return 0;
+            return $gv->NAME eq '_' && $gv->STASH->NAME eq 'main';
+        };
+        for my $o (_subtree_ops($list)) {
+            my $n = $o->name;
+            # (OPf_MOD; a call's argument only where the callee may write it)
+            return 1 if $is_topic->($o) && ($o->flags & 32) && !( _is_call_argument_op($o) && !_call_may_write_an_argument($cv, _enclosing_entersub($o)) );
+            return 1 if $n =~ /\A(?:subst|trans)\z/ && !($o->flags & 64);         # (no =~ target)
+            return 1 if $n =~ /\As?chom?p\z/ && ($o->flags & 4) && $is_topic->($o->first);
+        }
+        return 0;
+    }
+    sub _enclosing_entersub ($op) {
+        my $p = $op->parent;
+        $p = $p->parent while $$p && $p->name ne q{entersub};
+        return $p;
+    }
+    # _call_may_write_an_argument($cv, $entersub) -> false only when every sub
+    # the call may reach (a method: every sub of its name) stores through no
+    # argument, transitively (ModSets: no 'P', no 'U').
+    sub _call_may_write_an_argument ($cv, $call) {
+        return 1 unless $$call;
+        my ($cvs) = SoN::FromOptree::ModSets::_callees($cv, $call) or return 1;
+        return scalar grep {
+            grep { $_->{loc} eq q{P} || $_->{loc} eq q{U} } SoN::FromOptree::ModSets::summary($_)->@*
+        } $cvs->@*;
+    }
+
     # `state $x = V` is a `once` op whose ->other is the store: the store runs
     # the first time the statement is reached and never again. The program's
     # own straight line is reached once, so the main walk lowers it there as
@@ -9671,6 +9714,9 @@ class SoN::FromOptree 0.01 {
 
         if ($name eq 'mapstart' || $name eq 'grepstart') {
             ( my $word = $name ) =~ s/start\z//;
+            die "GAP: a grep whose block writes \$_, read as a list, is not yet lowered -- what"
+              . " grep returns are the elements, written after the walk read them\n"
+                if $word eq 'grep' && _grep_block_writes_topic($cv, $op);
             my $items = $sim->pop_to_mark;
             die "GAP: $word over an empty list not yet lowered\n"
                 unless $items->@*;
