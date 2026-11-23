@@ -37,4 +37,10 @@ unlike warnings_of('my @a=(1,2,3); my @g = grep { $_ > 1 } @a; print "@g\n";'),
 unlike warnings_of('use Scalar::Util qw(blessed); my @a=(bless({},"X"),1); my @g = grep { blessed($_) } @a; print scalar(@g), "\n";'),
     qr/GAP: a grep/, 'a grep passing $_ to a builtin that stores nothing (EffectTable) is not refused';
 
+like warnings_of('my @a=(1,2); my @g = grep { $_ .= "y"; 1 } @a; my $f = sub { "@g" }; print $f->(), "\n";'),
+    qr/GAP: a grep/, 'refused: a result a closure reads';
+# (lw40: the result goes into a `my` array nothing reads -- nothing reads an alias)
+unlike warnings_of('my @a = (1,2); my @r; for my $i (1..2) { push @r, join(",", @a); my @g = grep { $_ .= "y"; 1 } @a } print "@r\n";'),
+    qr/GAP: a grep/, 'a grep whose result no one reads is not refused';
+
 done_testing;

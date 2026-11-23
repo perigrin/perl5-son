@@ -1397,6 +1397,7 @@ class SoN::FromOptree 0.01 {
         my $while = $start->next;
         return 0 unless $$while && $while->name eq 'grepwhile';
         return 0 if ($while->flags & 3) == 1 || ($while->flags & 3) == 2;   # void, scalar
+        return 0 if _into_a_my_array_never_read($cv, $while);
         my $list = $start->first;
         $list = $list->sibling while $$list && $list->name eq 'pushmark';
         return 0 unless $$list;
@@ -1414,6 +1415,21 @@ class SoN::FromOptree 0.01 {
         }
         return 0;
     }
+    # _into_a_my_array_never_read($cv, $op) -> true when $op is the whole
+    # right side of `my @g = ...` and no other op of the sub names @g: what
+    # it holds is never read (probe lw40).
+    sub _into_a_my_array_never_read ($cv, $op) {
+        my $p = $op->parent;
+        $p = $p->parent while $$p && $p->name =~ /\A(?:null|list)\z/;
+        return 0 unless $$p && $p->name eq 'aassign';
+        my @lhs = grep { $_->name !~ /\A(?:pushmark|null|list)\z/ } _subtree_ops($p->last);
+        return 0 unless @lhs == 1 && $lhs[0]->name eq 'padav' && ($lhs[0]->private & 128);   # OPpLVAL_INTRO
+        my $targ = $lhs[0]->targ;
+        return 0 if $ADDR_TAKEN && $ADDR_TAKEN->{$targ};    # (a closure reads it)
+        my $root = $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT;
+        return !grep { $_->name =~ /\Apad[ah]v\z/ && $_->targ == $targ && $$_ != ${ $lhs[0] } } _subtree_ops($root);
+    }
+
     # (a method's invocant is $_[0] to it, as an argument is)
     sub _entersub_args_and_invocant ($call) {
         my $l = $call->first;
