@@ -1295,6 +1295,36 @@ class SoN::FromOptree 0.01 {
         return \%slot;
     }
 
+    # The pad hashes the walked sub may write in a way $MUTATED_SLOTS does not
+    # see, by targ: the hash itself in an lvalue place -- a slice store, a
+    # call's argument (`$_[1]` is its value), a foreach or `values` alias,
+    # `undef %h` -- but not its declaration, a whole assign into it (a new
+    # value) or `keys`. With $MUTATED_SLOTS, what decides whether a copy of
+    # a `my` hash that the wire binds to the source's node may be written.
+    our $HASH_WRITTEN = {};
+    sub _hash_slots_written ($root) {
+        my %slot;
+        return \%slot unless $root && $$root;
+        for my $op (_subtree_ops($root)) {
+            next unless $op->name eq 'padhv' && $op->targ;
+            # (a slice stored to, or deleted: the hash is its rvalue operand)
+            my $sl = $op->parent;
+            if ($$sl && $sl->name =~ /\A(?:kv)?hslice\z/
+                && ( ($sl->flags & 32) || ${ $sl->parent } && $sl->parent->name eq 'delete' )) {
+                $slot{ $op->targ } = 1;
+                next;
+            }
+            next unless $op->flags & 32;                                          # OPf_MOD
+            next if $op->private & 128;                                           # OPpLVAL_INTRO
+            my $p = $op->parent;
+            next if $$p && $p->name eq 'keys';
+            $p = $p->parent while $$p && $p->name =~ /\A(?:null|list)\z/;
+            next if $$p && $p->name eq 'aassign' && grep { $$_ == $$op } _subtree_ops($p->last);
+            $slot{ $op->targ } = 1;
+        }
+        return \%slot;
+    }
+
     # `state $x = V` is a `once` op whose ->other is the store: the store runs
     # the first time the statement is reached and never again. The program's
     # own straight line is reached once, so the main walk lowers it there as
@@ -2688,6 +2718,7 @@ class SoN::FromOptree 0.01 {
         local $REFERENCED_SLOTS = {};
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
+        local $HASH_WRITTEN = _hash_slots_written(defined $program_root ? B::main_root() : eval { $cv->ROOT });
         local %TIED_AGG = _tied_aggregates($cv, defined $program_root ? B::main_root() : eval { $cv->ROOT })->%*;
         # (not a BEGIN block: it has run, as perl compiled the program, and
         # what it would have died of it has)
@@ -11994,6 +12025,21 @@ class SoN::FromOptree 0.01 {
                             && defined $only->symbol
                             && _copies_written_pad_hash($op);
                         $names_storage ||= $copies_written_hash;
+                        # ...AND OTHERWISE IT IS THE SOURCE'S NODE, which is
+                        # only right while neither side is written: `my %opt
+                        # = %defaults; $opt{color} = "blue"` changed
+                        # %defaults (re-audit 2026-11-23, class A). The copy
+                        # wants a node of its own, a design not made yet.
+                        if ($sigil eq '%' && !$names_storage
+                            && $only->isa('SoN::IR::Node::HashLiteral') && defined $only->symbol) {
+                            my $src = _copied_pad_hash_targ($op);
+                            die "GAP: a copy of a hash that may then be written is not yet lowered"
+                              . " -- the wire binds it to the original's node, so a write to either"
+                              . " would change both\n"
+                                if !$is_pad
+                                || grep { $MUTATED_SLOTS->{$_} || $HASH_WRITTEN->{$_} || $ctx->{shared_lexicals}{$_} }
+                                    $target->targ, $src // ();
+                        }
                         if (($is_aggregate_value && !$names_storage)
                             || $is_list_builtin) {
                             # A DEREFERENCE BOUND AS A NAMED AGGREGATE IS A
@@ -20242,11 +20288,17 @@ class SoN::FromOptree 0.01 {
     # (`... = %h`) the sub writes somewhere ($MUTATED_SLOTS: an element store,
     # a delete, a reference to an element).
     sub _copies_written_pad_hash ($aassign) {
+        my $t = _copied_pad_hash_targ($aassign);
+        return $t && $MUTATED_SLOTS && $MUTATED_SLOTS->{$t} ? 1 : 0;
+    }
+    # _copied_pad_hash_targ($aassign) -> the targ of the one `my` hash its
+    # right side is, or undef.
+    sub _copied_pad_hash_targ ($aassign) {
         my $rhs = $aassign->first;
-        return 0 unless $rhs && $$rhs && $rhs->can('first');
+        return undef unless $rhs && $$rhs && $rhs->can('first');
         my @k = grep { $_->name ne 'pushmark' && !( $_->name eq 'null' && $_->targ == B::opnumber('pushmark') ) }
             map { my @l; for (my $c = $_; $c && $$c; $c = $c->sibling) { push @l, $c } @l } ( $rhs->flags & 4 ? $rhs->first : () );
-        return @k == 1 && $k[0]->name eq 'padhv' && $k[0]->targ && $MUTATED_SLOTS && $MUTATED_SLOTS->{ $k[0]->targ } ? 1 : 0;
+        return @k == 1 && $k[0]->name eq 'padhv' && $k[0]->targ ? $k[0]->targ : undef;
     }
 
     sub _aassign_introduces ($aassign) {
