@@ -150,7 +150,7 @@ my %OWN_VERSION = map { $_ => 1 } qw(push pop shift unshift splice);
 # AND KNOWN, placed by their own handlers, writing nothing this table says:
 # a read of a container or a list, a call, a block run per item.
 my %ELSEWHERE = map { $_ => 1 } qw(
-    keys values aeach akeys avalues sort split entersub
+    keys values aeach akeys avalues sort split entersub arylen
     grepstart mapstart allstart anystart coreargs custom
 );
 

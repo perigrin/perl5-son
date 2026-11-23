@@ -84,7 +84,7 @@ sub _control_preds ($n) {
 }
 
 # What kind of place an Assign target is (the audit census's classes).
-sub _target_class ( $t, $in_memory = {} ) {
+sub _target_class ($t) {
     return 'skip' unless $t;
     my ( $op, $f ) = ( $t->{op}, _fields($t) );
     return 'element' if $op eq 'Subscript';
@@ -93,8 +93,7 @@ sub _target_class ( $t, $in_memory = {} ) {
         return 'my-aggregate' if ( $f->{sigil} // '$' ) ne '$';
         # (on v2 one kept in memory follows it: a mem_in, here or on another
         # read of it -- the record flag is the serializer's guess, not a fact)
-        return 'my-scalar-in-memory' if ( $t->{inputs} // [] )->@* || $f->{shared} || defined $t->{mem_in}
-            || $in_memory->{ '$' . ( $f->{symbol} // '' ) };
+        return 'my-scalar-in-memory' if ( $t->{inputs} // [] )->@* || $f->{shared} || defined $t->{mem_in};
         return 'ssa-scalar';
     }
     return 'package-var'     if $op eq 'EntryDef';
@@ -180,9 +179,15 @@ sub _graph_v2 ( $name, $g, $res ) {
         return $x->{op} eq 'MemStart' || $memphi->($x) || $x->{mem_out};
     };
     my $record = sub ($n) { $n->{op} eq 'Assign' && _fields($n)->{record} };
-    # The `my` scalars this graph keeps in memory: some read of them names a version.
+    # The `my` scalars this graph keeps in memory: some read of them names a
+    # version, and no record binds the name (one kept in memory on one path
+    # and bound as a value on another -- `($min, $max) = ...` in each arm of
+    # an if, one of them a store -- is read either way; the wire has no pad
+    # slot to tell two `my`s of one name apart, so such a name is left out).
+    my %bound = map { my $n = $_; map { ( '$' . ( _fields( $by{$_} // {} )->{symbol} // '' ) => 1 ) } grep { defined && !ref } ( $n->{inputs} // [] )->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ] }
+        grep { $record->($_) } @nodes;
     my %in_memory = map { ( '$' . _fields($_)->{symbol} => 1 ) }
-        grep { $_->{op} eq 'PadAccess' && ( _fields($_)->{sigil} // '$' ) eq '$' && defined $_->{mem_in} && defined _fields($_)->{symbol} } @nodes;
+        grep { $_->{op} eq 'PadAccess' && ( _fields($_)->{sigil} // '$' ) eq '$' && defined $_->{mem_in} && defined _fields($_)->{symbol} && !$bound{ '$' . _fields($_)->{symbol} } } @nodes;
 
     # (V9) ONE CONTROL SUCCESSOR, except for the two kinds that branch.
     for my $n (@nodes) {
@@ -230,8 +235,18 @@ sub _graph_v2 ( $name, $g, $res ) {
     # write), a division that may fault. (v1's effect-rides-value and
     # fault-floating, deleted in stage 6 with nothing in their place: audit
     # 2026-11-22, M3, M6, M7, M11.)
+    # (a place -- `pos($s) = 0`, an Assign's target -- is not run; nor is a
+    # division whose value only an arm's merge takes: it runs in that arm)
+    my $place = sub ($n) { grep { $_->[0]{op} eq 'Assign' && $_->[1] < ( _fields( $_->[0] )->{targets} // 1 ) } ( $cons{ $n->{id} } // [] )->@* };
+    my $in_arm;
+    $in_arm = sub ( $n, $d = 0 ) {
+        $d < 8 && grep { $_->[0]{op} eq 'Phi' || $_->[0]{op} =~ /^(?:TernaryExpr|And|Or|DefinedOr)$/ && $_->[1] > 0
+                         || $_->[0]{op} eq 'Coerce' && $in_arm->( $_->[0], $d + 1 ) } ( $cons{ $n->{id} } // [] )->@*;
+    };
     for my $n ( grep { !defined $_->{control_in} } @nodes ) {
+        next if $place->($n);
         my ( $op, $f ) = ( $n->{op}, _fields($n) );
+        next if $op =~ /^(?:Divide|Modulo)$/ && $in_arm->($n);
         my $why = $op =~ /^(?:Print|Unwind|Return)$/ ? $op
             : $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin'
                 && ( B::SoN::EffectTable::on_chain( $f->{name} ) || B::SoN::EffectTable::is_version( $f->{name} )
@@ -390,6 +405,9 @@ sub _graph_v2 ( $name, $g, $res ) {
         elsif ( $op eq 'RefType' ) { $class = 'object-class' }
         elsif ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' ) { $class = B::SoN::EffectTable::reads_state( $f->{name} ) }
         next unless $class && grep { $live{ $_->[0]{id} } && !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
+        # (a list assign's target is the node later reads are: its value is
+        # that Assign's, a version -- `my ($b, $d) = f(); length $b`)
+        next if $class eq 'my-in-memory' && grep { $_->[0]{op} eq 'Assign' && $_->[1] < ( _fields( $_->[0] )->{targets} // 1 ) && $_->[0]{mem_out} } ( $cons{ $n->{id} } // [] )->@*;
         $bad->( $n, "read-unversioned:$class", _describe( $n, \%by ) );
     }
     for my $n ( grep { $_->{op} =~ /^(?:ArrayLiteral|HashLiteral)$/ && ( _fields($_)->{symbol} // '' ) =~ /::/ } @nodes ) {
@@ -406,7 +424,7 @@ sub _graph_v2 ( $name, $g, $res ) {
             next;
         }
         my $in = $n->{inputs} // [];
-        my %c = map { _target_class( $by{ $_ // '' }, \%in_memory ) => 1 } @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ];
+        my %c = map { _target_class( $by{ $_ // '' } ) => 1 } @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ];
         my @mem = grep { $_ ne 'ssa-scalar' && $_ ne 'skip' } sort keys %c;
         my $args = ( ( $by{ $in->[-1] // '' } // {} )->{op} // '' ) eq 'ArgsSource';
         if    ( !@mem )                                  { $res->{allowed}{record}++ }

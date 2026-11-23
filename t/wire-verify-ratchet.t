@@ -39,6 +39,14 @@ my %HELD = (
     'probes p/pl13:main::sw record' =>
         'a list assignment to package scalars that is its sub\'s value: its EntryWrites store, and the Assign '
       . 'is the value, on neither chain; what node that value is wants a design (chalk T2 refuses it by name)',
+    'probes a/aun17f:main::sw record' =>
+        'the same shape as pl13: a list assignment to package scalars that is its sub\'s value (chalk T2 refuses it by name)',
+    'probes a/aun6:main::bump read-unversioned:through-ref' =>
+        'a compound assignment through a symbolic reference (`${"main::g"} += 10`): its read of the package scalar names '
+      . 'no version; chalk gives perl\'s answer (the read is its own store\'s operand), B::SoN should version it -- open',
+    'probes a/aun5d:main::__PROGRAM__ effect-floating' =>
+        'a division that may fault after a `next unless` guard in a loop body floats: the rest of the body is walked as '
+      . 'an arm, where B::SoN does not pin; chalk makes it at its use, after the guard -- open, B::SoN should pin it',
     # (perl's own DynaLoader, which chalk's runtime module follows, was held
     # here as "not traced yet": traced, its subs were compiled with the
     # peephole on, and B::SoN now refuses their aelemfast by name --
