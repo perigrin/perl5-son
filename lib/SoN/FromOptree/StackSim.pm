@@ -100,8 +100,20 @@ class SoN::FromOptree::StackSim 0.01 {
         $capture_merge = $node;
     }
 
+    # A BINDING THAT IS ALSO A STORE: a foreach's alias is the element, so a
+    # write to it is a store where it stands (FromOptree's foreach walker sets
+    # it, local to the body walk). key => code($sim, $new, $old).
+    our %ON_DEFINE;
+
     # Scope: immutable-style variable bindings
     method define ($targ, $node) {
+        my $old = $scope{$targ};
+        $scope{$targ} = $node;
+        $ON_DEFINE{$targ}->( $self, $node, $old ) if $ON_DEFINE{$targ};
+    }
+
+    # (a binding copied, not made: no store)
+    method bind ($targ, $node) {
         $scope{$targ} = $node;
     }
 
@@ -121,7 +133,7 @@ class SoN::FromOptree::StackSim 0.01 {
         $copy->push_node($_) for @stack;
         $copy->restore_marks([@marks]);
         for my $targ (keys %scope) {
-            $copy->define($targ, $scope{$targ});
+            $copy->bind($targ, $scope{$targ});
         }
         $copy->set_last_match($last_match);
         $copy->set_capture_merge($capture_merge);

@@ -302,7 +302,7 @@ for my $src (
     my $d = SoN::Deparse->new;
     my $out = $d->render(graph_of($src) // {});
     ok !defined $out, "an aliased ternary list arm written: $src: not rendered";
-    like $d->gap // producer_stderr(), qr/GAP: (?:a ternary list arm passed by alias|an element (?:store into an anonymous container|read in a loop is spelled after a store))/,
+    like $d->gap // producer_stderr(), qr/GAP: (?:a ternary list arm passed by alias|an element (?:store into an anonymous container|read in a loop is spelled after a store|of a `TernaryExpr` spelled .* has no aggregate sigil to switch))/,
         "an aliased ternary list arm written: $src: refused, naming its cause";
 }
 # Constants and expressions are temporaries: nothing to alias, so they lower.

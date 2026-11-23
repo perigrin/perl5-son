@@ -5608,7 +5608,18 @@ class SoN::FromOptree 0.01 {
     # preceding method_named (recorded on $ctx->{pending_method}); otherwise it
     # is a direct sub call. Shared by the main walk and _walk_branch/_step so a
     # (void) method call in a conditional branch arm translates identically.
+    # A CALL PASSED A DEMOTED FOREACH ITERATOR may write it through `$_[0]`,
+    # and the write is the call: its slot is stored to the element right after
+    # (the foreach walker sets it, local to the body walk). targ => code($sim).
+    our %AFTER_CALL_PASSING;
     sub _handle_entersub ($cv, $op, $sim, $factory, $ctx) {
+        _handle_entersub_call($cv, $op, $sim, $factory, $ctx);
+        $AFTER_CALL_PASSING{$_}->($sim) for grep { $AFTER_CALL_PASSING{$_} }
+            map { $_->targ } grep { $_->name eq 'padsv' } _entersub_args($op);
+        return;
+    }
+
+    sub _handle_entersub_call ($cv, $op, $sim, $factory, $ctx) {
         my $args = $sim->pop_to_mark;
 
         if (defined $ctx->{pending_method}) {
@@ -14630,22 +14641,29 @@ class SoN::FromOptree 0.01 {
     # argument. A wrong guess is found after the walk (_check_writes).
     sub _writes_guess ($start, $key, $hint) {
         return $hint->{writes}{$key} if exists $hint->{writes}{$key};
+        return ( grep { _op_writes_key( $_, $key ) } _loop_cycle_ops($start) ) ? 1 : 0;
+    }
+
+    # _op_writes_key($op, $key) -> whether $op writes $key (a pad targ, or a
+    # package scalar's `$main::x`) as its ops say: a pad op of the slot, or the
+    # scalar's gv, in an lvalue place that is not a sub call's argument.
+    sub _op_writes_key ($op, $key) {
         my ($name) = $key =~ /\A\$(?:main)?::(\w+)\z/;
-        for my $op ( _loop_cycle_ops($start) ) {
+        {
             my $n = $op->name;
             return 1 if $key =~ /\A\d+\z/ && $op->targ == $key
                 && ( $n eq 'padsv_store' || ( $op->private & B::OPpTARGET_MY() ) && $n !~ /\Apad/ );
             my $hit = $key =~ /\A\d+\z/
                 ? $n =~ /\Apad(?:sv|any)\z/ && $op->targ == $key
                 : defined $name && $n eq 'gvsv' && ( eval { $op->gv->NAME } // '' ) eq $name;
-            next unless $hit && ( $op->flags & B::OPf_MOD() );
+            return 0 unless $hit && ( $op->flags & B::OPf_MOD() );
             # WHAT PUTS IT IN AN LVALUE PLACE: an assignment (its target), an
             # op-assign or an increment (its operand), a builtin that writes
             # its operand -- not a call's argument, a reference taken, an
             # element's container or a reference's target, sprintf's list.
             my $up = eval { $op->parent };
             $up = eval { $up->parent } while $up && $$up && $up->name eq 'null';
-            next unless $up && $$up;
+            return 0 unless $up && $$up;
             my $u = $up->name;
             return 1 if $u =~ /\A(?:sassign|aassign)\z/;
             return 1 if $u =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ || $u =~ /assign\z/;
@@ -15705,6 +15723,23 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    # _pass_may_leave_early($loop_root) -> true when a pass of the loop may end
+    # other than at its end or by a `next`: a return, a goto, a `last` or
+    # `redo` of this loop, or any loop control naming a label.
+    sub _pass_may_leave_early ($root) {
+        for my $o ( _subtree_ops($root) ) {
+            my $n = $o->name;
+            return 1 if $n =~ /\A(?:return|goto|dump)\z/;
+            next unless $n =~ /\A(?:last|next|redo)\z/;
+            return 1 if B::class($o) eq 'PVOP';    # (a label)
+            next if $n eq 'next';
+            my $p = $o->parent;
+            $p = $p->parent while $$p && $p->name !~ /\A(?:leaveloop|grepwhile|mapwhile|leavesub)\z/;
+            return 1 if $$p && $$p == $$root;
+        }
+        return 0;
+    }
+
     # _callee_writes_no_argument($cv, $call) -> true for a named callee that
     # holds no alias to its arguments (_callee_holds_no_alias) and modifies no
     # array element or array: `$_[0] * 2` reads, `$_[0]++` and `for (@_)`
@@ -16016,13 +16051,26 @@ class SoN::FromOptree 0.01 {
                 : do { my @l = grep { $_->name !~ /\A(?:null|pushmark)\z/ && $$_ != $$enteriter }
                                 _subtree_ops($enteriter);
                        @l == 1 && $l[0]->name eq 'padav' ? $l[0]->targ : undef };
+            my $reach = defined $targ ? _unproven_list_reach($enteriter, $targ, 0, $cv) : undef;
             my $unreached = defined $targ && $x_targ =~ /\A\d+\z/
-                && _list_is_private($cv, $targ)
-                && !defined _unproven_list_reach($enteriter, $targ, 0, $cv);
+                && _list_is_private($cv, $targ) && !defined $reach;
             die "GAP: a foreach whose body writes its alias and may reshape"
               . " the array (a shift, push, splice, list assign or call) not"
               . " yet lowered\n"
                 if ($body{reshapes} || $body{calls}) && !$unreached;
+            # NOR CHANGE ITS ELEMENT BY ANOTHER WAY: a read of the alias is
+            # then the element in perl, and the walk reads its own binding
+            # (`$x .= "y"; $a[0] = "q"; $s .= $x`: `1y` for perl's `q`).
+            # (a call whose MOD set may hold an element of it: a named sub
+            # closing over the array is no call `_list_is_private` sees)
+            $reach //= 'a call' if $body{calls} && defined $targ && do {
+                my $pl = SoN::FromOptree::ModSets::array_place($cv, $targ);
+                !$pl || SoN::FromOptree::ModSets::conflict( $pl,
+                    [ SoN::FromOptree::ModSets::op_effects($cv, $enteriter->parent) ] );
+            };
+            die "GAP: a foreach whose body writes its alias and may store into"
+              . " the array another way ($reach) not yet lowered\n"
+                if defined $reach && $reach =~ /\A(?:an element write|a store through a reference|a call)\z/;
         }
 
         # A TYPED ARRAY THE BODY RESHAPES BY NAME moves its elements under the
@@ -16131,6 +16179,17 @@ class SoN::FromOptree 0.01 {
         my $elem = $factory->make('Subscript', kind => 'array',
             inputs => [$array, $i_phi], mem => $sim->memory,
             (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
+        # A WRITE TO THE ALIAS IS STORED WHERE IT STANDS (below), so the
+        # element as the pass found it is read where the pass begins: left
+        # floating, a value made from it was spelled after the store.
+        # Not a scalar's one-element wrapper (`foreach ($l)`): its write
+        # rebinds the scalar.
+        my $at_write = $writes_iter
+            && !( $array->can('operation') && $array->operation eq 'ArrayLiteral'
+                  && scalar( $array->v1_inputs->@* ) == 1
+                  && $array->v1_inputs->[0]->can('operation')
+                  && $array->v1_inputs->[0]->operation eq 'PadAccess' );
+        _pin($sim, $elem) if $at_write;
         $sim->define($x_targ, $elem);
         # ALIASED BY REFERENCE: taken where the pass begins, so a shift later
         # in the pass does not move it; every read goes through it.
@@ -16258,6 +16317,14 @@ class SoN::FromOptree 0.01 {
               . " the reference can outlive the pass\n"
                 if grep { !_reference_dies_with_pass($_, $loop_root) }
                    _iterator_references($cv, $loop_root, $x_targ);
+            # NOR WHEN THE PASS MAY BE LEFT EARLY: a write through `my $r =
+            # \$x` reaches the element only by the copy at the pass end, which
+            # a `last`, a return or a label passes by (`1 2` for perl's `1x 2`).
+            die "GAP: a reference to a foreach iterator in a pass that may be"
+              . " left early (last, return, a label) is not yet lowered -- a"
+              . " write through it reaches the element at the pass end\n"
+                if _iterator_references($cv, $loop_root, $x_targ)
+                && _pass_may_leave_early($loop_root);
 
             # A CALL CAN HAND THE SAME REFERENCE BACK: `sub k { \$_[0] }` makes
             # `$r = k($x)` the reference above, made where nothing shows it.
@@ -16320,8 +16387,47 @@ class SoN::FromOptree 0.01 {
         # arms"). Only the break collector is wanted.
         my @break_projs;
         @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
-        _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
-            undef, \@break_projs, 1);
+        # A WRITE TO THE ALIAS IS A STORE TO THE ELEMENT WHERE IT STANDS, as
+        # perl's alias is the element. Stored back at the end of the pass, it
+        # was lost on a pass left early (`$e .= "x"; last if ...`: `1 2` for
+        # perl's `1x 2`; a return, a `next OUTER`) and unseen by a callee
+        # reading the array mid-pass.
+        my $store_at_write = $at_write
+            ? sub ( $s, $new, $old ) {
+                return if defined $old && $old->resolved == $new->resolved;
+                # (A LOOP'S PHI, at its header or bound at its exit: its init
+                # was stored before the loop and its back value at the write
+                # in the body. Stored at the exit, it was placed in the body.)
+                return if $new->isa('SoN::IR::Node::Phi')
+                    && $new->region->isa('SoN::IR::Node::Loop');
+                my $lvalue = $factory->make('Subscript', kind => 'array',
+                    inputs => [$array, $i_phi]);
+                _place($s, $factory->make('Assign', inputs => [$lvalue, $new]));
+                $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
+            }
+            : undef;
+        # (A DEMOTED ITERATOR a callee writes is stored after each call passed
+        # it, for the same reason; its pass-end write-back below stays for a
+        # write through `my $r = \$x`.)
+        my $after_call = $demoted_iter && !$writes_iter
+            && !( $array->can('operation') && $array->operation eq 'ArrayLiteral'
+                  && !defined(eval { $array->symbol }) )
+            ? sub ($s) {
+                my $slot = $factory->make('PadAccess', targ => $x_targ,
+                    do { my ($sg, $sy) = _padparts($cv, $x_targ); (sigil => $sg, symbol => $sy) },
+                    ($SHARED_SLOTS && $SHARED_SLOTS->{$x_targ} ? (shared => 1) : ()),
+                    mem => $s->memory);
+                my $lvalue = $factory->make('Subscript', kind => 'array', inputs => [$array, $i_phi]);
+                _place($s, $factory->make('Assign', inputs => [$lvalue, $slot], if_changed => 1));
+                $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
+            }
+            : undef;
+        {
+            local $SoN::FromOptree::StackSim::ON_DEFINE{$x_targ} = $store_at_write;
+            local $AFTER_CALL_PASSING{$x_targ} = $after_call;
+            _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
+                undef, \@break_projs, 1);
+        }
         # The iterator's write as guessed (it is checked before the sealing:
         # a wrong guess walks again either way).
         _check_writes($hint, $x_targ, $writes_iter, ( $sim->lookup($x_targ) // $elem )->resolved != $elem);
@@ -16435,7 +16541,7 @@ class SoN::FromOptree 0.01 {
                     if defined $slot && !$phis{$slot} && defined $pre_scope->{$slot};
                 $sim->define($slot, $new_val) if defined $slot;
             }
-            elsif (defined $new_val && $new_val != $elem) {
+            elsif (defined $new_val && $new_val != $elem && !$store_at_write) {
                 my $lvalue = $factory->make('Subscript', kind => 'array',
                     inputs => [$array, $i_phi]);
                 my $store = $factory->make('Assign',
@@ -18930,6 +19036,10 @@ class SoN::FromOptree 0.01 {
             # A builtin the effect table pins advances control as a call does.
             return 1 if B::SoN::EffectTable::on_chain($name);
             return 1 if _op_places_a_store($op);
+            # SO DOES A WRITE TO A FOREACH'S ALIAS: it is a store to the
+            # element where it stands (the foreach walker's hook).
+            return 1 if grep { $SoN::FromOptree::StackSim::ON_DEFINE{$_} && _op_writes_key( $op, $_ ) }
+                keys %SoN::FromOptree::StackSim::ON_DEFINE;
             return 1 if $name eq 'sort' && _sort_runs_comparator($op);
             return 1 if $name eq 'reverse' && ($op->private & 8);   # OPpREVERSE_INPLACE
             # AN ARM THAT PINS -- a read of a tied aggregate (a call), a whole assign

@@ -45,14 +45,6 @@ sub round_trips ($src, $name) {
 }
 
 
-sub refuses_render ($src, $cause, $name) {
-    my $data = graph_of($src);
-    is producer_stderr(), '', "$name: the producer says nothing";
-    my $d = SoN::Deparse->new;
-    my $out = $data ? $d->render($data) : undef;
-    ok !defined $out, "$name: the renderer refuses";
-    like $d->gap // '', $cause, "$name: naming its cause";
-}
 
 
 sub refuses ($src, $cause, $name) {
@@ -69,7 +61,6 @@ sub refuses ($src, $cause, $name) {
 # other than through the iterator refuses. A push moves nothing, and lowers.
 my $RESHAPE  = qr/GAP: a foreach whose body reshapes the array it iterates/;
 my $UNPROVEN = qr/GAP: a foreach over an unproven list .* whose body may reach the list other than through its iterator/;
-my $STALE    = qr/GAP: an element read in a loop is spelled after a store/;
 round_trips(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; shift @a } print "$s|@a\n" } f();},
     'a shift of a bare-declared array in its own loop');
 round_trips(q{sub f { my @a = (1, 2); my $s=""; for my $x (@a) { $s .= $x; shift @a } print "$s|@a\n" } f();},
@@ -169,8 +160,10 @@ round_trips(q{sub f { my @a = (1,2); my @b = (5,6); my $s=""; for my $x (@a) { f
     'an inner loop writing another array');
 round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { for my $k (1..2) { $a[0] = 7 } $s .= $x; } print "$s|@a\n" } f();},
     'an element store in an inner range loop before the read');
-refuses_render(q{sub f { my @a = (3,4); my $s = 0; for (@a) { $_ *= 2; $s += $_ } print "$s|@a\n" } f();},
-    $STALE, 'the alias written, then read');
+# (the alias write is a store where it stands, and the pass's element read
+# is bound at its top: no read is spelled after the store)
+round_trips(q{sub f { my @a = (3,4); my $s = 0; for (@a) { $_ *= 2; $s += $_ } print "$s|@a\n" } f();},
+    'the alias written, then read');
 round_trips(q{sub f { my @a = (1,2); for (@a) { $_ = 0 } print "@a\n" } f();},
     'the alias written and never read');
 

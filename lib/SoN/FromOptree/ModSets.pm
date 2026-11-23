@@ -585,6 +585,15 @@ sub place ( $cv, $op ) {
     return $p;
 }
 
+# array_place($cv, $targ) -> where a lexical array lives, as place() gives an
+# element's, for any element of it (a foreach's list).
+sub array_place ( $cv, $targ ) {
+    my ($loc) = _lex( $cv, $targ );
+    return undef unless defined $loc;
+    my $refd = $loc =~ /\AL:.:(\d+):(\d+)\z/ && $1 == $$cv ? ( _referenced($cv)->{$2} ? 1 : 0 ) : 1;
+    return { levels => [ { loc => $loc, key => '*', kind => 'array', refd => $refd } ] };
+}
+
 sub _place ( $cv, $op ) {
     $op = _strip($op);
     my $n = $op->name;

@@ -45,14 +45,6 @@ sub round_trips ($src, $name) {
 }
 
 
-sub refuses_render ($src, $cause, $name) {
-    my $data = graph_of($src);
-    is producer_stderr(), '', "$name: the producer says nothing";
-    my $d = SoN::Deparse->new;
-    my $out = $data ? $d->render($data) : undef;
-    ok !defined $out, "$name: the renderer refuses";
-    like $d->gap // '', $cause, "$name: naming its cause";
-}
 
 
 sub refuses ($src, $cause, $name) {
@@ -67,17 +59,17 @@ sub refuses ($src, $cause, $name) {
 # shift, an element store, a nested map, grep or foreach, or an iterator write
 # next to an array read each broke it; the body is refused instead.
 my $UNPROVEN = qr/GAP: a foreach over an unproven list .* whose body may reach the list other than through its iterator/;
-# A TYPED ARRAY keeps the array path it had, and the renderer refuses a read
-# carried past a later store to the same aggregate.
-my $STALE = qr/GAP: an element read in a loop is spelled after a store/;
 
 # An iterator write, then an element store, then a read of the iterator.
-refuses_render(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $x .= "y"; $a[0] = "q"; $s .= $x } print "$s|@a\n" } f();},
-    $STALE, 'a typed array: an alias write, an element store, an alias read');
+# (the read of the alias is then the element in perl, and the walk's own
+# binding in the graph: the producer refuses it by name)
+my $ANOTHER_WAY = qr/GAP: a foreach whose body writes its alias and may store into the array another way/;
+refuses(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $x .= "y"; $a[0] = "q"; $s .= $x } print "$s|@a\n" } f();},
+    $ANOTHER_WAY, 'a typed array: an alias write, an element store, an alias read');
 refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $x .= "y"; $a[0] = "q"; $s .= $x } print "$s|@a\n" } f();},
     $UNPROVEN, 'a bare array: an alias write, an element store, an alias read');
-refuses_render(q{sub f { my @a = (1,2); my $r = \@a; my $s=""; for my $x (@a) { $x .= "y"; $r->[0] = "q"; $s .= $x } print "$s|@a\n" } f();},
-    $STALE, 'a typed array: the element store through a reference');
+refuses(q{sub f { my @a = (1,2); my $r = \@a; my $s=""; for my $x (@a) { $x .= "y"; $r->[0] = "q"; $s .= $x } print "$s|@a\n" } f();},
+    $ANOTHER_WAY, 'a typed array: the element store through a reference');
 refuses(q{sub f { my @a; push @a, 1, 2; my $r = \@a; my $s=""; for my $x (@a) { $x .= "y"; $r->[0] = "q"; $s .= $x } print "$s|@a\n" } f();},
     $UNPROVEN, 'a bare array: the element store through a reference');
 refuses(q{use v5.42; sub f($r) { my $s=""; for (@$r) { $_ .= "y"; $r->[0] = "q"; $s .= $_ } "$s|@$r" } print f([1,2]), "\n";},
