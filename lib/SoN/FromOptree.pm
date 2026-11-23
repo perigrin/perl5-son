@@ -8067,6 +8067,16 @@ class SoN::FromOptree 0.01 {
             my $want        = $op->flags & 3;         # OPf_WANT: 3=list 2=scalar
             my $ref_or_mod  = $op->flags & 0x30;      # OPf_REF | OPf_MOD
             my $is_lvintro  = $op->private & 0x80;    # OPpLVAL_INTRO (target)
+            # A LIST OR VOID READ OF A LITERAL IN A LOOP takes the elements as
+            # first built -- flattened here, or by a return's list -- unless
+            # it is marked; each loop it is read in checks, at its sealing,
+            # that the body wrote it nowhere after the read (_braun_seal).
+            $_->{flattened}{ Scalar::Util::refaddr($existing) } = [ $targ, $existing ] for
+                grep { ( $want == 3 || $want == 0 ) && !$ref_or_mod && !$is_lvintro
+                    && $existing && $existing->can('operation')
+                    && $existing->operation =~ /\A(?:Array|Hash)Literal\z/
+                    && !$ctx->{mutated_aggregate}{$targ}
+                    && !$MUTATED_LITERALS{ Scalar::Util::refaddr($existing) } } @LOOP_STACK;
             # NOT ONCE THE ARRAY HAS BEEN MUTATED. The shortcut pushes the
             # literal's ORIGINAL elements, which is the array as first
             # constructed rather than as it now stands:
@@ -14487,7 +14497,7 @@ class SoN::FromOptree 0.01 {
     our $DIRTY = 0;
 
     sub _loop_hint ($start) {
-        return $LOOP_HINTS{ $$start } //= { unstamped => {}, extra => {}, writes => {} };
+        return $LOOP_HINTS{ $$start } //= { unstamped => {}, extra => {}, writes => {}, mutated => {} };
     }
 
     # _braun_phis($factory, $sim, $loop_node, $start, $pre_scope, $hint, @skip)
@@ -14506,6 +14516,11 @@ class SoN::FromOptree 0.01 {
                 $_->name eq 'padav' && $_->targ
                     && _operand_consumer( $_->parent->name eq 'aelem' ? $_->parent : $_ ) eq 'entersub'
             } _loop_cycle_ops($start);
+            # AN AGGREGATE THE BODY WROTE after a read had flattened it, as
+            # the sealing of an earlier walk learned (_braun_seal): every
+            # write -- a foreach's alias, a callee's `$_`, a slice, a map's
+            # `$_` -- is seen, because the walk's own mark is what is checked.
+            $MUTATED_AGGREGATE->{$_} = 1 for keys $hint->{mutated}->%*;
         }
         my %skip = map { $_ => 1 } @skip;
         # A SHARED AGGREGATE IS BOUND TO ITS CONTAINER before the body and
@@ -14558,6 +14573,21 @@ class SoN::FromOptree 0.01 {
             next unless _backedge_loses_stamp( $post->{$k}->resolved, $ph );
             $hint->{unstamped}{$k} = 1;
             $ph->set_stamp( SoN::IR::Stamp->new(type => 'Unknown') );   # (for the walk that goes on)
+            $DIRTY = 1;
+        }
+        # A LITERAL BOUND BEFORE THE LOOP AND READ WHOLE IN IT is the array as
+        # the next pass reads it only if nothing wrote it after the read: a
+        # write walked later (`push @r, "@a"; for (@a) { $_ .= "x" }`) marks
+        # it, too late for the read. Learned, the header marks the slot on
+        # the next walk (_braun_phis) and the read goes through memory.
+        for my $f ( @LOOP_STACK ? values( ( $LOOP_STACK[-1]{flattened} // {} )->%* ) : () ) {
+            my ( $targ, $lit ) = @$f;
+            next unless defined $pre_scope->{$targ} && $pre_scope->{$targ}->resolved == $lit;
+            next unless $MUTATED_LITERALS{ Scalar::Util::refaddr($lit) }
+                || ( $MUTATED_AGGREGATE && $MUTATED_AGGREGATE->{$targ} );
+            die "GAP: a loop body writes an aggregate after a read that flattened it ($targ),"
+              . " not settled by a second walk\n"
+                if $hint->{mutated}{$targ}++;
             $DIRTY = 1;
         }
         my @stay;
