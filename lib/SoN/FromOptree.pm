@@ -5288,6 +5288,12 @@ class SoN::FromOptree 0.01 {
               . " the statements it skips, and the label would otherwise be"
               . " dropped with no diagnostic",
 
+        # `defer { }` and a try's `finally { }` (re-audit 2026-11-23, class
+        # C): work on every way out of a scope, as a `local` restore is, and
+        # dropped: `try { $x=1 } catch ($e) { } finally { $x.=3 }` left $x 1.
+        pushdefer => "GAP: a `defer` or `finally` block is not yet lowered -- it runs on"
+              . " every way out of its scope, and nothing puts it on those ways",
+
     );
 
     sub _extract_const ($sv) {
