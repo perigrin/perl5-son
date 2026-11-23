@@ -1,0 +1,501 @@
+# probes/r at producer reaudit-refuse 57f9e9e, chalk 3cc2195a
+rea01    SAME     
+rea02    SAME     
+rea03    SAME     
+rea04    SAME     
+rea05    SAME     
+rea06    SAME     
+rea07    SAME     
+rea08    SAME     
+rea09    SAME     
+rea10    SAME     
+rea11    REFUSED  B::SoN: GAP: an anonymous sub closing over $i is not yet lowered -- it is built once per pass of a loop that gives it a fresh variable, and its lifted body reads one
+rea12    SAME     
+rea13    SAME     
+rea14    SAME     
+rea15    SAME     
+rea16    SAME     
+rea17    SAME     
+rea18    SAME     
+rea19    SAME     
+rea20    SAME     
+rea21    SAME     
+rea22    SAME     
+rea23    SAME     
+rea24    SAME     
+rea25    SAME     
+rea26    SAME     
+rea27    SAME     
+rea28    SAME     
+rea29    SAME     
+rea30    SAME     
+rea31    SAME     
+rea32    SAME     
+rea33    SAME     
+rea34    SAME     
+rea35    SAME     
+rea36    SAME     
+rea37    SAME     
+rea38    SAME     
+rea39    SAME     
+rea40    SAME     
+reb01    SAME     
+reb02    REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+reb03    SAME     
+reb04    SAME     
+reb05    SAME     
+reb06    REFUSED  B::SoN: GAP: local on an array or hash element in an eval or try is not yet lowered -- a die skips the restore
+reb07    SAME     
+reb08    SAME     
+reb09    SAME     
+reb10    SAME     
+reb11    SAME     
+reb12    SAME     
+reb13    SAME     
+reb14    SAME     
+reb15    SAME     
+reb16    SAME     
+reb17    SAME     
+reb18    SAME     
+reb19    SAME     
+reb20    SAME     
+reb21    SAME     
+reb22    SAME     
+reb23    SAME     
+reb24    SAME     
+reb25    SAME     
+reb26    REFUSED  B::SoN: GAP: loop without a lowerable condition
+reb27    REFUSED  B::SoN: GAP: a loop control (`next`) inside a branch arm is not yet lowered -- the arm walk carries no loop exit edge to route it to
+reb28    SAME     
+reb29    SAME     
+reb30    REFUSED  B::SoN: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way out of its scope, and nothing puts it on those ways
+reb31    SAME     
+reb32    SAME     
+reb33    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+reb34    SAME     
+reb35    SAME     
+reb36    SAME     
+reb37    SAME     
+reb38    SAME     
+reb39    REFUSED  B::SoN: GAP: an anonymous sub closing over $g has a capture that does not resolve to a slot in the enclosing pad (a nested closure's grandparent capture)
+reb40    SAME     
+rec01    REFUSED  load: from_json failed: GAP: a Modulo that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec02    REFUSED  load: from_json failed: GAP: a PostfixDeref that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec03    REFUSED  load: from_json failed: GAP: a PostfixDeref that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec04    REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec05    SAME     
+rec06    REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec07    REFUSED  GAP: T2: out of its slices (a statement Call builtin sqrt)
+rec08    REFUSED  GAP: T2: out of its slices (Call builtin splice)
+rec09    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` (@main::g), in a sub with no eval (in main::f)
+rec10    REFUSED  GAP: T2: out of its slices (a local of an element where a die may unwind past it)
+rec11    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec12    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec13    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec14    LOUD     substr outside of string (perl warns): stopped (chalk, T2)
+rec15    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec16    SAME     
+rec17    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec18    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+rec19    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::_), in a sub with no eval (in main::f)
+rec20    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+red01    REFUSED  B::SoN: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way out of its scope, and nothing puts it on those ways
+red02    REFUSED  B::SoN: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way out of its scope, and nothing puts it on those ways
+red03    REFUSED  load: from_json failed: GAP: main::f, which the program calls, is refused in its module: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way
+red04    SAME     
+red05    REFUSED  GAP: T2: out of its slices (a value an eval made, read past its end)
+red06    SAME     
+red07    SAME     
+red08    REFUSED  GAP: T2: out of its slices (two evals entered at one node (a try whose body begins with a try or an eval))
+ree01    SAME     
+ree02    REFUSED  GAP: T2: out of its slices (an array B::SoN reads at no version, aliased where it may be written)
+ree03    REFUSED  GAP: T2: out of its slices (PadAccess)
+ree04    REFUSED  GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+ree05    REFUSED  GAP: T2: out of its slices (a slice of an array B::SoN reads at no version, aliased where it may be written)
+ree06    REFUSED  GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+ree07    SAME     
+ree08    REFUSED  B::SoN: GAP: a chomp/chop whose subject is a `SoN::IR::Node::Subscript` has no slot to store back into
+ree09    SAME     
+ree10    SAME     
+ree11    REFUSED  B::SoN: GAP: a grep whose block writes $_, read as a list, is not yet lowered -- what grep returns are the elements, written after the walk read them
+ree12    SAME     
+ree13    REFUSED  B::SoN: GAP: a foreach whose body writes its alias and may reshape the array (a shift, push, splice, list assign or call) not yet lowered
+ree14    SAME     
+ree15    REFUSED  load: from_json failed: GAP: main::tw, which the program calls, is refused in its module: GAP: a write to a foreach iterator over @_ is not yet lowered -- @_ aliases
+ree16    SAME     
+ree17    SAME     
+ree18    SAME     
+ree19    SAME     
+ree20    SAME     
+ree21    SAME     
+ree22    SAME     
+ree23    SAME     
+ree24    SAME     
+ree25    SAME     
+ree26    SAME     
+ree27    SAME     
+ree28    REFUSED  GAP: T2: out of its slices (PadAccess)
+ree29    SAME     
+ree30    REFUSED  B::SoN: GAP: a foreach over a scalar variable its body may write is not yet lowered -- the iterator is perl's alias of the variable, and the walk binds it to the value
+ree31    REFUSED  B::SoN: GAP: a foreach over a scalar variable its body may write is not yet lowered -- the iterator is perl's alias of the variable, and the walk binds it to the value
+ree32    REFUSED  B::SoN: GAP: a reference to a foreach iterator is not yet lowered -- the iterator is a copy written back each pass, and the reference can outlive the pass
+ree33    SAME     
+ree34    REFUSED  GAP: T2: out of its slices (a list perl may alias (Phi) passed where a sub writes @_)
+ree35    REFUSED  GAP: T2: out of its slices (a list perl may alias (Phi) passed where a sub writes @_)
+ree36    SAME     
+ree37    REFUSED  B::SoN: GAP: a foreach whose body writes its alias and may store into the array another way (an element write) not yet lowered
+ree38    SAME     
+ree39    SAME     
+ree40    SAME     
+ref01    SAME     
+ref02    SAME     
+ref03    SAME     
+ref04    SAME     
+ref05    SAME     
+ref06    SAME     
+ref07    SAME     
+ref08    SAME     
+ref09    SAME     
+ref10    SAME     
+ref11    SAME     
+ref12    SAME     
+ref13    SAME     
+ref14    SAME     
+ref15    SAME     
+ref16    SAME     
+ref17    SAME     
+ref18    SAME     
+ref19    SAME     
+ref20    SAME     
+ref21    SAME     
+ref22    SAME     
+ref23    SAME     
+ref24    SAME     
+ref25    SAME     
+reg01    SAME     
+reg02    SAME     
+reg03    SAME     
+reg04    SAME     
+reg05    SAME     
+reg06    SAME     
+reg07    SAME     
+reg08    SAME     
+reg09    SAME     
+reg10    SAME     
+reg11    SAME     
+reg12    SAME     
+reg13    SAME     
+reg14    SAME     
+reg15    SAME     
+reg16    SAME     
+reg17    SAME     
+reg18    SAME     
+reg19    SAME     
+reg20    SAME     
+reh01    SAME     
+reh02    SAME     
+reh03    SAME     
+reh04    SAME     
+reh05    SAME     
+reh06    LOUD     chalk: refused at run time: a hash element read through no HASH reference
+reh07    SAME     
+reh08    SAME     
+reh09    SAME     
+reh10    SAME     
+reh11    SAME     
+reh12    SAME     
+reh13    SAME     
+reh14    REFUSED  GAP: T2: out of its slices (a list assignment to a slice whose indices are a list made at run time)
+reh15    SAME     
+reh16    SAME     
+reh17    SAME     
+reh18    SAME     
+reh19    REFUSED  GAP: T2: out of its slices (Call builtin splice)
+reh20    SAME     
+reh21    SAME     
+reh22    SAME     
+reh23    SAME     
+reh24    SAME     
+reh25    REFUSED  GAP: T2: out of its slices (the value of a list assignment to scalars)
+reh26    SAME     
+reh27    REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+reh28    SAME     
+reh29    REFUSED  GAP: T2: out of its slices (PadAccess)
+reh30    REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+rei01    SAME     
+rei02    SAME     
+rei03    SAME     
+rei04    SAME     
+rei05    SAME     
+rei06    SAME     
+rei07    SAME     
+rei08    SAME     
+rei09    SAME     
+rei10    REFUSED  B::SoN: GAP: a foreach over a package variable whose body calls a sub (the callee sees the variable, not the element) not yet lowered
+rei11    REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+rei12    SAME     
+rei13    SAME     
+rei14    SAME     
+rei15    REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+rei16    REFUSED  B::SoN: GAP: void-context 'or' arm did not converge (statement-modifier loop or unhandled arm op)
+rei17    SAME     
+rei18    SAME     
+rei19    SAME     
+rei20    SAME     
+rej01    SAME     
+rej02    SAME     
+rej03    SAME     
+rej04    SAME     
+rej05    REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+rej06    SAME     
+rej07    SAME     
+rej08    SAME     
+rej09    SAME     
+rej10    SAME     
+rej11    SAME     
+rej12    SAME     
+rej13    SAME     
+rej14    SAME     
+rej15    SAME     
+rej16    SAME     
+rej17    SAME     
+rej18    SAME     
+rej19    SAME     
+rej20    SAME     
+rej21    REFUSED  GAP: T2: out of its slices (Call builtin splice)
+rej22    SAME     
+rej23    SAME     
+rej24    SAME     
+rej25    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rej26    SAME     
+rej27    REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+rej28    SAME     
+rej29    SAME     
+rej30    SAME     
+rej31    REFUSED  GAP: T2: out of its slices (wantarray in a sub (T2 has no void context))
+rej32    SAME     
+rej33    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it
+rej34    SAME     
+rej35    SAME     
+rej36    SAME     
+rej37    SAME     
+rej38    SAME     
+rej39    SAME     
+rej40    SAME     
+rej41    SAME     
+rej42    SAME     
+rej43    REFUSED  B::SoN: GAP: an element operand is read by alias and a later operand stores into its container -- not yet lowered
+rej44    SAME     
+rej45    SAME     
+rej46    REFUSED  B::SoN: GAP: an element operand is read by alias and a later operand stores into its container -- not yet lowered
+rej47    SAME     
+rej48    SAME     
+rej49    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it through a reference
+rej50    SAME     
+rek01    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek02    SAME     
+rek03    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek04    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek05    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek06    SAME     
+rek07    SAME     
+rek08    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek09    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek10    SAME     
+rek11    SAME     
+rek12    SAME     
+rek13    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek14    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek15    SAME     
+rek16    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek17    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek18    SAME     
+rek19    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rek20    REFUSED  load: from_json failed: GAP: main::f, which the program calls, is refused in its module: GAP: a copy of a hash that may then be written is not yet lowered -- the wire
+rel01    SAME     
+rel02    REFUSED  GAP: T2: out of its slices (Phi)
+rel03    SAME     
+rel04    SAME     
+rel05    SAME     
+rel06    REFUSED  B::SoN: GAP: void-context 'and' arm did not converge (statement-modifier loop or unhandled arm op)
+rel07    SAME     
+rel08    SAME     
+rel09    SAME     
+rel10    SAME     
+rel11    SAME     
+rel12    SAME     
+rel13    REFUSED  B::SoN: GAP: untranslatable op inside a guarded arm (arm stopped at `iter`, not the join) not yet lowered
+rel14    SAME     
+rel15    SAME     
+rel16    SAME     
+rel17    SAME     
+rel18    SAME     
+rel19    SAME     
+rel20    REFUSED  GAP: T2: out of its slices (an array through an element read whole)
+rem01    SAME     
+rem02    SAME     
+rem03    SAME     
+rem04    SAME     
+rem05    SAME     
+rem06    SAME     
+rem07    SAME     
+rem08    REFUSED  GAP: T2: out of its slices (a list assignment to an array or hash)
+rem09    REFUSED  load: from_json failed: GAP: C::get, which the program calls, is refused in its module: GAP: `//=` into something other than a lexical scalar or an element
+rem10    SAME     
+rem11    SAME     
+rem12    SAME     
+rem13    SAME     
+rem14    REFUSED  GAP: T2: out of its slices (sub main::mod returns a list as one value)
+rem15    REFUSED  GAP: T2: out of its slices (sub main::mod returns a list as one value)
+rem16    SAME     
+rem17    SAME     
+rem18    SAME     
+rem19    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rem20    SAME     
+ren01    SAME     
+ren02    SAME     
+ren03    SAME     
+ren04    SAME     
+ren05    SAME     
+ren06    SAME     
+ren07    REFUSED  load: from_json failed: GAP: main::f, which the program calls, is refused in its module: GAP: a copy of a hash that may then be written is not yet lowered -- the wire
+ren08    SAME     
+ren09    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren10    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren11    SAME     
+ren12    SAME     
+ren13    SAME     
+ren14    SAME     
+ren15    SAME     
+ren16    SAME     
+ren17    SAME     
+ren18    REFUSED  GAP: T2: out of its slices (Call builtin splice)
+ren19    SAME     
+ren20    SAME     
+ren21    SAME     
+ren22    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren23    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren24    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren25    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren26    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren27    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren28    SAME     
+ren29    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren30    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+ren31    SAME     
+ren32    SAME     
+ren33    SAME     
+ren34    SAME     
+ren35    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+reo01    REFUSED  GAP: T2: out of its slices (a statement Call builtin srand)
+reo02    REFUSED  GAP: T2: out of its slices (a statement Call builtin sleep)
+reo03    REFUSED  GAP: T2: out of its slices (a statement Call builtin mkdir)
+reo04    REFUSED  GAP: T2: out of its slices (EntryDef)
+reo05    REFUSED  GAP: T2: out of its slices (a hash element of a named hash)
+reo06    SAME     
+reo07    REFUSED  GAP: T2: out of its slices (a statement Call builtin sqrt)
+reo08    REFUSED  GAP: T2: out of its slices (EntryDef)
+reo09    REFUSED  GAP: T2: out of its slices ($" written)
+reo10    SAME     
+reo11    SAME     
+reo12    SAME     
+reo13    SAME     
+reo14    SAME     
+reo15    SAME     
+reo16    SAME     
+reo17    SAME     
+reo18    SAME     
+reo19    SAME     
+reo20    SAME     
+reo21    SAME     
+reo22    SAME     
+reo23    REFUSED  load: from_json failed: GAP: main::c, which the program calls, is refused in its module: GAP: a `state` initialiser that can run more than once is not yet lowered --
+reo24    REFUSED  load: from_json failed: GAP: main::c, which the program calls, is refused in its module: GAP: a `state` variable with no initialiser, where it can be reached more tha
+reo25    SAME     
+reo26    SAME     
+reo27    REFUSED  GAP: T2: out of its slices (Call builtin aeach)
+reo28    REFUSED  GAP: T2: out of its slices (a value stamped List (Assign))
+reo29    SAME     
+reo30    SAME     
+reo31    SAME     
+reo32    SAME     
+reo33    SAME     
+reo34    SAME     
+reo35    SAME     
+reo36    SAME     
+reo37    SAME     
+reo38    SAME     
+reo39    SAME     
+reo40    SAME     
+rep01    SAME     
+rep02    SAME     
+rep03    SAME     
+rep04    SAME     
+rep05    SAME     
+rep06    SAME     
+rep07    SAME     
+rep08    SAME     
+rep09    REFUSED  GAP: T2: out of its slices (a phi stamped List)
+rep10    REFUSED  GAP: T2: out of its slices (a phi stamped List)
+rep11    REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+rep12    REFUSED  GAP: T2: out of its slices (a statement Call builtin log)
+rep13    SAME     
+rep14    SAME     
+rep15    REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+rep16    REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+rep17    REFUSED  load: from_json failed: GAP: a `my` aggregate a sub also reaches, flattened beside a call that may change it (in main::__PROGRAM__)
+rep18    SAME     
+rep19    SAME     
+rep20    REFUSED  load: from_json failed: GAP: a DESTROY method (B1::DESTROY), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+rep21    REFUSED  load: from_json failed: GAP: a DESTROY method (P::AUTOLOAD), or an AUTOLOAD perl calls for one: chalk never destroys an object, so it would never run
+rep22    SAME     
+rep23    SAME     
+rep24    SAME     
+rep25    SAME     
+req01    REFUSED  load: from_json failed: GAP: main::c, which the program calls, is refused in its module: GAP: a `state` variable with no initialiser, where it can be reached more tha
+req02    REFUSED  load: from_json failed: GAP: main::c, which the program calls, is refused in its module: GAP: a `state` variable with no initialiser, where it can be reached more tha
+req03    REFUSED  load: from_json failed: GAP: main::c, which the program calls, is refused in its module: GAP: a `state` initialiser that can run more than once is not yet lowered --
+req04    REFUSED  B::SoN: GAP: once inside a loop body not yet lowered
+req05    REFUSED  B::SoN: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way out of its scope, and nothing puts it on those ways
+req06    REFUSED  load: from_json failed: GAP: main::f, which the program calls, is refused in its module: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way
+req07    REFUSED  GAP: T2: out of its slices (PadAccess)
+req08    REFUSED  B::SoN: GAP: a foreach over a scalar variable its body may write is not yet lowered -- the iterator is perl's alias of the variable, and the walk binds it to the value
+req09    REFUSED  GAP: T2: out of its slices (PadAccess)
+req10    REFUSED  GAP: T2: out of its slices (PadAccess)
+req11    REFUSED  B::SoN: GAP: a foreach over a scalar variable its body may write is not yet lowered -- the iterator is perl's alias of the variable, and the walk binds it to the value
+req12    REFUSED  B::SoN: GAP: a foreach over a scalar variable its body may write is not yet lowered -- the iterator is perl's alias of the variable, and the walk binds it to the value
+req13    SAME     
+req14    REFUSED  B::SoN: GAP: a grep whose block writes $_, read as a list, is not yet lowered -- what grep returns are the elements, written after the walk read them
+req15    REFUSED  B::SoN: GAP: a grep whose block writes $_, read as a list, is not yet lowered -- what grep returns are the elements, written after the walk read them
+req16    REFUSED  B::SoN: GAP: a grep whose block writes $_, read as a list, is not yet lowered -- what grep returns are the elements, written after the walk read them
+req17    SAME     
+req18    SAME     
+req19    SAME     
+req20    SAME     
+req21    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it
+req22    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it
+req23    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it
+req24    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it
+req25    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it through a reference
+req26    REFUSED  B::SoN: GAP: a scalar operand is read by alias and a later operand stores it through a reference
+req27    REFUSED  B::SoN: GAP: an element operand is read by alias and a later operand stores into its container -- not yet lowered
+req28    REFUSED  load: from_json failed: GAP: C::get, which the program calls, is refused in its module: GAP: `//=` into something other than a lexical scalar or an element
+req29    SAME     
+req30    REFUSED  load: from_json failed: GAP: C::get, which the program calls, is refused in its module: GAP: `||=` into something other than a lexical scalar or an element
+req31    LOUD     chalk: refused at run time: a hash element read through no HASH reference
+req32    REFUSED  load: from_json failed: GAP: a PostfixDeref that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+req33    LOUD     chalk: refused at run time: a hash element read through no HASH reference
+req34    REFUSED  load: from_json failed: GAP: a PostfixDeref that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+req35    REFUSED  load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+req36    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+req37    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+req38    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+req39    REFUSED  load: from_json failed: GAP: a Divide that may die under a `local` ($main::g), in a sub with no eval (in main::f)
+req40    SAME     
+rer01    REFUSED  B::SoN: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way out of its scope, and nothing puts it on those ways
+rer02    REFUSED  load: from_json failed: GAP: main::f, which the program calls, is refused in its module: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way
+rer03    REFUSED  load: from_json failed: GAP: main::f, which the program calls, is refused in its module: GAP: a `defer` or `finally` block is not yet lowered -- it runs on every way
+rer04    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rer05    REFUSED  B::SoN: GAP: a copy of a hash that may then be written is not yet lowered -- the wire binds it to the original's node, so a write to either would change both
+rer06    SAME     
+LOUD=4 REFUSED=156 SAME=339 

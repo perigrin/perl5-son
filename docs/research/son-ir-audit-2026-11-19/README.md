@@ -12,6 +12,10 @@
   (../2026-11-22-memory-model-goal-audit.md, section 2), named `au` plus the
   audit's batch letter and number (`aun1` is its batch n, probe 1);
   `_run1.log` is their sweep at producer 2d67c84, chalk 287e5da1 (55 WRONG).
+  `probes/l/`: lw1-lw96, a loop body writing an aggregate after reading it.
+  `probes/r/`: the 499 probes of the 2026-11-23 re-audit
+  (../2026-11-23-memory-model-goal-re-audit.md, section 3), in chalk's
+  `t/data/audit-probes` as `re` plus their name (`a01.pl` is `rea01`).
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),
