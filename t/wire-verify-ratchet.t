@@ -36,11 +36,9 @@ $ENV{PERL_PERTURB_KEYS} = 0;
 # A VIOLATION HELD, by source, case and graph, and rule: why it is not fixed.
 # One that no longer occurs is printed: take it out.
 my %HELD = (
-    'probes p/pl13:main::sw record' =>
-        'a list assignment to package scalars that is its sub\'s value: its EntryWrites store, and the Assign '
-      . 'is the value, on neither chain; what node that value is wants a design (chalk T2 refuses it by name)',
-    'probes a/aun17f:main::sw record' =>
-        'the same shape as pl13: a list assignment to package scalars that is its sub\'s value (chalk T2 refuses it by name)',
+    # (probes pl13 and aun17f, a list assignment to package scalars that is
+    # its sub's value, were held here as `record`: the Return carries its two
+    # readings now -- t/wire-v2-a-list-assign-to-package-scalars-is-no-record.t)
     'probes a/aun6:main::bump read-unversioned:through-ref' =>
         'a compound assignment through a symbolic reference (`${"main::g"} += 10`): its read of the package scalar names '
       . 'no version; chalk gives perl\'s answer (the read is its own store\'s operand), B::SoN should version it -- open',

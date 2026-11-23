@@ -76,4 +76,15 @@ my @d = ($r);
 print scalar(@c), " ", scalar(@d), " $d[0]\n";
 SRC
 
+# AN AGGREGATE BY ITS SIGIL. A file's `my @x` read in a sub before anything
+# stamps it is Unknown, and _list_count took it for one value: `sub f { my $n
+# = () = @x; $n }` gave 1 where perl gives 3 (a silent wrong answer in chalk).
+for my $case ( [ '@x', 'my @x = (1, 2, 3);', 'Count' ], [ '%h', 'my %h = (a => 1, b => 2);', 'Multiply' ] ) {
+    my ( $agg, $decl, $op ) = @$case;
+    my $w = graph_of("$decl sub f { my \$n = () = $agg; \$n } print f(), qq{\\n};");
+    my %n = map { ( $_->{id} => $_ ) } $w->{methods}{'main::f'}{nodes}->@*;
+    my ($r) = grep { $_->{op} eq 'Return' } values %n;
+    is $n{ $r->{inputs}[0] }{op}, $op, "the count of $agg in a sub is its $op, not one value";
+}
+
 done_testing;

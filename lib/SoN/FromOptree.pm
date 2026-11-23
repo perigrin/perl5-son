@@ -274,12 +274,19 @@ class SoN::FromOptree 0.01 {
                     $sim, stamp => $int);
             }
             elsif ($t eq 'ArrayRef' || $t eq 'HashRef') { $scalars++ }
-            elsif ($t eq 'Hash' || $op eq 'HashLiteral') {
+            # (AN AGGREGATE BY ITS SIGIL, as a target is: `my @x` read in a sub
+            # before anything stamps it is Unknown, and counted as one value
+            # `sub f { my $n = () = @x; $n }` said 1 for 3.)
+            elsif ($t eq 'Hash' || $op eq 'HashLiteral'
+                   || ( $op =~ /\A(?:PadAccess|EntryDef)\z/ && ( $v->sigil // '' ) eq '%' )) {
                 push @counts, $factory->make('Multiply',
                     inputs => [ _make_count($factory, $v, $sim, stamp => $int), $const->(2) ],
                     stamp  => $int);
             }
-            elsif (_is_aggregate_node($v)) { push @counts, _make_count($factory, $v, $sim, stamp => $int) }
+            elsif (_is_aggregate_node($v)
+                   || ( $op =~ /\A(?:PadAccess|EntryDef)\z/ && ( $v->sigil // '' ) eq '@' )) {
+                push @counts, _make_count($factory, $v, $sim, stamp => $int);
+            }
             # A TERNARY WHOSE ARMS MAY BE LISTS, with no stamp to say so.
             elsif ($op eq 'TernaryExpr' && $t eq 'Unknown') {
                 die "GAP: a list assignment from a ternary of unknown shape counted in scalar context is not yet lowered\n";
@@ -4639,6 +4646,36 @@ class SoN::FromOptree 0.01 {
         return ($list, $scalar);
     }
 
+    # _list_assign_return($factory, $sim, $value) -> ($list, $scalar) or ($value)
+    #
+    # A LIST ASSIGNMENT TO PACKAGE SCALARS THAT IS ITS SUB'S VALUE (probes
+    # pl13, aun17f: `sub sw { ($a1, $b1) = ($b1 + 1, $a1 + 2) }`) has two
+    # readings, by the caller's context: the targets as they are after it in a
+    # list, the right side's count in a scalar. The handler stored each target
+    # by position (EntryWrites) and left the Assign as the value, on neither
+    # chain: a record of no `my` (wire v2's V7). So it becomes the two readings
+    # a Return carries, as `return @a`'s are: each target read at the memory
+    # after the stores, and the count. (An Assign that is placed -- a store --
+    # or that has a `my` or aggregate target is left as it is.)
+    #
+    # ONLY THE ONE THE HANDLER MARKED (%CALLER_CONTEXT_ASSIGN): made in the
+    # caller's context, by position, every target a package scalar. The same
+    # Assign returned through a `my` (`my $n = (($p, $q) = @x); $n`) is a
+    # scalar-context one, and the count is of the right side as written (the
+    # record of a copy from an array names the elements, not the array).
+    our %CALLER_CONTEXT_ASSIGN;    # refaddr => [ the Assign (weak), its count ]
+    sub _list_assign_return ($factory, $sim, $value) {
+        my $mark = blessed($value) && $CALLER_CONTEXT_ASSIGN{ refaddr $value };
+        return ($value) unless $mark && $mark->[0] && $mark->[0] == $value;
+        delete $CALLER_CONTEXT_ASSIGN{ refaddr $value };
+        my @t = ( $value->v1_inputs->@* )[ 0 .. $value->targets - 1 ];
+        my $list = $factory->make('ArrayLiteral',
+            inputs => [ map { _entry_live_value($factory, $sim, $_) } @t ],
+            stamp  => SoN::IR::Stamp->new(type => 'List'));
+        $_->remove_consumer($value) for grep { blessed($_) } $value->inputs->@*;
+        return ($list, $mark->[1]);
+    }
+
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
         my $value;
         # The scalar reading of a multi-value return, when there is one. It
@@ -4728,7 +4765,8 @@ class SoN::FromOptree 0.01 {
             }
             else {
                 $value = $args->@* ? $args->[-1] : undef;
-                ($value, $scalar_value) = _merged_aggregate_return($factory, $value);
+                ($value, $scalar_value) = _list_assign_return($factory, $sim, $value);
+                ($value, $scalar_value) = _merged_aggregate_return($factory, $value) unless defined $scalar_value;
             }
         }
         elsif ($sim->stack_depth > 0) {
@@ -4752,8 +4790,8 @@ class SoN::FromOptree 0.01 {
                     _list_return_value($factory, \@vals, $exit_op, $sim);
             }
             else {
-                ($value, $scalar_value) =
-                    _merged_aggregate_return($factory, $sim->pop_node);
+                ($value, $scalar_value) = _list_assign_return($factory, $sim, $sim->pop_node);
+                ($value, $scalar_value) = _merged_aggregate_return($factory, $value) unless defined $scalar_value;
             }
         }
         # NOTHING ON THE STACK: the undef is the producer's, not the
@@ -12302,6 +12340,14 @@ class SoN::FromOptree 0.01 {
                                && !( $param_bind && $_ eq 'aggregate' ) } @storage;
             _place($sim, $node)
                 if $stores || @LOOP_STACK;
+            # THE SUB'S VALUE, IN THE CALLER'S CONTEXT, of package scalars
+            # stored by position: counted here, before the stores, and its
+            # two readings made at the sub's end (_list_assign_return).
+            if ( $positional && ( $op->flags & 3 ) == 0 && !$node->local
+                    && !grep { !( $_->isa('SoN::IR::Node::EntryDef') && ( $_->sigil // '' ) eq '$' ) } @targets ) {
+                $CALLER_CONTEXT_ASSIGN{ refaddr $node } = [ $node, _list_count($factory, $sim, @rhs) ];
+                Scalar::Util::weaken( $CALLER_CONTEXT_ASSIGN{ refaddr $node }[0] );
+            }
             if ($positional) {
                 # READ EVERY VALUE BEFORE WRITING ANY KEY. `($a,$b) = ($b,$a)`
                 # has the OLD bindings on the RHS already (@rhs was popped
