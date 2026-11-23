@@ -52,7 +52,7 @@ our %LOADED_INC = %INC;
 # lowers itself; the program never named it (perlvar, perlfunc): glob loads
 # File::Glob, %! Errno, %+ and %- Tie::Hash::NamedCapture.
 our %BUILTIN_MODULE = map { $_ => 1 } qw(File::Glob Errno Tie::Hash::NamedCapture);
-our %REFUSED;    # { sub name => GAP } for a followed module's refused subs
+our %REFUSED;    # { sub name => GAP } for every refused sub, the program's and a followed module's
 our $FOLLOWED;   # set at CHECK, before the walk can load anything (B::Op_private)
 sub _followed_modules {
     return $FOLLOWED if $FOLLOWED;
@@ -2873,8 +2873,11 @@ sub _stash_is_other_file {
 # so a consumer that reaches the sub refuses in the module's own words.
 sub _warn_skipped {
     my ( $cv, $name, $e ) = @_;
-    if ( defined _cv_module($cv) ) { chomp( $REFUSED{$name} = $e ) }
-    else { warn "B::SoN: skipped $name: $e" }
+    chomp( $REFUSED{$name} = $e );
+    # (the program's own too: a consumer that reaches it refuses by name, where
+    # finding no sub it would make a call perl never fails -- re-audit
+    # 2026-11-23, section 3 H)
+    warn "B::SoN: skipped $name: $e" unless defined _cv_module($cv);
 }
 
 # _stash_is_followed($name, $stash) -- did this package come from a followed
