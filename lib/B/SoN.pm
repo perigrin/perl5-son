@@ -428,8 +428,8 @@ sub _discover_and_translate {
     $SoN::FromOptree::EVAL_COUNT = 0;
     %SoN::FromOptree::QR_CODE_BODIES = ();
     %SoN::FromOptree::SORT_BODY_SEQ = ();
-    # Per-run, like the body registry: a node id from a previous compilation
-    # unit must not mark a fresh graph's literal as mutated.
+    # Per-run, like the body registry: the marked nodes of a previous
+    # compilation unit are not held past it.
     %SoN::FromOptree::MUTATED_LITERALS = ();
 
     _walk_package( \%graphs, \%classes, 'main', \%main::, $filter );

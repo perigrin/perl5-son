@@ -496,7 +496,11 @@ class SoN::FromOptree 0.01 {
     # Each entry is the ordered capture list from _anoncode_capture_info, and
     # the ORDER IS THE CONTRACT: input N of the AnonSub is the cell for
     # capture N, which the body reads as CellParam(index => N).
-    # Aggregate LITERAL nodes that have been mutated in place, by node id.
+    # Aggregate LITERAL nodes that have been mutated in place, by the node
+    # itself: refaddr => node. Not by `->id`, a per-graph counter, while the
+    # table lives for the compilation unit -- one sub's mark fell on another's
+    # node of the same id. The value holds the node, so its address is never
+    # reused while the mark stands.
     #
     # The padav flatten shortcut pushes a bound ArrayLiteral's INPUTS straight
     # onto the stack, which is the array as first CONSTRUCTED -- correct until
@@ -602,7 +606,7 @@ class SoN::FromOptree 0.01 {
         return unless $container;
         return unless $container->can('operation');
         return unless $container->operation =~ /\A(?:Array|Hash)Literal\z/;
-        $MUTATED_LITERALS{ $container->id } = 1 if $container->can('id');
+        $MUTATED_LITERALS{ Scalar::Util::refaddr($container) } = $container if $container->can('id');
         return;
     }
 
@@ -4242,7 +4246,7 @@ class SoN::FromOptree 0.01 {
             # built (`my %h=(a=>1); $h{b}=2; return %h` returned a => 1).
             if ( defined $st && ( $st->type eq 'Array' || $st->type eq 'Hash' )
                  && $v->operation =~ /\A(?:Array|Hash)Literal\z/
-                 && !$MUTATED_LITERALS{ $v->id // '' } ) {
+                 && !$MUTATED_LITERALS{ Scalar::Util::refaddr($v) } ) {
                 push @flat, $v->v1_inputs->@*;
             }
             else {
@@ -8034,7 +8038,7 @@ class SoN::FromOptree 0.01 {
             # nothing has marked the literal yet. The sub-wide slot scan
             # knows: `return @o if C; push @o, $i` returned the literal as
             # first built.
-            $MUTATED_LITERALS{ $existing->id } = 1
+            $MUTATED_LITERALS{ Scalar::Util::refaddr($existing) } = $existing
                 if @LOOP_STACK && $existing && $MUTATED_SLOTS->{$targ}
                 && $existing->can('operation')
                 && $existing->operation =~ /\A(?:Array|Hash)Literal\z/;
@@ -8085,7 +8089,7 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'padav' && $existing && $want == 3
                     && !$ref_or_mod && !$is_lvintro
                     && !$ctx->{mutated_aggregate}{$targ}
-                    && !$MUTATED_LITERALS{ $existing->id // '' }
+                    && !$MUTATED_LITERALS{ Scalar::Util::refaddr($existing) }
                     && $existing->operation eq 'ArrayLiteral'
                     && !grep { $_->isa('SoN::IR::Node::TernaryExpr') } $existing->v1_inputs->@*) {
                 $sim->push_node($_) for $existing->v1_inputs->@*;
@@ -8179,7 +8183,7 @@ class SoN::FromOptree 0.01 {
                     # BNF::Target::C::_emit_nullable_set).
                     && !$existing->isa('SoN::IR::Node::Call')
                     && ($ctx->{mutated_aggregate}{$targ}
-                        || $MUTATED_LITERALS{ $existing->id // '' })) {
+                        || $MUTATED_LITERALS{ Scalar::Util::refaddr($existing) })) {
                 die "GAP: a list-context read of an array mutated in place"
                   . " has no memory to observe the mutation against\n"
                     unless defined $sim->memory;
@@ -10127,7 +10131,7 @@ class SoN::FromOptree 0.01 {
                   . " yet lowered\n" unless $operands->@* >= 2;
                 my $container = pop $operands->@*;
                 # A delete mutates the literal, as an element store does.
-                $MUTATED_LITERALS{ $container->id } = 1
+                $MUTATED_LITERALS{ Scalar::Util::refaddr($container) } = $container
                     if $container->can('operation')
                     && $container->operation =~ /\A(?:Array|Hash)Literal\z/;
 
@@ -10154,7 +10158,7 @@ class SoN::FromOptree 0.01 {
 
             my $key       = $sim->pop_node;
             my $container = $sim->pop_node;
-            $MUTATED_LITERALS{ $container->id } = 1
+            $MUTATED_LITERALS{ Scalar::Util::refaddr($container) } = $container
                 if $container->can('operation')
                 && $container->operation =~ /\A(?:Array|Hash)Literal\z/;
 
@@ -10795,7 +10799,7 @@ class SoN::FromOptree 0.01 {
                     && ( $target->name // '' ) eq 'arylen') {
                 # (a later read of the array is of the array as it now is)
                 my $arr = $target->v1_inputs->[0];
-                $MUTATED_LITERALS{ $arr->id } = 1
+                $MUTATED_LITERALS{ Scalar::Util::refaddr($arr) } = $arr
                     if $arr->can('operation') && $arr->operation =~ /\A(?:Array|Hash)Literal\z/;
                 my $write = $factory->make('Call',
                     inputs        => [ $target->v1_inputs->[0], $value ],
@@ -14548,7 +14552,8 @@ class SoN::FromOptree 0.01 {
                 # stands for: an inner foreach's write into the elements of
                 # @b marked the outer loop's Phi for @b mutated, and a read
                 # after the loops flattened the literal -- `5 6` for `5z 6z`)
-                $MUTATED_LITERALS{ $ph->inputs->[0]->resolved->id } = 1 if $MUTATED_LITERALS{ $ph->id };
+                my $to = $ph->inputs->[0]->resolved;
+                $MUTATED_LITERALS{ Scalar::Util::refaddr($to) } = $to if $MUTATED_LITERALS{ Scalar::Util::refaddr($ph) };
             }
             else {
                 die $refuse->{$k} if $refuse->{$k};
@@ -16115,7 +16120,7 @@ class SoN::FromOptree 0.01 {
         # A NAMED ARRAY'S ELEMENTS ARE NOW REACHED BY REFERENCE, which may
         # outlive the pass: a later list read flattening its literal missed
         # `$$r = 5` (`1 2` for perl's `1 5`).
-        $MUTATED_LITERALS{ $array->id } = 1
+        $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array
             if $aref && $array->can('id') && defined(eval { $array->symbol });
 
         # THE TOPIC A CALLEE READS BY NAME. The body's own reads of `$_` are
@@ -16163,7 +16168,7 @@ class SoN::FromOptree 0.01 {
             $topic_alias = $factory->make('LocalAlias', name => '_', inputs => [$ref]);
             _place($sim, $topic_alias);
             # Any callee may now write the element through it.
-            $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
+            $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
         }
 
         # THE ALIAS IS IN FORCE FOR THE BODY ONLY. An implicit `$_` iterator is
@@ -16325,7 +16330,7 @@ class SoN::FromOptree 0.01 {
         # A `$_` OR PACKAGE ITERATOR A CALLEE MAY WRITE is read as the element
         # itself, so the write lands in the array -- and a later list read
         # flattened the literal (`1 2` for perl's `5 5`).
-        $MUTATED_LITERALS{ $array->id } = 1
+        $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array
             if $x_targ !~ /\A\d+\z/ && $array->can('id')
             && _iterator_may_be_written($cv, $loop_root, $x_targ);
 
@@ -16342,7 +16347,7 @@ class SoN::FromOptree 0.01 {
             my $store = $factory->make('Assign',
                 inputs => [$lvalue, $iter_slot->()], if_changed => 1);
             _place($sim, $store);
-            $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
+            $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
         }
 
         # THE STORE-BACK, and only when the body actually wrote the iterator.
@@ -16400,7 +16405,7 @@ class SoN::FromOptree 0.01 {
                 # NODE. Threading a slot through would be a second spelling of
                 # the same fact; the literal is what the shortcut ultimately
                 # tests, so marking it directly is the smaller change.
-                $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
+                $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
             }
         }
 
