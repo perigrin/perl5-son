@@ -59,6 +59,8 @@ for my $src (
     'package C; sub new { bless {}, shift } sub nul { $_[0] = undef } package main; my $o=C->new; $o->nul; print defined $o ? "d" : "u", "\n";',
     'my $x=1; sub inc { $_[0]++ } inc($x); print "$x\n";',
     'my @a=(1); sub inc { $_[0]++ } inc($a[0]); print "@a\n";',
+    # (a foreach over @_ after the store reads each element then)
+    'our $x=1; sub f { $x=2; my $s=0; $s+=$_ for @_; $s } print f($x,$x),"\n";',
     # (a call nothing here sees into, before the read, on a captured variable)
     'sub k { $_[1]->(); $_[0] } sub w { my $v=1; my $s=sub { $v=9 }; k($v,$s) } print w(),"\n";',
 ) {
@@ -77,7 +79,6 @@ for my $src (
     'our $x=1; sub f { my ($v)=@_; $x=2; $v } print f($x),"\n";',
     'our $x=1; sub f { local $x=2; $_[0] } print f($x),"\n";',
     'my @a=(1); sub f { push @a,2; $_[0] } print f($a[0]),"\n";',
-    'our $x=1; sub f { $x=2; my $s=0; $s+=$_ for @_; $s } print f($x,$x),"\n";',
     # (an unknown call cannot name a `my` nothing captures or references)
     'my $x=1; sub k { $_[1]->(); $_[0] } print k($x, sub { 1 }),"\n";',
     'package C; sub new { bless {}, shift } sub m { $_[0]{k} = 1; 1 } package main; my $o=C->new; $o->m; print $o->{k}, "\n";',

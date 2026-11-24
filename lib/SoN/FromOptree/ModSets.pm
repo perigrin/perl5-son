@@ -529,8 +529,8 @@ sub stores_invocant ( $cv, $call ) {
 
 # _reads_args_op($sub, $op) -> true for an op of $sub that reads its @_: an
 # element of it, all of it, a shift or pop of it, `&f;` or `goto &f` handing
-# it on (a multideref is counted: it may start at @_). Not a foreach's list:
-# its alias reads each element where the body does (T2 reads them so).
+# it on (a multideref is counted: it may start at @_). A foreach, map or grep
+# over it too: its alias reads each element where the body does.
 sub _reads_args_op ( $sub, $o ) {
     my $n = $o->name;
     return 1 if $n =~ /\A(?:shift|pop)\z/ && !( $o->flags & B::OPf_KIDS );
@@ -546,7 +546,9 @@ sub _reads_args_op ( $sub, $o ) {
     # assign takes it, `my ($v) = @_` -- read whole elsewhere, a join or a
     # foreach, T2 reads its aliases)
     my $up = $av->parent; $up = $up->parent while $$up && $up->name =~ /\A(?:null|list)\z/;
-    return $$up && $up->name =~ /\A(?:aassign|aelem|aslice)\z/ ? 1 : 0;
+    # (a foreach, map or grep over @_ reads each element where its body does:
+    # after a store before it, the alias is no value -- aliases-as-places)
+    return $$up && $up->name =~ /\A(?:aassign|aelem|aslice|enteriter|mapstart|grepstart)\z/ ? 1 : 0;
 }
 
 # _is_call($op) -> true for an op that runs code of the program: a sub or

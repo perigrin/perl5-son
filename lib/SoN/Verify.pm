@@ -82,9 +82,30 @@ sub _alias_private ( $wire, $res ) {
         if ( $k eq 'method' ) { my @t = grep { /::\Q$name\E\z/ } keys $m->%*; return @t ? \@t : undef }
         return undef;
     };
+    # (A `local` IS A SAVE AND A RESTORE, by shape: a store to X that a later
+    # store puts back with X read at the version before it. Both are of
+    # another variable than the one $_[N] was bound to. shortcut: a value saved
+    # and put back by hand has the same shape and is skipped too -- V12 then
+    # misses a store the producer's own rule (ModSets::_is_local, by the op)
+    # counts; upgrade when the wire marks a local's store.)
+    my %localish;
+    for my $g ( keys $m->%* ) {
+        my @w = grep { $_->{op} eq 'EntryWrite' } values $by{$g}->%*;
+        for my $r (@w) {
+            my $v = $by{$g}{ $r->{inputs}[1] // '' } or next;
+            my $k = $src->( $g, $by{$g}{ $r->{inputs}[0] // '' } ) // next;
+            next unless $v->{op} eq 'EntryDef' && defined $v->{mem_in} && ( $src->( $g, $v ) // '' ) eq $k;
+            my @save = grep { ( $_->{mem_in} // -1 ) == $v->{mem_in} && ( $src->( $g, $by{$g}{ $_->{inputs}[0] // '' } ) // '' ) eq $k } @w;
+            next unless @save;
+            $localish{$g}{ $_->{id} } = 1 for $r, @save;
+        }
+    }
     my %own;
     for my $g ( keys $m->%* ) {
         for my $n ( values $by{$g}->%* ) {
+            # (a `local`'s save and its restore make and put back another
+            # variable: $_[N] still names the one passed)
+            next if _fields($n)->{local} || _fields($n)->{restore} || $n->{op} eq 'ElemRestore' || $localish{$g}{ $n->{id} };
             my @t = $n->{op} eq 'Assign' && !_fields($n)->{record} ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
                   : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
             for my $t ( grep { defined && !ref } @t ) { my $k = $src->( $g, $by{$g}{$t} ); $own{$g}{$k} = 1 if defined $k }
@@ -109,6 +130,7 @@ sub _alias_private ( $wire, $res ) {
             my $t = $callees->( $g, $n ) or return 1;
             return scalar grep { my $w = $writes->($_); $w->{any} || $w->{$key} } $t->@*;
         }
+        return 0 if _fields($n)->{local} || _fields($n)->{restore} || $n->{op} eq 'ElemRestore' || $localish{$g}{$v};
         my @t = $n->{op} eq 'Assign' ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
               : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
         return scalar grep { defined && !ref && ( $src->( $g, $by{$g}{$_} ) // '' ) eq $key } @t;
