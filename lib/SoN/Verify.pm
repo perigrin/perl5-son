@@ -536,9 +536,12 @@ sub _graph_v2 ( $name, $g, $res ) {
                 my @live;
                 for my $pr (@pairs) {
                     my ( $local, $save, $r ) = @$pr;
+                    # (back to the local, not through a restore of it: the
+                    # one paired, or another -- a loop pass's end, an arm's)
+                    my %put_back = map { ( $_->{id} => 1 ) } grep { ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
                     my ( @q, %s ) = ( $pred{ $t->{id} }->@* );
                     while ( defined( my $id = shift @q ) ) {
-                        next if $s{$id}++ || $id == $r->{id};
+                        next if $s{$id}++ || $put_back{$id};
                         if ( $id == $local->{id} ) { push @live, $save; last }
                         push @q, ( $pred{$id} // [] )->@*;
                     }

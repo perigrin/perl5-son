@@ -52,6 +52,9 @@ my %src = (
     t7 => 'our $g=1; sub f { local $g = 2; 1/$_[0] } eval { f(0) }; print "$g\n";',
     # (an Exc into a catch, of a die in a sort block that carries no eval_id)
     t8 => 'my @r = eval { sort { die "boom\n" if $a == 2; $a <=> $b } 3, 1, 2 }; print "[@r] $@";',
+    # (a call at a loop's top, before the pass's local: the back edge passes
+    # a restore of that local, so it is not live there -- probe p/lo22)
+    t10 => 'our $g = 1; sub b { $g++ } for my $i (1..3) { b(); local $g = $g + 10; next if $i == 2; print "$g\n"; } print "$g\n";',
     t9 => 'eval \'package Other; sub g { "g$_[0]" } 1\' or die; sub f { return Other::g($_[0]) } print f(2), "\n";',
 );
 sub rejected ( $what, $w, $rule ) {
