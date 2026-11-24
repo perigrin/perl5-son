@@ -57,6 +57,7 @@ for my $src (
     'my @p=(1,2,3); my $n=""; for my $q (@p[1 .. $#p]) { $n .= $q } print "$n\n";',
     'sub g { $_[0] = 5 } my @n = (1, 2); g($_) for @n[1 .. 1]; print "@n\n";',
     'my @a=(1,2,3); for my $x ($a[1]) { print $x } print "\n";',
+    'my @c = (4, 5, 6); my @m = map { $_ * 2 } @c[2, 0]; print "@m\n";',
 ) {
     unlike translate($src), qr/GAP:/, "not refused: $src";
 }

@@ -9871,11 +9871,11 @@ class SoN::FromOptree 0.01 {
         }
 
         if ($name eq 'mapstart' || $name eq 'grepstart') {
-            if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
             ( my $word = $name ) =~ s/start\z//;
             die "GAP: a grep whose block writes \$_, read as a list, is not yet lowered -- what"
               . " grep returns are the elements, written after the walk read them\n"
                 if $word eq 'grep' && _grep_block_writes_topic($cv, $op);
+            if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
             my $items = $sim->pop_to_mark;
             die "GAP: $word over an empty list not yet lowered\n"
                 unless $items->@*;
@@ -16175,6 +16175,7 @@ class SoN::FromOptree 0.01 {
                 $reads = 1;
                 $stores = 1 if $$p && ( $p->name =~ /\A(?:orassign|dorassign)\z/ || B::class($p) eq 'BINOP' && ( $p->flags & 64 ) ) && ${ $p->first } == $$at;
                 $stores = 1 if $$p && $p->name eq 'entersub';   # (a call may store it through $_[N])
+                $stores = 1 if $$p && $p->name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/;
             }
         }
         # (not a stash, `$::{"P::"}`: Carp aliases an entry it has just
@@ -16211,55 +16212,83 @@ class SoN::FromOptree 0.01 {
     sub _element_is_there ($cv, $t, $sim) {
         my @k; for (my $k = $t->first; $k && $$k; $k = $k->sibling) { push @k, $k }
         my $n = $t->name;
+        my $consts = sub ($ix) {    # the constants of a subscript list, or ()
+            my @c = $ix->name eq 'const' ? ($ix) : ( $ix->flags & 4 ) ? do { my @x; for (my $q = $ix->first; $q && $$q; $q = $q->sibling) { push @x, _strip_null($q) } @x } : ();
+            @c = grep { $_->name !~ /\A(?:pushmark|null)\z/ } @c;   # (an ex-pushmark is a null)
+            return () if !@c || grep { $_->name ne 'const' } @c;
+            return map { _const_val($cv, $_) } @c;
+        };
         if ( $n eq 'aslice' ) {
             my $arr = _strip_null( $k[-1] );
             return 0 unless $arr->name eq 'padav';
             my $ix = $k[1];
             my $flop = $ix->name eq 'null' && ( $ix->flags & 4 ) ? $ix->first : $ix;
-            if ( $flop->name eq 'flop' ) {    # `@a[N .. $#a]`: N >= 0, so within @a
+            if ( $flop->name eq 'flop' ) {
                 my $range = $flop->first->first;
                 return 0 unless $$range && $range->name eq 'range';
                 my $lo = _strip_null( $range->first );
                 my $hi = _strip_null( $range->first->sibling );
-                return $lo->name eq 'const' && ( _const_val($cv, $lo) // '' ) =~ /\A\d+\z/
+                # `@a[N .. $#a]`: N >= 0, so within @a
+                return 1 if $lo->name eq 'const' && ( _const_val($cv, $lo) // '' ) =~ /\A\d+\z/
                     && $hi->name eq 'av2arylen' && _strip_null( $hi->first )->name eq 'padav'
-                    && _strip_null( $hi->first )->targ == $arr->targ ? 1 : 0;
+                    && _strip_null( $hi->first )->targ == $arr->targ;
+                # `@a[$i .. N]`, N in the literal (shortcut: a bottom below -@a
+                # dies in perl, "Modification of non-creatable array value";
+                # upgrade when one is seen)
+                return $hi->name eq 'const' && _literal_has($cv, $arr->targ, _const_val($cv, $hi), $sim) ? 1 : 0;
             }
-            my @c = $ix->name eq 'const' ? ($ix) : ( $ix->flags & 4 ) ? do { my @x; for (my $q = $ix->first; $q && $$q; $q = $q->sibling) { push @x, _strip_null($q) } @x } : ();
-            @c = grep { $_->name !~ /pushmark/ } @c;
-            return 0 if !@c || grep { $_->name ne 'const' } @c;
-            return !grep { !_literal_has($cv, $arr->targ, _const_val($cv, $_), $sim) } @c;
+            my @c = $consts->($ix) or return 0;
+            return !grep { !_literal_has($cv, $arr->targ, $_, $sim) } @c;
+        }
+        if ( $n eq 'hslice' || $n eq 'helem' ) {
+            my ( $h, $ix ) = $n eq 'hslice' ? ( _strip_null( $k[-1] ), $k[1] ) : ( _strip_null( $k[0] ), _strip_null( $k[1] ) );
+            return 0 unless $h->name eq 'padhv';
+            my @c = $consts->($ix) or return 0;
+            return !grep { !_literal_has($cv, $h->targ, $_, $sim) } @c;
         }
         my ( $arr, $i ) = $n eq 'aelemfast_lex' ? ( $t, undef ) : ( _strip_null( $k[0] ), _strip_null( $k[1] ) );
         return 0 unless $arr->name =~ /\A(?:padav|aelemfast_lex)\z/;
         my $ix = $n eq 'aelemfast_lex' ? do { my $p = $t->private; $p > 127 ? $p - 256 : $p } : $i->name eq 'const' ? _const_val($cv, $i) : undef;
         return defined $ix && _literal_has($cv, $arr->targ, $ix, $sim);
     }
-    # _literal_has($cv, $targ, $ix, $sim) -> true where the `my` array $targ is
-    # bound to a literal of constants with an element $ix, and nothing may
-    # shrink it: no reshape of it by its sub or a call (ModSets), no call
-    # nothing can be said of, and -- a reference to it taken -- no store
-    # through an array reference.
+    # _literal_has($cv, $targ, $ix, $sim) -> true where the `my` array (or
+    # hash) $targ is bound to a literal of constants with an element (a key)
+    # $ix, and nothing may shrink it: no op of its sub that removes elements
+    # (the declaring `my @a = (...)` is not one), no reshape of it by a call
+    # (ModSets), no call nothing can be said of, no reference to it taken.
     sub _literal_has ($cv, $targ, $ix, $sim) {
-        return 0 unless defined $ix && $ix =~ /\A-?\d+\z/;
+        return 0 unless defined $ix;
         my $lit = $sim->lookup($targ);
-        return 0 unless $lit && $lit->can('operation') && $lit->operation eq 'ArrayLiteral';
+        return 0 unless $lit && $lit->can('operation') && $lit->operation =~ /\A(?:Array|Hash)Literal\z/;
+        my $hash = $lit->operation eq 'HashLiteral';
         my @in = $lit->v1_inputs->@*;
-        return 0 if grep { !$_->isa('SoN::IR::Node::Constant') } @in;
-        return 0 unless $ix >= 0 ? $ix < @in : -$ix <= @in;
+        # (each a single value: a constant, a [...] or {...} -- nothing that
+        # flattens, so the count is the literal's; a hash's keys constants)
+        return 0 if grep { !$_->isa('SoN::IR::Node::Constant')
+            && !( $_->can('stamp') && $_->stamp && ( $_->stamp->type // '' ) =~ /\A(?:ArrayRef|HashRef)\z/ ) } @in;
+        return 0 if $hash && grep { !$in[ 2 * $_ ]->isa('SoN::IR::Node::Constant') } 0 .. int( @in / 2 ) - 1;
+        if ($hash) {
+            my %keys = map { ( $in[ 2 * $_ ]->value // '' ) => 1 } 0 .. int( @in / 2 ) - 1;
+            return 0 unless $keys{$ix};
+        }
+        else {
+            return 0 unless $ix =~ /\A-?\d+\z/ && ( $ix >= 0 ? $ix < @in : -$ix <= @in );
+        }
         my ($loc) = SoN::FromOptree::ModSets::_lex($cv, $targ);
         return 0 unless defined $loc;
         local $SoN::FromOptree::ModSets::KEEP_OWN = 1;
         return 0 if SoN::FromOptree::ModSets::_referenced($cv)->{$targ};
         my $root = SoN::FromOptree::ModSets::_root($cv) or return 0;
-        # (its own sub: an op that may shrink it -- the declaring `my @a = (...)`
-        # is not one)
+        my $agg = $hash ? 'padhv' : 'padav';
         for my $o ( _subtree_ops($root) ) {
-            next unless $o->name eq 'padav' && $o->targ == $targ;
+            next unless $o->name eq $agg && $o->targ == $targ;
             my $up = $o->parent; $up = $up->parent while $$up && $up->name eq 'null';
             next unless $$up;
             return 0 if $up->name =~ /\A(?:shift|pop|splice|undef)\z/;
             return 0 if $up->name eq 'av2arylen' && ( $up->flags & B::OPf_MOD );
+            # (a delete of one of its keys or elements)
+            my $d = $up; $d = $d->parent while ${ $d->parent } && $d->parent->name eq 'null';
+            return 0 if $up->name =~ /\A(?:helem|hslice|aelem|aslice)\z/ && ${ $d->parent } && $d->parent->name eq 'delete';
             if ( $up->name eq 'aassign' && !( $o->private & 128 ) ) {   # (OPpLVAL_INTRO: the `my`)
                 my $in_lhs = 0;
                 for ( my $a = $o; $$a && $$a != $$up; $a = $a->parent ) { $in_lhs = 1 if $$a == ${ $up->last } }

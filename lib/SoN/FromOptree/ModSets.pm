@@ -527,8 +527,11 @@ sub _reads_args_op ( $sub, $o ) {
     return 1 if $n eq 'aelemfast';
     my $av = $o->parent;
     return 0 unless $$av && $av->name eq 'rv2av';
+    # (an element or a slice of it; all of it a copy only where a list
+    # assign takes it, `my ($v) = @_` -- read whole elsewhere, a join or a
+    # foreach, T2 reads its aliases)
     my $up = $av->parent; $up = $up->parent while $$up && $up->name =~ /\A(?:null|list)\z/;
-    return $$up && $up->name eq 'enteriter' ? 0 : 1;
+    return $$up && $up->name =~ /\A(?:aassign|aelem|aslice)\z/ ? 1 : 0;
 }
 
 # _is_call($op) -> true for an op that runs code of the program: a sub or
