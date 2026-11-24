@@ -561,3 +561,35 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [28m26
 ```
 
 (The run read the producer at 732eec4 with this section's draft and the notes uncommitted: docs only.)
+
+## 21. The re-audit's wrong answers refused by name (branch `reaudit-refuse`)
+
+Heads: producer `reaudit-refuse` 1f402b9 (from 087e828: 64a110f, ada4761, 470aa28, 5ef9fcf, b30c231, b58d82f, 0010940, 216d190, b184aa8, 67851f2, 4920f1a, 57f9e9e, 1f402b9; docs e128acd, 8b7dea0), chalk `reaudit-refuse` 890c0ff8 (from a8057fb6: 41654fd8, 262b43e5, 9a9bd2dc, probes and BASELINE.tsv 3cc2195a, tests b8061d83, 8f6e3670, 890c0ff8). The re-audit (`docs/research/2026-11-23-memory-model-goal-re-audit.md`) found 68 silent wrong answers in seven classes among its 499 probes (`docs/research/son-ir-audit-2026-11-19/probes/r`, in chalk's `t/data/audit-probes` as `re<name>`), and three programs that died with an error perl never gives. Every one is now refused by name; none was lowered. Classes A and B wait on a design the user holds; the others were refused because refusal is the default.
+
+| class | probes | side | refused as |
+|---|---|---|---|
+| A: `my %c = %h` binds %c to %h's node | 26 | B::SoN | `a copy of a hash that may then be written` -- either side may be written ($MUTATED_SLOTS, or %$HASH_WRITTEN: a slice store or delete, a call's argument, a foreach or `values` alias, `undef`), a sub shares it, or the target is a package hash (64a110f) |
+| B: a fault under a `local`, in a sub with no eval | 16 | chalk WireCheck | `a Divide/Modulo/PostfixDeref that may die under a `local` ($main::g), in a sub with no eval` -- W6 started from sub calls only (41654fd8) |
+| C: `finally`, `defer` | 6 | B::SoN | `a `defer` or `finally` block is not yet lowered` (pushdefer, 470aa28) |
+| D: `state $n;` with no initialiser | 3 | B::SoN | `a `state` variable with no initialiser, where it can be reached more than once` (ada4761) |
+| E: `for my $y ($x)` with $x written in the body | 4 | B::SoN | `a foreach over a scalar variable its body may write` (5ef9fcf) |
+| F: grep's block writes `$_`, result read as a list | 4 | B::SoN | `a grep whose block writes $_, read as a list` -- ModSets' stores, or a callee that may store an argument (b58d82f, 0010940, 57f9e9e) |
+| G: an operand read by alias, stored by another name | 9 | B::SoN | `a scalar operand is read by alias and a later operand stores it [through a reference]`: a `++$x` operand, a `$$r` store; `an element operand ... stores into its container` for `$a[0]` beside `$r->[0] = ...` (0010940) |
+
+The three invented errors: `C->get` where get is refused (`//=` into a package scalar) died "Can't locate object method": B::SoN now puts the program's own refused subs in the wire's `refused` (the key a followed module's already used), and chalk's loader names the refusal (67851f2). A try whose body begins with a try or an eval shares its eval entry, and T2's `eval_at` kept one of the two: refused in T2 (262b43e5; nested tries that never die printed nothing too). aue1 and rn1 (an INTERNAL ERROR, stack underflow): rand, srand and mkdir pop what their op says, the sixth optional-arity operator (4920f1a; `5 + rand()` was rand(5)); both are now T2 refusals by name. ModSets read a match's OPf_STACKED as an op-assign (a PMOP isa B::BINOP): fixed (b30c231), or the grep rule refused chalk-lib's `grep { $d->isn($_) }`.
+
+Probes: re SAME 339, REFUSED 156, LOUD 4, WRONG 0 (at 087e828 / a8057fb6: SAME 341, REFUSED 83, LOUD 7, WRONG 68). rec02 and rec03 went SAME -> REFUSED: a dereference that may die under a `local` (the wire cannot say it does not). lw40 went SAME -> REFUSED with the grep rule and back (57f9e9e: a result into a `my` array nothing reads). No other probe changed verdict. The harness names a program B::SoN skips in its words (9a9bd2dc): 58 refusals that said "no program graph" or "a direct call with no sub" now name their GAP. The ratchet's probes source took in probes/r at 087e828, and with it a violation: r/a12, `sub z { @a = () }`, whose Return read the package ArrayLiteral its store wrote, at no version. Held by name first (216d190, chalk 8f6e3670), then fixed: the assign's value, where used, is @a read at its store's version (1f402b9), and T2 returns a package array as it does a `my` one (890c0ff8; it refused `sub z { @a }` before). Both holds dropped: two held, as at section 20. Still LOUD, by a run-time refusal: rec14, reh06, req31, req33. Not done: SoN::Verify cannot see class A (the wire names the source's symbol only).
+
+`tools/gates.sh` at producer 1f402b9, chalk 890c0ff8:
+
+```
+producer-suite  PASS  801 files, 0 failing [9m34s]
+chalk-suite     PASS  937 files, 0 failing [65m44s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m38s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [4m37s]
+probes          PASS  LOUD=8 REFUSED=343 SAME=1065; WRONG 0, SAME lost 0, changed 0 [3m21s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [29m09s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [2m39s]
+```
+
+(The run read the producer at 1f402b9 with this section and the memory note's a12 paragraph uncommitted: docs only. Earlier runs: at chalk 3cc2195a two chalk tests held a refusal whose cause had moved into B::SoN (b8061d83 names both); at b8061d83 chalk's wire-verify.t met r/a12 (then held, now fixed); two runs were killed by container restarts.)

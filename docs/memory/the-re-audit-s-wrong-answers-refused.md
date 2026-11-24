@@ -5,8 +5,8 @@ metadata:
   type: project
 ---
 
-Branch `reaudit-refuse` (2026-11-23; producer 64a110f..e128acd, chalk
-41654fd8..3cc2195a; baseline section 21). The re-audit
+Branch `reaudit-refuse` (2026-11-23/24; producer 64a110f..1f402b9, chalk
+41654fd8..890c0ff8; baseline section 21). The re-audit
 (docs/research/2026-11-23-memory-model-goal-re-audit.md) found 68 WRONG in
 499 probes (probes/r, chalk `re<name>`), all on wires SoN::Verify passes.
 Every one is now REFUSED by name; none was lowered (A and B wait on a design
@@ -48,7 +48,12 @@ srand, mkdir pop what the op says, now T2 refusals by name.
   result is read". Two re probes went SAME -> REFUSED and stay so (rec02/03:
   a deref may die, the wire cannot say when).
 - **A probe set in docs/research joins the ratchet.** probes/r made
-  t/wire-verify-ratchet.t fail at 087e828 (r/a12, held by name now).
+  t/wire-verify-ratchet.t fail at 087e828 (r/a12: `sub z { @a = () }`
+  returned the stored literal, at no version). Held first (216d190,
+  8f6e3670); the coordinator said holds must shrink, not grow -- and it was
+  a bug: the list assign's value is now @a at its store's version (1f402b9)
+  and T2 returns a package array (890c0ff8, it refused `sub z { @a }` too).
+  Fix before holding; a hold is for a design question.
 - **Bonus not done:** SoN::Verify cannot see class A -- the wire names only
   the source's symbol on the literal; a mechanical check needs the copy's
   name on the wire (a format change).
