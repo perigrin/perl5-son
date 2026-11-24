@@ -20,11 +20,17 @@ class SoN::IR::Node::Assign :isa(SoN::IR::Node::BinOp) {
     # block's exit by an ElemRestore. Spelled `local` so perl restores it.
     field $local :param :reader = false;
 
+    # A BINDING RECORD, not a store (wire v2's `record`): B::SoN says so
+    # where it builds the node, and it goes on neither chain (_pin refuses
+    # one). The serializer writes what is said here; it derives nothing.
+    field $record :param :reader = false;
+
     method operation() { 'Assign' }
 
-    # A local store and a plain one of the same value are different writes.
+    # A local store and a plain one of the same value are different writes;
+    # so are a record and a store of the same value.
     method content_hash() {
-        return join('|', $self->SUPER::content_hash(), ($local ? 'local' : ()));
+        return join('|', $self->SUPER::content_hash(), ($local ? 'local' : ()), ($record ? 'record' : ()));
     }
     method op_str()    { '=' }
 }

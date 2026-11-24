@@ -214,8 +214,8 @@ sub _extract_fields ($node, $id_remap) {
     }
     if ($op eq 'Assign') {
         my %f = (
-            # A BINDING RECORD, not a store (wire v2): on neither chain.
-            ( !defined $node->control_in && !$node->mem_out ? ( record => JSON::PP::true ) : () ),
+            # A BINDING RECORD, not a store (wire v2): as B::SoN built it.
+            ( $node->record ? ( record => JSON::PP::true ) : () ),
             ( $node->if_changed ? ( if_changed => JSON::PP::true ) : () ),
             ( defined $node->targets ? ( targets => 0 + $node->targets ) : () ),
             ( $node->local ? ( local => JSON::PP::true ) : () ),

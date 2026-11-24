@@ -887,6 +887,8 @@ class SoN::FromOptree 0.01 {
     # the memory it follows (wire v2's mem_in) unless it read one where it was
     # built.
     sub _pin ($sim, $node, $version = 0) {
+        die sprintf "INTERNAL ERROR: a record Assign is put on the chain (%s)\n", $node->id
+            if $node->operation eq 'Assign' && $node->record;
         $node->set_mem_in($sim->memory)
             if !defined $node->mem_in && defined $sim->memory && ( $version || $node->touches_memory );
         # A node already on the chain elsewhere would be MOVED, and what follows
@@ -12578,9 +12580,6 @@ class SoN::FromOptree 0.01 {
             # scalar context the assignment counts the array, so it keeps it.)
             my $by_element = @args_elems && !$rhs[0]->isa('SoN::IR::Node::ArgsSource')
                 && ($op->flags & 3) != 2;   # OPf_WANT_SCALAR
-            my $node = $factory->make('Assign',
-                inputs => [ $lhs->@*, ( $by_element ? @args_elems : @rhs ) ],
-                targets => scalar $lhs->@*);
 
             # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
             # value lives in memory because a reference to it exists, so the
@@ -12728,8 +12727,21 @@ class SoN::FromOptree 0.01 {
             my $stores = grep { !/\A(?:ssa|skip)\z/
                                && !( $positional && $_ eq 'package' )
                                && !( $param_bind && $_ eq 'aggregate' ) } @storage;
-            _place($sim, $node)
-                if $stores || @LOOP_STACK;
+            # A RECORD, OR A STORE: decided here, once, and said on the node
+            # (wire v2's `record`; the serializer no longer derives it from
+            # "on neither chain", which made a store the walk forgot a record
+            # by construction -- final audit, clause 3). A store when a target
+            # lives in memory, in a loop body, a declared `my` scalar rebound
+            # (below: its reads go through the slot), or a `my (...)` from a
+            # value with no positions (below: the call's effects need a place).
+            my @rebound_pad = !$positional && !$introduces ? grep {
+                $_->isa('SoN::IR::Node::PadAccess') && ($_->sigil // '') eq '$' && $_->targ
+                    && !$ctx->{addr_taken}{ $_->targ } } @targets : ();
+            my $record = !( $stores || @LOOP_STACK || @rebound_pad || !$positional && $introduces && $single_call );
+            my $node = $factory->make('Assign',
+                inputs => [ $lhs->@*, ( $by_element ? @args_elems : @rhs ) ],
+                targets => scalar $lhs->@*, ( $record ? ( record => 1 ) : () ));
+            _place($sim, $node) unless $record;
             # (placed, it writes its `my` aggregates in memory: a later read
             # of one whole is at a version -- `my ($x, @r) = @a; ... @r`)
             $MUTATED_SLOTS->{ $_->targ } = 1 for grep {
@@ -12774,11 +12786,8 @@ class SoN::FromOptree 0.01 {
             # (an aggregate among the targets changes nothing for the scalars
             # beside it: `($x, @r) = f()` left $x at its old value.)
             elsif (!$introduces) {
-                my @pad = grep { $_->isa('SoN::IR::Node::PadAccess')
-                                 && ($_->sigil // '') eq '$' && $_->targ
-                                 && !$ctx->{addr_taken}{ $_->targ } } @targets;
+                my @pad = @rebound_pad;
                 if (@pad) {
-                    _place($sim, $node) unless defined $node->control_in;
                     # BOUND TO A READ AT THIS STORE'S VERSION, not to the slot:
                     # the slot is one node for every read of the name, and a
                     # value made from a read after this assign was made once
@@ -12793,11 +12802,8 @@ class SoN::FromOptree 0.01 {
             # too: each slot is its own PadAccess, which reads what the Assign
             # stored. Floating, nothing reached it -- a consumer walking the
             # chain never bound the targets, and a call's effects had no place.
-            elsif ($introduces && $single_call) {
-                # ...and the memory version a later read takes, so a
-                # floating read (a join over `($s) x $n`) is placed after it.
-                _place($sim, $node) unless defined $node->control_in;
-            }
+            # (placed above: and the memory version a later read takes, so a
+            # floating read -- a join over `($s) x $n` -- is placed after it.)
 
             # A VOID ONE THAT STORED A PACKAGE SCALAR BY POSITION is its
             # EntryWrites and bindings: the Assign is nobody's value, on

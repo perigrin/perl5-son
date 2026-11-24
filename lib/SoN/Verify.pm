@@ -92,7 +92,7 @@ sub _target_class ($t) {
     if ( $op eq 'PadAccess' ) {
         return 'my-aggregate' if ( $f->{sigil} // '$' ) ne '$';
         # (on v2 one kept in memory follows it: a mem_in, here or on another
-        # read of it -- the record flag is the serializer's guess, not a fact)
+        # read of it -- a record flag is B::SoN's claim, checked here, not trusted)
         return 'my-scalar-in-memory' if ( $t->{inputs} // [] )->@* || $f->{shared} || defined $t->{mem_in};
         return 'ssa-scalar';
     }
