@@ -521,8 +521,14 @@ sub _graph_v2 ( $name, $g, $res ) {
                 push @pairs, [ $local, $save, $r ] if $local;
             }
             my $in_eval = sub ($t) { my $e = _fields($t)->{eval_id}; defined $e && $join{$e} };
+            # (an Exc is an eval's by where its edge goes, into a catch: a die
+            # in a sort block inlined in an eval carries no eval_id)
+            my %into_catch = map { ( $_ => 1 ) } grep { defined && !ref } map { $_->{inputs}->@* }
+                grep { $_->{op} eq 'Region' && _fields($_)->{catch} } @nodes;
+            my $to_catch = sub ($x) { grep { $into_catch{$_} } keys %{ $path->( $x->{id}, -1 ) } };
             my $may_die = sub ($t) {
                 return 0 unless defined $t->{control_in} && !$in_eval->($t) && !$edge_node{ $t->{id} };
+                return 0 if $exc_of{ $t->{id} } && $to_catch->( $exc_of{ $t->{id} } );
                 return 1 if $t->{op} eq 'Call' && ( _fields($t)->{dispatch_kind} // '' ) ne 'builtin';
                 return $t->{op} =~ /^(?:Divide|Modulo|PostfixDeref|Ref)$/ && defined _fields($t)->{line} ? 1 : 0;
             };
@@ -546,7 +552,7 @@ sub _graph_v2 ( $name, $g, $res ) {
                         unless grep { $p->{ $_->{id} } && ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
                 }
             }
-            for my $x ( grep { !$in_eval->( $by{ $_->{inputs}[0] // '' } // {} ) } values %exc_of ) {
+            for my $x ( grep { !$to_catch->($_) } values %exc_of ) {
                 my $p = $path->( $x->{id}, -1 );
                 $bad->( $x, 'exc', 'an Exc outside an eval whose way out ends in no rethrow' )
                     unless grep { $p->{ $_->{id} } && $_->{op} eq 'Unwind' && _fields($_)->{rethrow} && ( $_->{inputs}[0] // -1 ) == $x->{id} } @nodes;

@@ -50,6 +50,9 @@ my %src = (
     t5 => 'our $g=1; sub f { die "x\n" } eval { local $g = 2; f() }; print "$g\n";',
     t6 => 'my $d = @ARGV; my $q = 1/$d; print "before\n"; print "$q\n";',
     t7 => 'our $g=1; sub f { local $g = 2; 1/$_[0] } eval { f(0) }; print "$g\n";',
+    # (an Exc into a catch, of a die in a sort block that carries no eval_id)
+    t8 => 'my @r = eval { sort { die "boom\n" if $a == 2; $a <=> $b } 3, 1, 2 }; print "[@r] $@";',
+    t9 => 'eval \'package Other; sub g { "g$_[0]" } 1\' or die; sub f { return Other::g($_[0]) } print f(2), "\n";',
 );
 sub rejected ( $what, $w, $rule ) {
     my @v = SoN::Verify::verify($w)->{violations}->@*;
