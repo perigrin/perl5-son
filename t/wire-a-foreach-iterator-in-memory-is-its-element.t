@@ -39,6 +39,8 @@ for my $src (
     'use feature q(try); no warnings; my @a=(1,2); try { for my $x (@a) { $x.="!"; die "x\n" } } catch ($e) { } print "@a\n";',
     'my $r=[1,2]; eval { for my $x (@$r) { $x.="!"; die "x\n" } }; print "@$r\n";',
     'my @a=(1,2); eval { for my $x (@a) { for my $y (@a) { $y.="!"; die "x\n" } } }; print "@a\n";',
+    # (an increment of the iterator is a store where it stands too)
+    'our @a=(1,2); eval { for my $x (@a) { $x++; $x++; die "x\n" if $x > 2 } }; print "@a\n";',
 ) {
     unlike translate($src), qr/GAP:/, "not refused: $src";
     ok !write_back(), "no write-back: $src";

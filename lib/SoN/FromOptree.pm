@@ -10841,6 +10841,12 @@ class SoN::FromOptree 0.01 {
                 my $bound = $sim->lookup($targ);
                 $old = $bound if defined $bound;
             }
+            # (A FOREACH ITERATOR KEPT IN MEMORY is its element: its slot read
+            # was built as the element's, and its targ is the op's)
+            elsif ($old->isa('SoN::IR::Node::Subscript') && $op->can('first')) {
+                my $f = _strip_null( $op->first );
+                $targ = $f->targ if $f->name eq 'padsv' && $ITER_ELEMENT{ $f->targ };
+            }
 
             # An element RMW (`$a[0]++`, `$h{k}--`): $old is the 2-input LVALUE
             # Subscript (a store ADDRESS, no memory input -- see the aelem/helem
@@ -11055,7 +11061,9 @@ class SoN::FromOptree 0.01 {
             # location. Rebinding instead dropped the increment: `my $r=\$x;
             # $x++; print $$r` printed the old value.
             elsif (defined $targ && $ctx->{addr_taken}{$targ}
-                   && $old->isa('SoN::IR::Node::PadAccess')) {
+                   && ( $old->isa('SoN::IR::Node::PadAccess')
+                        # (a foreach iterator kept in memory is its element)
+                        || $old->isa('SoN::IR::Node::Subscript') && $ITER_ELEMENT{$targ} )) {
                 my $store = $factory->make('Assign', inputs => [$old, $new]);
                 _place($sim, $store);
                 $targ = undef;
