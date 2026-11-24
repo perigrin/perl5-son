@@ -16,6 +16,11 @@
   `probes/r/`: the 499 probes of the 2026-11-23 re-audit
   (../2026-11-23-memory-model-goal-re-audit.md, section 3), in chalk's
   `t/data/audit-probes` as `re` plus their name (`a01.pl` is `rea01`).
+  `probes/f/`: the 847 probes of the 2026-11-24 final audit
+  (../2026-11-24-memory-model-final-audit.md, section 3); `_run1.log` is their
+  sweep (111 WRONG), `_base.log` the wrong ones at the re-audit's heads;
+  `unverified/` holds three whose wires break a verifier rule, out of the
+  ratchet's reach. Not in chalk's `t/data/audit-probes`.
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),
