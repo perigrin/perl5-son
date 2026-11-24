@@ -653,3 +653,31 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [35m40
 ```
 
 (gates1 was stopped: its producer suite failed 16 files and the ratchet lost 6 corpus graphs, all refusals reaching past their class -- ed66c63. gates2: five chalk tests refused programs that matched perl -- slices and hash keys known to be there, `"@_"` read whole, a hash copy of an undef reference -- 21457b0, add5ce17.)
+
+## 24. Clause 3's caveats and the verifier's alias-list exemption (branch `clause3`)
+
+Heads: producer `clause3` c66429e (from 9afe7f0: 46cb342 time/rand, 053a625 record, 3ec0817 alias item, c66429e deparser), chalk `clause3` b1de1e4f (from add5ce17: 5dd631c7, 640ad9af, b1de1e4f). The final audit's clause-3 row and its section 4 items 7 and 10.
+
+| item | outcome | where |
+|---|---|---|
+| `record` derived by the serializer | DONE | the list assign (the only site that made one, measured over corpus and probes) decides record-or-store before it builds the Assign and says `record => 1` (in its content hash); `_pin` dies on a record; SoN::Serialize::JSON writes the flag and derives nothing |
+| the double walk (`%LOOP_HINTS`) | NOT DONE: a design decision | over the corpus, 8 of 1671 sub walks go round again (4 a Phi's stamp, 4 the iterator-write guess, 0 a missed slot, 0 a later write); the guesses are about the binding's class, which Braun's incomplete Phi does not have |
+| EntryDef with no version in an alias list | DONE | the gvsv handler gives an item of a foreach/map/grep list the memory there; V6 no longer excuses a package scalar as an alias-list place; 0 such items over corpus and probes (2 at base: f/j01, r/e29, both SAME before and after) |
+| positional memory in the deparser | DONE | SoN::Wire::as_v1 marks every node it appends a mem_in to (`memory_input`); the deparser reads it (`_mem_input`); `%MEM_MIN_INPUTS`, Ref's and Subscript's positional pops, and t/deparse-memory-table-matches-producer.t are gone |
+| time, sleep, rand, srand not ordered | DONE | EffectTable: `time` reads the `clock` (an ordered class), `rand` writes the random stream; chalk's BuiltinTable `reads_state` makes both where they stand; a sleep or srand statement stays refused by name in T2 (c3t1, c3t3-6) |
+
+Probes: c3t1-7 added (2 SAME, 5 REFUSED). The deparser printed `no` for perl's `ok` on `my $t0 = time; sleep 1; my $t1 = time` (both reads floated); chalk never showed it, since T2 refuses the sleep. chalk's interval oracle re-keyed for loops:11 (rand's Calls numbered one lower, the same six proofs).
+
+`tools/gates.sh` at producer c66429e, chalk b1de1e4f:
+
+```
+producer-suite  PASS  815 files, 0 failing [18m21s]
+chalk-suite     PASS  940 files, 0 failing [40m25s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m46s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [6m18s]
+probes          PASS  LOUD=15 REFUSED=540 SAME=1750; WRONG 0, SAME lost 0, changed 0 [5m46s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [85m35s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m15s]
+```
+
+(gates1, producer c66429e and chalk 640ad9af: all PASS but the chalk suite -- t1-integer-intervals-prove-nothing-new.t counted rand's renamed Calls as six proofs new and six lost; re-keyed, b1de1e4f. gates2 ran beside another session's gates, which slowed the ratchet to 85m.)
