@@ -15518,9 +15518,9 @@ class SoN::FromOptree 0.01 {
     # iterator), read off its ops before the walk: an op _op_writes_key says
     # writes it. The walk never guesses it (clause 3); a write the ops do not
     # show is refused where the walk finds it (_check_writes).
-    # A DEMOTED ITERATOR'S slot lives in memory: an assignment, `.=`, chop,
-    # `||=` or undef stores it and leaves its binding (the pass's end writes
-    # it back), and only the rest rebind it (_demoted_rebinds). NOR A WRITE
+    # A DEMOTED ITERATOR'S slot lives in memory: an assignment, `.=`, `++`,
+    # chop, `||=`, undef or a list assign stores it and leaves its binding,
+    # and only the rest rebind it (_demoted_rebinds). NOR A WRITE
     # UNDER AN INNER foreach, map or grep that aliases the same name: that
     # loop binds it, and puts it back where it ends.
     # ($all: the whole body; else the ops on its way round, as the header's
@@ -15542,10 +15542,10 @@ class SoN::FromOptree 0.01 {
     }
 
     # _demoted_rebinds($op) -> whether a write _op_writes_key found rebinds a
-    # demoted slot as well as storing it: an op= but `.=`, an increment, an
-    # s/// or tr///, a list assign. Measured on `eval { for my $x (@a) {
-    # WRITE } die }` (probes f/n03, f/n20). A form this misses is refused
-    # where the walk finds it (_check_writes).
+    # demoted slot as well as storing it: an op= but `.=`, an s/// or tr///.
+    # Measured on `eval { for my $x (@a) { WRITE } die }` (probes f/n03,
+    # f/n20, al/g03) over `my @a` and `our @a`. A form this misses is
+    # refused where the walk finds it (_check_writes).
     sub _demoted_rebinds ($op) {
         return 1 if $op->name =~ /\A(?:subst|trans)\z/;
         return 0 if $op->name eq 'padsv_store' || $op->name !~ /\Apad/;    # (TARGMY: an assignment)
@@ -15553,8 +15553,8 @@ class SoN::FromOptree 0.01 {
         $up = eval { $up->parent } while $up && $$up && $up->name eq 'null';
         return 0 unless $up && $$up;
         my $u = $up->name;
-        return 1 if $u =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ || $u =~ /\A(?:subst|trans|aassign|list)\z/;
-        return 1 if ( $up->flags & B::OPf_STACKED() ) && $u !~ /\A(?:sassign|concat|multiconcat)\z/;
+        return 1 if $u =~ /\A(?:subst|trans)\z/;
+        return 1 if ( $up->flags & B::OPf_STACKED() ) && $u !~ /\A(?:sassign|aassign|concat|multiconcat)\z/;
         return 0;
     }
 
@@ -15625,7 +15625,12 @@ class SoN::FromOptree 0.01 {
         # flags the operands of a string append modified too (`$s .= "$x"`)
         if ( $u =~ /\A(?:concat|multiconcat|stringify|repeat|add|subtract|multiply|divide|modulo|pow|left_shift|right_shift|bit_and|bit_or|bit_xor|sbit_and|sbit_or|sbit_xor|nbit_and|nbit_or|nbit_xor|i_add|i_subtract|i_multiply|i_divide|i_modulo)\z/ ) {
             return 0 unless $up->flags & B::OPf_STACKED();
+            # (a multiconcat that is not `.=` is a whole assignment folded
+            # in: `$_ = "v$_"` -- its target is its last operand)
             my $f = $up->first;
+            if ( $u eq 'multiconcat' && !( $up->private & B::OPpMULTICONCAT_APPEND() ) ) {    # (a UNOP_AUX: no ->last)
+                $f = $f->sibling while ${ $f->sibling };
+            }
             $f = $f->first while $$f && $f->name eq 'null' && ( $f->flags & B::OPf_KIDS() ) && $$f != $$place;
             return $$f == $$place ? 1 : 0;
         }
