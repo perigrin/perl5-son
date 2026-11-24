@@ -7,7 +7,7 @@ metadata:
 
 Branch `alias-places` (2026-11-24; baseline section 25; design
 docs/plans/2026-11-24-aliases-as-places.md, approved with its wire change).
-Producer eaa8488..ed47e9d, chalk add5ce17..8ef047ef.
+Rebased on clause3; producer e30a00f..e899786, chalk ..f1d9aa74. All gates PASS (census 426, corpus 222, deparse 430, held 0).
 
 **What changed.** `fields.place` marks an access node that is storage, not a
 read. B::SoN passes a sub's argument, a method's invocant, and an alias
@@ -33,7 +33,7 @@ The final audit's wrong answers by class (its own lists, `f/<name>` = chalk `fa<
 Neighbours refused before by these classes' GAPs: faj03 al1 al2 faa67 SAME;
 fap03/fap11 (T2: a store through an element not made a hash first), fap07
 (its sub refused), faj20/lw25 (T2), ree30/req12 (`_foreach_body_writes_its_scalar`)
-refused by name. Probes: 2344 (46 new `al<name>`), SAME 1857 REFUSED 472
+refused by name. Probes: 2351 (46 new `al<name>`), SAME 1859 REFUSED 477
 LOUD 15 WRONG 0; no older verdict but REFUSED -> SAME.
 
 **Lessons:**
@@ -62,6 +62,13 @@ LOUD 15 WRONG 0; no older verdict but REFUSED -> SAME.
   placed alias list (one that vivifies) was taken for a read of memory, and
   MemStart reached the deparser as a value: two producer tests over Carp's
   `for ($::{$p})`, found only by the full suite (gates1).
+- **A fast path the producer proves is checked against a verifier that may
+  be wrong too.** V12 first flagged a `local` (another variable) and rightly
+  flagged a foreach over @_ the producer had called private -- read both
+  before fixing either.
+- **Reading through a new path exposes an old type.** The iterator read as
+  its element met chalk Analysis typing `my @c = @$r`'s element as an Array
+  (fixed: a deref in a literal flattens).
 - **`-MO=...` runs in `-c` mode: END blocks are skipped.** Print a
   measurement where B::SoN writes the wire, not in END.
 - **Never edit what a running sweep reads** (again): a ModSets edit landed

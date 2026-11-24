@@ -683,7 +683,7 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [85m35
 (gates1, producer c66429e and chalk 640ad9af: all PASS but the chalk suite -- t1-integer-intervals-prove-nothing-new.t counted rand's renamed Calls as six proofs new and six lost; re-keyed, b1de1e4f. gates2 ran beside another session's gates, which slowed the ratchet to 85m.)
 ## 25. Aliases are places; an assignment or `?:` as an lvalue (branch `alias-places`)
 
-Heads: producer `alias-places` ed47e9d (from 9afe7f0: eaa8488 design doc, 823e818 design 1, 5a62dc1 design 3, 5f6fdeb, ed47e9d), chalk `alias-places` 8ef047ef (from add5ce17: 002086d0 design 1, 624b8054 design 3 probes, 8ef047ef). Design: `docs/plans/2026-11-24-aliases-as-places.md` (designs 1 and 3, approved; wire change: `fields.place`, `fields.vivify`).
+Heads (rebased on clause3, producer 152a6be, chalk b1de1e4f): producer `alias-places` e899786 (e30a00f design doc, 337c1ec design 1, 7dd249b design 3, d10b2c6, 1edebdd, 3e0705d, e899786), chalk `alias-places` f1d9aa74 (design 1, design 3 probes, alg03, 7d78744a, f1d9aa74). Design: `docs/plans/2026-11-24-aliases-as-places.md` (designs 1 and 3, approved; wire change: `fields.place`, `fields.vivify`).
 
 The final audit's wrong answers in the classes the designs cover, by the audit's own lists:
 
@@ -695,7 +695,7 @@ The final audit's wrong answers in the classes the designs cover, by the audit's
 | H `$_[0] = ...` on a `my` invocant | 2 | 2 SAME |
 | D an assignment or `?:` as an lvalue | 14 | 13 SAME; f/i03 (a `?:` of package scalars needs a real If) refused by name |
 
-Probes: 2344 in chalk (46 new `al<name>`; producer `probes/al/`), SAME 1857, REFUSED 472, LOUD 15, WRONG 0. Against section 23 no older verdict changed but REFUSED -> SAME (74 probes); the 46 new ones are 35 SAME, 11 refused by name. Deleted: the GAPs of C, H, G and E's package scalar and element arms; the pass-end write-back, `%AFTER_CALL_PASSING`, `_iterator_written_unstored`. New: SoN::Verify V12 `alias-not-private` (mutation case M17), chalk WireInvariant L10.
+Probes: 2351 in chalk (46 new `al<name>`; producer `probes/al/`), SAME 1859, REFUSED 477, LOUD 15, WRONG 0. Against section 23 no older verdict changed but REFUSED -> SAME (74 probes); the 46 new ones are 35 SAME, 11 refused by name. Deleted: the GAPs of C, H, G and E's package scalar and element arms; the pass-end write-back, `%AFTER_CALL_PASSING`, `_iterator_written_unstored`. New: SoN::Verify V12 `alias-not-private` (mutation case M17), chalk WireInvariant L10.
 
 The fast path (`tools/alias-fastpath.pl --chalk`, over chalk's 221 lib wires at 002086d0; a sub walked again inside one translation counts again, and a module counts once per wire that loads it):
 
@@ -705,4 +705,16 @@ list  value    227  place     54  proof fails  19.2%
 iter  value   9417  place     67  proof fails   0.7%
 ```
 
-GATES
+`tools/gates.sh` at producer e899786, chalk f1d9aa74:
+
+```
+producer-suite  PASS  814 files, 0 failing [25m35s]
+chalk-suite     PASS  941 files, 0 failing [83m14s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m40s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [11m24s]
+probes          PASS  LOUD=15 REFUSED=477 SAME=1859; WRONG 0, SAME lost 0, changed 0 [6m06s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [61m52s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [2m50s]
+```
+
+(gates1 stopped: two producer tests over Carp's `for ($::{$p})` -- as_v1 took a placed alias list's mem_in for an operand. gates2 stopped: clause3 merged, rebased. gates3: V12 counted a `local` as a store to the alias's source (f/h11), and the fast path called a foreach over @_ private (f/h14: now a place); chalk's grammar refused `grep( { } LIST )`; an interval-oracle row renamed (node ids moved). gates4: chalk's Analysis typed an element of `my @c = @$r` as an Array, which Test::Chalk's isa_ok now read through its iterator.)
