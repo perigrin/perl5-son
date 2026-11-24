@@ -17631,10 +17631,14 @@ class SoN::FromOptree 0.01 {
                 # A `return` in the rest is a function exit; see $FN_EXITS.
                 my $rest_exits = defined $break_projs
                     ? $FN_EXITS : [];
-                my ($rest_end, $rest_sig) =
+                my ($rest_end, $rest_sig) = do {
+                    # (ON ITS OWN Proj the rest may pin, as the guarded
+                    # statement's arm does: `next unless $x; print 4 / $x`
+                    # left the division floating, above the guard -- aun5d)
+                    local $ARM_PINS = 1;
                     _walk_branch($cv, $op->next, $rest_sim, $factory, $opmap,
                         $loop_visited, $rest_exits, 0, ($CONTINUE_START ? ${$CONTINUE_START} : undef),
-                        $loop_node, $break_projs, 1);
+                        $loop_node, $break_projs, 1) };
                 # THE REST RETURNED, so it never reaches the latch: the loop
                 # goes on only along the guard-taken arm, with the bindings it
                 # had at the guard. The ops after the return are dead.

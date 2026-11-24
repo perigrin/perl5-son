@@ -42,9 +42,10 @@ my %HELD = (
     # (probe aun6, `${"main::g"} += 10` as its sub's value, was held here as
     # read-unversioned:through-ref: the read after the store names it as its
     # memory version now -- t/wire-a-compound-store-through-a-reference-is-read-at-its-version.t)
-    'probes a/aun5d:main::__PROGRAM__ effect-floating' =>
-        'a division that may fault after a `next unless` guard in a loop body floats: the rest of the body is walked as '
-      . 'an arm, where B::SoN does not pin; chalk makes it at its use, after the guard -- open, B::SoN should pin it',
+    # (probe aun5d, a division that may fault after a `next unless` guard in
+    # a loop body, was held here as effect-floating: the rest of the body is
+    # walked on its own Proj, where B::SoN pins now --
+    # t/wire-the-rest-after-a-loop-guard-pins-what-may-fault.t)
     # (r/a12, `sub z { @a = () }`, held here at 216d190: its Return reads @a at
     # its store's version now -- t/wire-a-list-assign-to-a-package-array-is-read-at-its-version.t)
     # (perl's own DynaLoader, which chalk's runtime module follows, was held
