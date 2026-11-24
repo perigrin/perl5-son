@@ -26,7 +26,7 @@ package B::SoN::EffectTable;
 #            it stands, once, whatever context its value is in.
 #   reads    its VALUE is of state a write may change, named by where the
 #            state lives: `handle`, `stack`, `variable`, `object-class`,
-#            `external` (the clock, the file system, the random stream).
+#            `external` (the file system, the time of day), `clock`.
 #   version  it is a version of memory: the wire's builtin Call carries the
 #            memory it follows as its last input (`memory_input`) and a later
 #            read names it. Only for a write a read IN THIS GRAPH can see --
@@ -45,7 +45,7 @@ package B::SoN::EffectTable;
 #     and every sub call: each has its own handler or node kind that places
 #     it. Their rows are in %OWN_HANDLER so that `writes` answers for them
 #     (SoN::Verify asks), and on_chain leaves them to their handlers.
-#   - `external` reads (time, rand, -e): reads of changeable state that take
+#   - `external` reads (localtime, -e, stat): reads of changeable state that take
 #     no memory input yet. They are listed, flagged by the verifier
 #     (read-unversioned:external), and wait for wire v2's `mem_in`.
 #
@@ -80,6 +80,10 @@ _rows { writes => 1 }, qw(
 # the variables they name; lock, weaken and unweaken the referent's flags;
 # vec in lvalue form is a store handled as one, in rvalue form a pure read.
 _rows { writes => 1 }, qw(srand formline reset study lock weaken unweaken);
+# A rand ADVANCES THE RANDOM STREAM the next rand reads, and srand reseeds:
+# floating, `srand(42); $a = rand; srand(42); $b = rand` named one version
+# for both rands and nothing put them after their srands (final audit 4.10).
+_rows { writes => 1 }, qw(rand);
 
 # A BLESS IS A STORE TO THE REFERENT'S CLASS, and `ref`, `blessed` and
 # `reftype` in this graph read it: a version, so a read after it names it.
@@ -107,8 +111,10 @@ _rows { reads => 'stack' },    qw(caller);
 _rows { reads => 'variable' }, qw(pos);    # (its lvalue form is a store's target: see on_chain)
 # (`reftype_of_ref` is the walk's name for `ref \$x`: the kind of thing $x holds)
 _rows { reads => 'object-class' }, qw(ref reftype blessed reftype_of_ref);
+# THE CLOCK a sleep moves: `time` is read where it stands, on the chain.
+_rows { reads => 'clock' }, qw(time);
 _rows { reads => 'external' }, qw(
-    time rand localtime gmtime glob tied tms getlogin
+    localtime gmtime glob tied tms getlogin
     stat lstat readlink fileno telldir
     ftis ftsize ftdir ftfile ftlink ftzero ftchr ftmtime fteread fteexec
 );
@@ -178,8 +184,8 @@ sub reads_state ($name) { return ( $ROW{ $name // '' } // {} )->{reads} }
 # The state classes a read of which is ORDERED BY CONTROL on this wire: a
 # handle's position, the call stack, a variable's pos(). An object-class read
 # names its version instead (reads_at_version); an external one floats, and
-# is the verifier's to count.
-my %ORDERED_READ = map { $_ => 1 } qw(handle stack variable);
+# is the verifier's to count. The clock is ordered: sleep moves it.
+my %ORDERED_READ = map { $_ => 1 } qw(handle stack variable clock);
 
 # on_chain($name, lvalue => bool) -> true when the walk must pin this builtin
 # to the control chain whatever context its value is in.

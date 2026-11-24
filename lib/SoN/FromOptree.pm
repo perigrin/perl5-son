@@ -13766,7 +13766,7 @@ class SoN::FromOptree 0.01 {
                 elsif ($name eq 'gelem' && defined $sim->memory) {
                     $extra{mem} = $sim->memory;
                 }
-                # AN EXTERNAL READ -- the clock, the file system, a tie's
+                # AN EXTERNAL READ -- the file system, a tie's
                 # object -- is at a memory version too (Q13: the world is on
                 # the one chain): `my $t = time; sleep 1; time - $t` reads
                 # either side of the sleep.

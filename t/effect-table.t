@@ -25,10 +25,10 @@ subtest 'the table: facts and what follows from them' => sub {
     ok !$t->can('is_version')->($_), "$_ is not"              for qw(mkdir caller tell pos select);
     ok $t->can('reads_at_version')->($_),  "$_ reads at a memory version" for qw(ref blessed reftype reftype_of_ref);
     ok !$t->can('reads_at_version')->($_), "$_ does not"                  for qw(time rand caller tell bless keys);
-    ok !$t->can('on_chain')->($_),   "$_ is not pinned by the table" for qw(push time ref length uc join);
+    ok !$t->can('on_chain')->($_),   "$_ is not pinned by the table" for qw(push localtime ref length uc join);
     ok $t->can('writes')->($_),      "$_ writes"              for qw(push chomp print bless open prtf);
     is $t->can('reads_state')->('ref'),  'object-class', 'ref reads an object\'s class';
-    is $t->can('reads_state')->('time'), 'external',     'time reads the clock';
+    is $t->can('reads_state')->('time'), 'clock',        'time reads the clock';
 };
 
 my $dir = tempdir( CLEANUP => 1 );
