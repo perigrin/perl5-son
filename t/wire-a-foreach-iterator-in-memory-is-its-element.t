@@ -21,7 +21,7 @@ sub write_back () {
     for my $g ( values( ( $main::WIRE // {} )->{methods}->%* ) ) {
         my %by = map { $_->{id} => $_ } ( $g->{nodes} // [] )->@*;
         return 1 if grep {
-            my ( $t, $v ) = map { $by{$_} // {} } $_->{inputs}->@[ 0, 1 ];
+            my ( $t, $v ) = map { $by{ $_ // "" } // {} } $_->{inputs}->@[ 0, 1 ];
             $_->{op} eq 'Assign' && ( $t->{op} // '' ) eq 'Subscript' && ( $v->{op} // '' ) eq 'PadAccess'
                 && ( $v->{fields}{symbol} // '' ) =~ /\A[xy]\z/
         } values %by;

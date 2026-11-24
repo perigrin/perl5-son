@@ -492,7 +492,9 @@ sub _graph_v2 ( $name, $g, $res ) {
         }
         return ( $n->{stamp} // '' ) =~ /^(?:Array|List|Hash)$/ ? undef : 'through-ref';
     };
-    for my $n ( grep { !defined $_->{mem_in} } @nodes ) {
+    # (a place -- fields.place, aliases-as-places -- is storage, not a read:
+    # L10 and V12 hold it)
+    for my $n ( grep { !defined $_->{mem_in} && !_fields($_)->{place} } @nodes ) {
         my ( $op, $f ) = ( $n->{op}, _fields($n) );
         my $class;
         # (a list slice, `(f())[0]`, picks from values: index_count says so)

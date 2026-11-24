@@ -49,7 +49,8 @@ subtest 'the verifier: an unversioned package scalar in a foreach list' => sub {
     is [ map { "$_->{rule}" } SoN::Verify::verify($w)->{violations}->@* ], [], 'named at its version, it is not';
 };
 
-# perl aliases the variable itself: the write through $_ is $x's.
+# perl aliases the variable itself: the write through $_ is $x's. The list
+# holds its place (docs/plans/2026-11-24-aliases-as-places.md).
 for my $case (
     [ 'our $x = 1; for ($x) { $_ = 5 } print "$x\n";', "5\n" ],
     [ 'our $x = 5; for my $y ($x) { $y = 6 } print "$x\n";', "6\n" ],
@@ -62,7 +63,8 @@ for my $case (
         map { my $l = $_; map { my $i = $_; grep { $_->{id} == $i } $w->{methods}{'main::__PROGRAM__'}{nodes}->@* } $l->{inputs}->@* }
         grep { $_->{op} eq 'ArrayLiteral' } $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
     is scalar @items, 1, '... the list holds $x';
-    ok defined $items[0]{mem_in}, '... at a version';
+    # (aliases-as-places: the item is the variable's place, not a read of it)
+    ok !defined $items[0]{mem_in} && $items[0]{fields}{place}, '... as its place';
     is [ map { "$_->{rule}" } SoN::Verify::verify($w)->{violations}->@* ], [], '... and the wire verifies';
     # (the deparser refuses it by name, as it did before: never a wrong answer)
     my $d   = SoN::Deparse->new;
