@@ -80,4 +80,22 @@ for my $what (sort keys %cases) {
         'an array of a hash: the join reads the array';
 }
 
+# AN ARRAY TOO: one whose literal the list shortcut cannot flatten (a ternary
+# among its elements) was bound as the source's own literal -- `my @d = @b;
+# $d[0] = 9` changed @b (cpa33, cpa34: silent wrongs at base).
+{
+    my ($w, $err) = translate('my $c = 1; my @b = $c ? (1, 3) : (); my @d = @b; $d[0] = 9; print "@b|@d\n";');
+    my ($w2) = translate('my $c = 1; my @b = $c ? (1, 3) : (); my @d = @b; push @b, 4; print "@d\n";');
+    my @n2 = $w2->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+    my %by2 = map { $_->{id} => $_ } @n2;
+    my ($j) = grep { $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'join' } @n2;
+    is( ( $by2{ $j->{inputs}[1] }{fields}{symbol} // '' ), 'd', 'an array copied from an array: "@d" reads @d, not @b (cpa34)' );
+    unlike $err, qr/GAP:/, 'an array copied from a ternary literal: not refused';
+    my @n = $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+    my %by = map { $_->{id} => $_ } @n;
+    my ($d) = grep { $_->{op} eq 'ArrayLiteral' && ( $_->{fields}{symbol} // '' ) eq 'd' } @n;
+    my ($store) = grep { $_->{op} eq 'Assign' && $_->{mem_out} } @n;
+    ok $d && $by{ $store->{inputs}[0] }{inputs}[0] == $d->{id}, '... the store is into a literal of its own';
+}
+
 done_testing;

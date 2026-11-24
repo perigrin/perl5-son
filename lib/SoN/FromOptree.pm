@@ -8271,7 +8271,7 @@ class SoN::FromOptree 0.01 {
                 if $existing && $existing->can('operation')
                 && $existing->operation =~ /\A(?:Array|Hash)Literal\z/
                 && defined $existing->symbol
-                && $existing->symbol ne ( _padparts($cv, $targ) )[1];
+                && $existing->symbol ne ( $PAD_SYMBOL{$targ} // ( _padparts($cv, $targ) )[1] );
             # IN A LOOP, A MUTATION LATER IN THE BODY RAN ON AN EARLIER
             # ITERATION, before this read -- but it is walked after it, so
             # nothing has marked the literal yet. The sub-wide slot scan
@@ -8340,10 +8340,10 @@ class SoN::FromOptree 0.01 {
                     && !$ctx->{mutated_aggregate}{$targ}
                     && !$MUTATED_LITERALS{ Scalar::Util::refaddr($existing) }
                     && $existing->operation eq 'ArrayLiteral'
-                    # (nor a `my` hash flattened into it: that hash is a location,
+                    # (nor a `my` hash or array flattened into it: that is a location,
                     # and pushed here it was read after a later store to it)
                     && !grep { $_->isa('SoN::IR::Node::TernaryExpr')
-                        || ( $_->isa('SoN::IR::Node::HashLiteral') && defined $_->symbol ) } $existing->v1_inputs->@*) {
+                        || ( ( $_->isa('SoN::IR::Node::HashLiteral') || $_->isa('SoN::IR::Node::ArrayLiteral') ) && defined $_->symbol ) } $existing->v1_inputs->@*) {
                 $sim->push_node($_) for $existing->v1_inputs->@*;
                 return ($op->next, 'handled');
             }
@@ -12230,7 +12230,10 @@ class SoN::FromOptree 0.01 {
                         # was sound only where a syntactic scan proved neither
                         # side written; the scan had holes, so it always copies:
                         # the literal below, its pairs read where it is made.
-                        $names_storage ||= $only->isa('SoN::IR::Node::HashLiteral')
+                        # (and a `my` array whose literal the list shortcut
+                        # could not flatten -- a ternary among its elements --
+                        # bound the same way: `my @d = @b; $d[0] = 9` changed @b)
+                        $names_storage ||= ( $only->isa('SoN::IR::Node::HashLiteral') || $only->isa('SoN::IR::Node::ArrayLiteral') )
                             && defined $only->symbol
                             && _copies_pad_hash($op);
                         if (($is_aggregate_value && !$names_storage)
@@ -12345,10 +12348,10 @@ class SoN::FromOptree 0.01 {
                         $_->isa('SoN::IR::Node::PadAccess')
                             && ($_->sigil // '') =~ /\A[\@%]\z/
                     } $rhs->@*;
-                    # (a `my` hash, copied or among other pairs: read here too;
+                    # (a `my` hash or array, copied or among other pairs: read here too;
                     # floating, `my %d = (%h, x => 1); $h{a} = 2` read the store)
                     $copies_container ||= grep {
-                        $_->isa('SoN::IR::Node::HashLiteral') && defined $_->symbol
+                        ( $_->isa('SoN::IR::Node::HashLiteral') || $_->isa('SoN::IR::Node::ArrayLiteral') ) && defined $_->symbol
                     } $rhs->@*;
                     # A PACKAGE OR SHARED AGGREGATE ASSIGNED IN A LOOP BODY is
                     # made there too: its store below writes this literal, and
@@ -20494,16 +20497,17 @@ class SoN::FromOptree 0.01 {
     # its own.
     # _aassign_introduces($aassign) -> true when the list assignment's target
     # is a `my` aggregate: a padav/padhv on its LHS carries OPpLVAL_INTRO.
-    # _copies_pad_hash($aassign) -> its right side is one `my` hash (`... = %h`).
+    # _copies_pad_hash($aassign) -> its right side is one `my` hash or array
+    # (`... = %h`, `... = @a`).
     sub _copies_pad_hash ($aassign) { return _copied_pad_hash_targ($aassign) ? 1 : 0 }
-    # _copied_pad_hash_targ($aassign) -> the targ of the one `my` hash its
-    # right side is, or undef.
+    # _copied_pad_hash_targ($aassign) -> the targ of the one `my` hash or
+    # array its right side is, or undef.
     sub _copied_pad_hash_targ ($aassign) {
         my $rhs = $aassign->first;
         return undef unless $rhs && $$rhs && $rhs->can('first');
         my @k = grep { $_->name ne 'pushmark' && !( $_->name eq 'null' && $_->targ == B::opnumber('pushmark') ) }
             map { my @l; for (my $c = $_; $c && $$c; $c = $c->sibling) { push @l, $c } @l } ( $rhs->flags & 4 ? $rhs->first : () );
-        return @k == 1 && $k[0]->name eq 'padhv' && $k[0]->targ ? $k[0]->targ : undef;
+        return @k == 1 && $k[0]->name =~ /\Apad[ah]v\z/ && $k[0]->targ ? $k[0]->targ : undef;
     }
 
     sub _aassign_introduces ($aassign) {
