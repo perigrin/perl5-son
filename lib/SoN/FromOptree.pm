@@ -12336,6 +12336,15 @@ class SoN::FromOptree 0.01 {
                         if $is_pad && $copies_container && !$shared_pad
                         && !_aassign_introduces($op) && defined $node->control_in;
                     $store_observable->($node);
+                    # A PACKAGE ARRAY'S VALUE IS ITSELF, read at the version its
+                    # store made: the literal the store wrote is no version, and
+                    # `sub z { @a = () }` returned it (probe r/a12, a verifier
+                    # violation held at 216d190).
+                    my $value = !$is_pad && $sigil eq '@' && ($op->flags & 3) != 1   # (not void)
+                        ? $factory->make('EntryDef', package => $target->package, sigil => '@',
+                            symbol => $target->symbol, mem => $sim->memory,
+                            stamp => SoN::IR::Stamp->new(type => 'Array'))
+                        : $node;
                     # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT, as for
                     # the bound value above: `print scalar(my @t = (1, 2, $c))`
                     # printed the elements. A hash's is of the RHS pairs, which a
@@ -12343,8 +12352,8 @@ class SoN::FromOptree 0.01 {
                     $sim->push_node(
                         defined $hash_count ? $hash_count
                         : (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
-                            ? _make_count($factory, $node, $sim)
-                            : $node);
+                            ? _make_count($factory, $value, $sim)
+                            : $value);
                     return ($op->next, 'handled');
                 }
             }

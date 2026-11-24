@@ -45,11 +45,8 @@ my %HELD = (
     'probes a/aun5d:main::__PROGRAM__ effect-floating' =>
         'a division that may fault after a `next unless` guard in a loop body floats: the rest of the body is walked as '
       . 'an arm, where B::SoN does not pin; chalk makes it at its use, after the guard -- open, B::SoN should pin it',
-    # (the re-audit's probes, docs/research/.../probes/r, joined the sources
-    # at 087e828 with this one; chalk gives perl's answer for it)
-    'probes r/a12:main::z read-unversioned:package-aggregate-literal' =>
-        'a sub whose value is a list assign to a package array (`sub z { @a = () }`): its Return reads the new '
-      . 'ArrayLiteral at no version, as pl13 was for package scalars before its Return took two readings -- open',
+    # (r/a12, `sub z { @a = () }`, held here at 216d190: its Return reads @a at
+    # its store's version now -- t/wire-a-list-assign-to-a-package-array-is-read-at-its-version.t)
     # (perl's own DynaLoader, which chalk's runtime module follows, was held
     # here as "not traced yet": traced, its subs were compiled with the
     # peephole on, and B::SoN now refuses their aelemfast by name --
