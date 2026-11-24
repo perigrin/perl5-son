@@ -404,7 +404,14 @@ sub _graph_v2 ( $name, $g, $res ) {
         if    ( $op =~ /^(?:Subscript|Slice|Count|PostfixDeref|CellRead|EntryDef|PadAccess|FieldAccess)$/ ) { $class = $place_class->($n) }
         elsif ( $op eq 'RefType' ) { $class = 'object-class' }
         elsif ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' ) { $class = B::SoN::EffectTable::reads_state( $f->{name} ) }
-        next unless $class && grep { $live{ $_->[0]{id} } && !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
+        # (A PACKAGE SCALAR IN AN ALIAS LIST is no place: the list is made
+        # where it stands, and the variable is read there -- final audit 4.7,
+        # class E. Its item names the version, as any read does.)
+        my $scalar_entry = $op eq 'EntryDef' && ( $f->{sigil} // '' ) eq '$';
+        next unless $class && grep {
+            $live{ $_->[0]{id} } && ( !$is_place_use->(@$_)
+                || $scalar_entry && $_->[0]{op} =~ /^(?:ArrayLiteral|Phi|TernaryExpr)$/ )
+        } ( $cons{ $n->{id} } // [] )->@*;
         # (a list assign's target is the node later reads are: its value is
         # that Assign's, a version -- `my ($b, $d) = f(); length $b`)
         next if $class eq 'my-in-memory' && grep { $_->[0]{op} eq 'Assign' && $_->[1] < ( _fields( $_->[0] )->{targets} // 1 ) && $_->[0]{mem_out} } ( $cons{ $n->{id} } // [] )->@*;

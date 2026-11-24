@@ -9057,19 +9057,30 @@ class SoN::FromOptree 0.01 {
                     # earlier behaviour: spelled at its use.
                     my $errsv_read = !$is_lvalue && $gv_name eq '@'
                         && ( $ctx->{mode} // '' ) eq 'main';
+                    # AN ITEM OF AN ALIAS LIST -- the list a foreach, map or
+                    # grep walks -- is the variable itself, and names the
+                    # memory version the list is made at: the per-pass read
+                    # and a write through the alias go to the variable as it
+                    # is there (final audit 4.7: with no version the verifier
+                    # excused it as a place, class E).
+                    my $alias_item = $is_lvalue && defined $sim->memory
+                        && _operand_consumer($op) =~ /\A(?:enteriter|mapstart|grepstart)\z/;
                     my $node = $factory->${\ ($errsv_read ? 'make_unique' : 'make')}('EntryDef',
                         package => $gv->STASH->NAME,
                         sigil      => '$',
                         symbol => $gv_name,
-                        ($is_lvalue ? () : (mem => $sim->memory)),
+                        ($is_lvalue && !$alias_item ? () : (mem => $sim->memory)),
                         (!$is_lvalue && defined $read_stamp
                             ? (stamp => $read_stamp) : ()));
                     if ($errsv_read) {
                         _pin($sim, $node);
                     }
                     # Seed only when unbound: an lvalue over an already-bound
-                    # name must not clobber it (`$g += 2` reads first).
-                    $sim->define(_stash_key($node), $node) unless defined $existing || $errsv_read;
+                    # name must not clobber it (`$g += 2` reads first). (An
+                    # alias item seeds the name, as any lvalue does.)
+                    $sim->define(_stash_key($node), $alias_item
+                        ? $factory->make('EntryDef', package => $gv->STASH->NAME, sigil => '$', symbol => $gv_name)
+                        : $node) unless defined $existing || $errsv_read;
                     $sim->push_node($node);
                 }
             }
