@@ -6295,15 +6295,16 @@ class SoN::FromOptree 0.01 {
         my $edge = $sim->snapshot;
         my $exc  = $factory->make_cfg('Exc', inputs => [$node]);
         $edge->set_control($exc);
-        $edge->set_memory( $node->mem_out ? $node : $node->mem_in // $sim->memory );
+        # (a version already: $node, or the one it followed -- as _exc_edge)
+        my @memory = ( $node->mem_out ? $node : $node->mem_in // $sim->memory );
+        $edge->set_memory($memory[0]);
         {
             local $EXC_EDGE = 1;
             _restore_locals($edge, { local_saves => \@saves }, $factory, 0, 1);
         }
         my $unwind = $factory->make_cfg('Unwind', inputs => [ [$exc] ]);
         $unwind->set_rethrow(1);
-        $unwind->set_control_in( $edge->control );
-        $unwind->set_mem_in( $edge->memory );
+        _pin($edge, $unwind);
         return;
     }
     # _rethrow_saves($frame) -> the saves of this graph live now, or ().
