@@ -681,3 +681,28 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [85m35
 ```
 
 (gates1, producer c66429e and chalk 640ad9af: all PASS but the chalk suite -- t1-integer-intervals-prove-nothing-new.t counted rand's renamed Calls as six proofs new and six lost; re-keyed, b1de1e4f. gates2 ran beside another session's gates, which slowed the ratchet to 85m.)
+## 25. Aliases are places; an assignment or `?:` as an lvalue (branch `alias-places`)
+
+Heads: producer `alias-places` ed47e9d (from 9afe7f0: eaa8488 design doc, 823e818 design 1, 5a62dc1 design 3, 5f6fdeb, ed47e9d), chalk `alias-places` 8ef047ef (from add5ce17: 002086d0 design 1, 624b8054 design 3 probes, 8ef047ef). Design: `docs/plans/2026-11-24-aliases-as-places.md` (designs 1 and 3, approved; wire change: `fields.place`, `fields.vivify`).
+
+The final audit's wrong answers in the classes the designs cover, by the audit's own lists:
+
+| class | n | now |
+|---|---|---|
+| C a callee stores the argument by name, then reads `$_[N]` | 19 | 19 SAME: the argument is a place, the callee reads `@_` as aliases |
+| E foreach/map/grep over package scalars or new elements | 18 | 14 SAME; 4 slices refused by name (`a slice perl's alias may make elements of`) |
+| G a foreach write lost when a die leaves the pass | 13 | 12 SAME: the iterator in memory is its element, nothing is written back; f/n10 (`values %h`) refused by name |
+| H `$_[0] = ...` on a `my` invocant | 2 | 2 SAME |
+| D an assignment or `?:` as an lvalue | 14 | 13 SAME; f/i03 (a `?:` of package scalars needs a real If) refused by name |
+
+Probes: 2344 in chalk (46 new `al<name>`; producer `probes/al/`), SAME 1857, REFUSED 472, LOUD 15, WRONG 0. Against section 23 no older verdict changed but REFUSED -> SAME (74 probes); the 46 new ones are 35 SAME, 11 refused by name. Deleted: the GAPs of C, H, G and E's package scalar and element arms; the pass-end write-back, `%AFTER_CALL_PASSING`, `_iterator_written_unstored`. New: SoN::Verify V12 `alias-not-private` (mutation case M17), chalk WireInvariant L10.
+
+The fast path (`tools/alias-fastpath.pl --chalk`, over chalk's 221 lib wires at 002086d0; a sub walked again inside one translation counts again, and a module counts once per wire that loads it):
+
+```
+call  value  49999  place   1487  proof fails   2.9%
+list  value    227  place     54  proof fails  19.2%
+iter  value   9417  place     67  proof fails   0.7%
+```
+
+GATES
