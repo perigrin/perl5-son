@@ -39,9 +39,9 @@ my %HELD = (
     # (probes pl13 and aun17f, a list assignment to package scalars that is
     # its sub's value, were held here as `record`: the Return carries its two
     # readings now -- t/wire-v2-a-list-assign-to-package-scalars-is-no-record.t)
-    'probes a/aun6:main::bump read-unversioned:through-ref' =>
-        'a compound assignment through a symbolic reference (`${"main::g"} += 10`): its read of the package scalar names '
-      . 'no version; chalk gives perl\'s answer (the read is its own store\'s operand), B::SoN should version it -- open',
+    # (probe aun6, `${"main::g"} += 10` as its sub's value, was held here as
+    # read-unversioned:through-ref: the read after the store names it as its
+    # memory version now -- t/wire-a-compound-store-through-a-reference-is-read-at-its-version.t)
     'probes a/aun5d:main::__PROGRAM__ effect-floating' =>
         'a division that may fault after a `next unless` guard in a loop body floats: the rest of the body is walked as '
       . 'an arm, where B::SoN does not pin; chalk makes it at its use, after the guard -- open, B::SoN should pin it',

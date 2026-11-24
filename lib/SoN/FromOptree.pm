@@ -13800,8 +13800,10 @@ class SoN::FromOptree 0.01 {
                     # Pushing the Add gave it a second consumer, and the
                     # emission spelled `$$r + 5` again after the store:
                     # `my $w = ($$r += 5)` set $w to 11 where perl sets 6.
+                    # The store is its memory version, not an operand: as an
+                    # operand the read named no version (probe aun6).
                     $node = $factory->make('PostfixDeref',
-                        inputs => [$elem_lvalue->v1_inputs->[0], $store],
+                        inputs => [$elem_lvalue->v1_inputs->[0]], mem => $store,
                         sigil  => '$',
                         stamp  => SoN::IR::Stamp->new(type => 'Scalar'))
                         if $elem_lvalue->isa('SoN::IR::Node::PostfixDeref');
