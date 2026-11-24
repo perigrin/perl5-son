@@ -422,18 +422,31 @@ sub _call_args ($call) {
 sub arg_stored_by_call ( $cv, $call ) {
     my @args = _call_args($call) or return 0;
     my $site = _site( $cv, $call );
-    return 0 if $site->{unknown};
     local $KEEP_OWN = 1;
-    my @places;
+    # (REACHABLE: other code may name the argument's variable -- a package
+    # variable, an element, a captured or referenced lexical -- so a call this
+    # walk cannot see into may store it: nothing proves the alias private)
+    my ( @places, $reachable );
     for my $a (@args) {
         my $o = _strip($a);
-        if    ( $o->name =~ /\A(?:padsv|gvsv|rv2sv)\z/ ) { push @places, [ loc => $_->{loc} ] for _target_effects( $cv, $o ) }
+        if ( $o->name =~ /\A(?:padsv|gvsv|rv2sv)\z/ ) {
+            push @places, [ loc => $_->{loc} ] for _target_effects( $cv, $o );
+            my ( undef, $own ) = $o->name eq 'padsv' ? _lex( $cv, $o->targ ) : ( undef, 0 );
+            $reachable = 1 if !$own || _referenced($cv)->{ $o->targ };
+        }
         # (shortcut: an argument that is the caller's own $_[N] aliases what
         # nothing here names -- any store meets it; not counted, upgrade when
         # a sub hands its $_[N] on to one storing that variable by name)
-        elsif ( my $p = place( $cv, $o ) ) { push @places, [ place => $p ] if $p->{levels}[-1]{loc} ne 'P' }
+        elsif ( my $p = place( $cv, $o ) ) {
+            next if $p->{levels}[-1]{loc} eq 'P';
+            push @places, [ place => $p ];
+            $reachable = 1;
+        }
     }
     return 0 unless @places;
+    # AN UNKNOWN CALLEE (a code value, a name made at run time) may store a
+    # reachable variable and read @_: not proved private.
+    return $reachable ? 1 : 0 if $site->{unknown};
     my $hits = sub (@eff) {
         @eff = grep { $_->{loc} ne 'P' && $_->{loc} ne 'U' && !$_->{reshape} } @eff;
         for my $pl (@places) {
@@ -441,14 +454,15 @@ sub arg_stored_by_call ( $cv, $call ) {
         }
         return 0;
     };
-    for my $sub ( ( $site->{cvs} // [] )->@* ) { return 1 if _read_after_store( $sub, $hits ) }
+    for my $sub ( ( $site->{cvs} // [] )->@* ) { return 1 if _read_after_store( $sub, $hits, $reachable ) }
     return 0;
 }
 
-# _read_after_store($sub, $hits) -> true when, in $sub's ops in order, a
-# store $hits names (its own, not a `local`; or a call's) comes before a read
+# _read_after_store($sub, $hits, $reachable) -> true when, in $sub's ops in
+# order, a store $hits names (its own, not a `local`; or a call's; or, where
+# the arguments are $reachable, a call it cannot see into) comes before a read
 # of @_ (_reads_args_op).
-sub _read_after_store ( $sub, $hits ) {
+sub _read_after_store ( $sub, $hits, $reachable = 0 ) {
     my $root = _root($sub) or return 0;    # (no body here -- XS: it stores none of the program's variables by name)
     my $stored = 0;
     for my $o ( _post_order($root) ) {
@@ -456,7 +470,8 @@ sub _read_after_store ( $sub, $hits ) {
         next if $stored;
         if ( _is_call($o) ) {
             my $s = _site( $sub, $o );
-            $stored = 1 if !$s->{unknown} && $hits->( map { summary($_)->@* } ( $s->{cvs} // [] )->@* );
+            # (a call this walk cannot see into may store what other code reaches)
+            $stored = 1 if $s->{unknown} ? $reachable : $hits->( map { summary($_)->@* } ( $s->{cvs} // [] )->@* );
         }
         elsif ( !_is_local($o) ) {
             $stored = 1 if $hits->( _stores( $sub, $o ) );

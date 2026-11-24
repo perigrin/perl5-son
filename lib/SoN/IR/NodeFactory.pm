@@ -349,6 +349,14 @@ class SoN::IR::NodeFactory {
     # behavior so Actions.pm can route every call through the typed
     # factory without distinguishing between make() and make_cfg() shapes.
     method make($op_name, %args) {
+        # A DEMOTED FOREACH ITERATOR IS ITS ELEMENT while its body is walked
+        # (SoN::FromOptree::%ITER_ELEMENT, aliases-as-places): its slot read
+        # is the element read at that version, its slot as a target the element.
+        if ( $op_name eq 'PadAccess' && %SoN::FromOptree::ITER_ELEMENT && defined $args{targ}
+                && ( $args{sigil} // '' ) eq '$' && ( my $el = $SoN::FromOptree::ITER_ELEMENT{ $args{targ} } ) ) {
+            return $self->make('Subscript', kind => 'array', inputs => [ $el->@* ],
+                map { exists $args{$_} ? ( $_ => $args{$_} ) : () } qw(mem stamp place));
+        }
         # A reference to an element counts only with an index before the start
         # (`\$a[-5]`): the walk makes alias references (`\$a[$i]` for a
         # foreach) it may not use, and those cannot die.

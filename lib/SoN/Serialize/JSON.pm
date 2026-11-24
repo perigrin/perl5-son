@@ -676,6 +676,11 @@ sub _serialize_graph ($graph) {
                 : $id_remap{ $_->id }
         } $node->inputs->@*;
         my $fields = _extract_fields($node, \%id_remap);
+        # A PLACE: storage an alias is bound to (aliases-as-places).
+        if ( $node isa SoN::IR::Node::Access && $node->place ) {
+            $fields = { ( $fields // {} )->%*, place => JSON::PP::true,
+                ( $node->vivify ? ( vivify => JSON::PP::true ) : () ) };
+        }
 
         my %entry = (
             id     => $pos,

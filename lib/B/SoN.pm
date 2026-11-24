@@ -307,6 +307,10 @@ sub compile {
                 $phases,
                 [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
                 _graph_modules($graphs), \%REFUSED, \%switch );
+            # (tools/alias-fastpath.pl: how often the alias fast path held;
+            # shortcut: a sub walked again inside one translation counts twice)
+            print STDERR 'ALIAS_STATS ' . join( ' ', map { "$_=$SoN::FromOptree::ALIAS_STATS{$_}" } sort keys %SoN::FromOptree::ALIAS_STATS ) . "\n"
+                if $ENV{SON_ALIAS_STATS};
         }
         else {
             for my $name ( sort keys $graphs->%* ) {
@@ -334,6 +338,7 @@ sub _translate_until_settled {
     while (1) {
         my $late = SoN::FromOptree::package_writes_found_late();
         my ( @warned, $graphs, $classes, $phases );
+        %SoN::FromOptree::ALIAS_STATS = ();    # (counted again on a walk again)
         my $ok = eval {
             local $SIG{__WARN__} = sub { push @warned, @_ };
             ( $graphs, $classes ) = _discover_and_translate($filter);

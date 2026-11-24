@@ -143,6 +143,8 @@ class SoN::IR::Node {
         }
         # (where wire v1 put it, so a node's id is what it was)
         push @parts, $mem_in->id() if $mem_operand;
+        # (a place is not a read of the same variable: two nodes)
+        push @parts, 'place' . ( $self->vivify ? '+vivify' : '' ) if $self isa SoN::IR::Node::Access && $self->place;
         return @parts;
     }
 

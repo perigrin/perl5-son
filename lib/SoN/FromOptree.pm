@@ -759,6 +759,10 @@ class SoN::FromOptree 0.01 {
     # store in an arm was an SSA rebind nothing outside the arm could see.
     # The renames below read it too.
     our $ADDR_TAKEN;
+    # A DEMOTED FOREACH ITERATOR'S ELEMENT, targ => [list, index], while its
+    # body is walked: SoN::IR::NodeFactory builds the iterator's PadAccess as
+    # that element (aliases-as-places). Local to each CV's walk.
+    our %ITER_ELEMENT;
     # The main walk's closure cells, for the same walkers: a capture read in an
     # arm or loop body is a cell read, and a fresh ctx without them made it a
     # PadAccess naming a slot the closure does not own (`$w` in a recursive
@@ -1934,6 +1938,12 @@ class SoN::FromOptree 0.01 {
             # argument: `$x + 1` passes a temporary, not $x. The arguments are
             # entersub's ex-list kids between the pushmark and the callee.
             if ($op->name eq 'entersub' && !$skip_call_args) {
+                # A METHOD STORING $_[0] stores the caller's invocant variable:
+                # it lives in memory, passed as its place (class H).
+                if ( SoN::FromOptree::ModSets::stores_invocant($cv, $op) ) {
+                    my ($inv) = map { _strip_null($_) } _entersub_args_and_invocant($op);
+                    $taken{ $inv->targ } = 1 if $inv && $inv->name eq 'padsv' && $inv->targ;
+                }
                 {
                     for my $k (_entersub_args($op)) {
                         $taken{ $k->targ } = 1
@@ -1947,6 +1957,23 @@ class SoN::FromOptree 0.01 {
                         $taken{ $_->targ } = 1
                             for grep { $_->name eq 'padsv' && $_->targ }
                                 _ternary_arm_variables($t);
+                    }
+                }
+            }
+
+            # A `my` SCALAR IN A FOREACH LIST whose alias may be written: perl's
+            # alias is the variable, so it lives in memory and the list holds
+            # its place (_alias_list_items; final audit class E).
+            if ($op->name eq 'enteriter' && !( $op->flags & 64 ) && $op->can('first')) {
+                my @k; for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) { push @k, $k }
+                my ($list) = grep { $_->name =~ /\A(?:null|list)\z/ && ( $_->flags & 4 ) } @k;
+                my ($gv) = grep { $_->name eq 'gv' } @k;
+                my $g = $gv ? _op_gv($cv, $gv) : undef;
+                my $key = $op->targ || ( $g ? '$' . $g->STASH->NAME . '::' . $g->NAME : undef );
+                if ($list && defined $key && $op->parent->$* && _iterator_may_be_written($cv, $op->parent, $key)) {
+                    for (my $k = $list->first; ref($k) && $$k; $k = $k->sibling) {
+                        my $t = _strip_null($k);
+                        $taken{ $t->targ } = 1 if $t->name eq 'padsv' && $t->targ && !( $t->private & 128 );
                     }
                 }
             }
@@ -2862,6 +2889,7 @@ class SoN::FromOptree 0.01 {
         local $ADDR_TAKEN   = $ctx->{addr_taken};
         local $CELLS        = { map { $_ => $ctx->{$_} } qw(cells cell_params cells_written) };
         local %PAD_SYMBOL   = _pad_aggregate_renames($cv)->%*;
+        local %ITER_ELEMENT = ();
         local %SHARED_SYMBOL = _shared_scalar_renames($cv, $ctx->{is_program})->%*;
         # A SLOT ANOTHER SUB SHARES is written behind this graph's back, so
         # it reads as mutated from the start.
@@ -5831,10 +5859,62 @@ class SoN::FromOptree 0.01 {
     # preceding method_named (recorded on $ctx->{pending_method}); otherwise it
     # is a direct sub call. Shared by the main walk and _walk_branch/_step so a
     # (void) method call in a conditional branch arm translates identically.
-    # A CALL PASSED A DEMOTED FOREACH ITERATOR may write it through `$_[0]`,
-    # and the write is the call: its slot is stored to the element right after
-    # (the foreach walker sets it, local to the body walk). targ => code($sim).
-    our %AFTER_CALL_PASSING;
+    # A CALL WHOSE ALIASES ARE NOT PROVED PRIVATE passes each variable or
+    # element argument as its place (_alias_place); set by _handle_entersub.
+    our $ARGS_ARE_PLACES = 0;
+    # How often the fast path's proof held ('*-value') or failed ('*-place'),
+    # by binder (a call, an alias list, a foreach iterator), for
+    # tools/alias-fastpath.pl (B::SoN prints them under SON_ALIAS_STATS).
+    our %ALIAS_STATS;
+    # _alias_place($node, $factory) -> the place an argument read names (a
+    # `$` variable kept in memory, a package scalar, an element), or undef
+    # for a value (a temporary: perl's alias of it is no one's variable).
+    sub _alias_place ($n, $factory, %o) {
+        return undef unless $n isa SoN::IR::Node::Access && !$n->place;
+        my $op = $n->operation;
+        if ( $op eq 'PadAccess' ) {
+            return undef unless $n->sigil eq '$';
+            return $factory->make('PadAccess', targ => $n->targ, sigil => '$', symbol => $n->symbol,
+                ( $n->shared ? ( shared => 1 ) : () ), place => 1);
+        }
+        if ( $op eq 'EntryDef' ) {
+            return undef unless $n->sigil eq '$';
+            return $factory->make('EntryDef', package => $n->package, sigil => '$', symbol => $n->symbol, place => 1);
+        }
+        if ( $op eq 'Subscript' ) {
+            return $factory->make('Subscript', kind => $n->kind, inputs => [ $n->inputs->@[ 0, 1 ] ], place => 1,
+                ( $o{vivify} ? ( vivify => 1 ) : () ));
+        }
+        # (a captured variable's place is its cell)
+        return $factory->make('CellRead', inputs => [ $n->inputs->[0] ], place => 1) if $op eq 'CellRead';
+        return undef;
+    }
+    # _place_vivifying_list($sim, $list): AN ALIAS LIST THAT MAKES AN ELEMENT
+    # EXIST stores: it is a memory version made where it stands, so a read of
+    # the aggregate after it (`exists $h{k}`) names it.
+    sub _place_vivifying_list ($sim, $list) {
+        return unless $list isa SoN::IR::Node::ArrayLiteral
+            && grep { $_ isa SoN::IR::Node::Access && $_->vivify } $list->inputs->@*;
+        _place($sim, $list);
+        return;
+    }
+    # _alias_list_items(\@items, $factory) -> [items]: a foreach, map or grep
+    # list's items, each package scalar, scalar kept in memory or element its
+    # place -- the alias IS it, read and written where the body does (final
+    # audit class E: the list held an EntryDef of no version, read as 0). An
+    # element's place makes it exist (perl's binder does: `for ($a[2]) {}`).
+    sub _alias_list_items ($items, $factory) {
+        return [ map {
+            my $n = $_;
+            my $p = $n isa SoN::IR::Node::Access && !$n->place
+                && ( $n->operation eq 'EntryDef' && $n->sigil eq '$'
+                     || $n->operation eq 'Subscript'
+                     || $n->operation eq 'PadAccess' && $n->sigil eq '$' && ( $n->shared || defined $n->mem_in ) )
+                ? _alias_place($n, $factory, vivify => $n->operation eq 'Subscript') : undef;
+            $ALIAS_STATS{ 'list-' . ( $p ? 'place' : 'value' ) }++ if $n isa SoN::IR::Node::Access;
+            $p // $n
+        } $items->@* ];
+    }
     sub _handle_entersub ($cv, $op, $sim, $factory, $ctx) {
         # AN ARGUMENT THAT IS AN ASSIGNMENT passes the variable it stores,
         # and a sub that writes $_[N] writes that variable:
@@ -5856,20 +5936,27 @@ class SoN::FromOptree 0.01 {
                 if $what && SoN::FromOptree::ModSets::call_stores_through_args($cv, $op);
         }
         if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
-        die "GAP: a method that stores \$_[0] is not yet lowered -- \$_[0] is the caller's invocant"
-          . " variable, and the wire passes the invocant as a value\n"
-            if SoN::FromOptree::ModSets::stores_invocant($cv, $op);
-        die "GAP: a variable passed to a sub that stores it by name and reads its arguments is not yet lowered"
-          . " -- \$_[N] is the variable, and the wire passes its value as it was\n"
-            if SoN::FromOptree::ModSets::arg_stored_by_call($cv, $op);
+        # AN ALIAS NOT PROVED PRIVATE IS A PLACE: a method that stores $_[0]
+        # (the caller's invocant), or a sub that stores an argument's variable
+        # by name and then reads @_ (final audit classes H, C), or one that
+        # stores through $_[N]. Its `$_[N]` reads and writes the variable as it
+        # is then; a value would be the one before, and need a write-back.
+        local $ARGS_ARE_PLACES = SoN::FromOptree::ModSets::stores_invocant($cv, $op)
+            || SoN::FromOptree::ModSets::arg_stored_by_call($cv, $op)
+            || SoN::FromOptree::ModSets::call_stores_through_args($cv, $op) ? 1 : 0;
+        $ALIAS_STATS{ 'call-' . ( $ARGS_ARE_PLACES ? 'place' : 'value' ) }++
+            if grep { _strip_null($_)->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|aelemfast(?:_lex)?)\z/ } _entersub_args_and_invocant($op);
         _handle_entersub_call($cv, $op, $sim, $factory, $ctx);
-        $AFTER_CALL_PASSING{$_}->($sim) for grep { $AFTER_CALL_PASSING{$_} }
-            map { $_->targ } grep { $_->name eq 'padsv' } _entersub_args($op);
         return;
     }
 
     sub _handle_entersub_call ($cv, $op, $sim, $factory, $ctx) {
         my $args = $sim->pop_to_mark;
+        # (the arguments, not the code a direct or indirect call names last)
+        if ($ARGS_ARE_PLACES) {
+            my $n = defined $ctx->{pending_method} ? scalar $args->@* : $args->$#*;
+            $args->[$_] = _alias_place( $args->[$_], $factory ) // $args->[$_] for 0 .. $n - 1;
+        }
 
         if (defined $ctx->{pending_method}) {
             my $pending_method = $ctx->{pending_method};
@@ -9906,7 +9993,7 @@ class SoN::FromOptree 0.01 {
             # "a List is not an Array" miscompile from the other direction.
             my $input = ($items->@* == 1 && _is_aggregate_node($items->[0]))
                 ? $items->[0]
-                : $factory->make('ArrayLiteral', inputs => [$items->@*],
+                : $factory->make('ArrayLiteral', inputs => _alias_list_items($items, $factory),
                     stamp => SoN::IR::Stamp->new(type => 'List'));
 
             my $while_op = $op->next;
@@ -11528,7 +11615,7 @@ class SoN::FromOptree 0.01 {
                 # Subscript and stores back into it for an iterator write --
                 # so it is not a reference and must not read as one.
                 my $arr = $factory->make('ArrayLiteral',
-                    inputs => [$bounds->@*],
+                    inputs => _alias_list_items($bounds, $factory),
                     stamp  => SoN::IR::Stamp->new(type => 'Array'));
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $arr, $iter_key);
@@ -16138,18 +16225,14 @@ class SoN::FromOptree 0.01 {
     }
 
     # _alias_list_gap($cv, $op, $sim) -> the GAP for a foreach (enteriter), a
-    # map or grep (mapstart/grepstart) or a call (entersub) whose list aliases
-    # what the wire cannot say, or undef (final audit 2026-11-24, class E):
-    #   - A PACKAGE SCALAR in the list is an EntryDef with no version: read as
-    #     0, and a write to its alias lost. Kept: one alone, whose alias the
-    #     body only assigns (`for ($x) { $_ = 5 }`, rebound as a scalar).
-    #   - AN ELEMENT OR A SLICE OF A NAMED AGGREGATE perl's alias makes exist
-    #     (`for ($a[2]) {}` grows @a; so does a slice passed to a call). Kept:
-    #     a body that stores the alias (that store makes it), or an element
-    #     known to be there (a constant index into an unchanged literal, or
-    #     `@a[N .. $#a]`). Through a reference: not refused (shortcut: the
-    #     probes found none wrong, and the corpus has such lists in grep and
-    #     a foreach; upgrade when one is found).
+    # map or grep (mapstart/grepstart) or a call (entersub) over A SLICE OF A
+    # NAMED AGGREGATE perl's alias makes elements of (`for (@a[0,1]) {}` grows
+    # @a; so does a slice passed to a call), or undef. A slice is no place on
+    # the wire (a package scalar or an element is: _alias_list_items). Kept: a
+    # body that stores the alias (that store makes it), or elements known to be
+    # there (constant indices into an unchanged literal, or `@a[N .. $#a]`).
+    # Through a reference: not refused (shortcut: the probes found none wrong;
+    # upgrade when one is found).
     sub _alias_list_gap ($cv, $op, $sim) {
         my $name = $op->name;
         my @kids;
@@ -16206,20 +16289,16 @@ class SoN::FromOptree 0.01 {
         };
         for my $t (@items) {
             my $n = $t->name;
-            if ( $n eq 'gvsv' || $n eq 'rv2sv' && ${ $t->first } && _strip_null( $t->first )->name eq 'gv' ) {
-                next if @items == 1 && $iter && !$reads;
-                return "GAP: a package scalar aliased by a foreach, map or grep is not yet lowered -- the"
-                     . " list holds its name, not its value, and a write through the alias is lost\n";
-            }
+            # (a package scalar or an element is its place: _alias_list_items)
             my $slice = $n =~ /\A(?:aslice|hslice)\z/;
-            next unless $slice || $n =~ /\A(?:aelem|helem|aelemfast_lex)\z/;
+            next unless $slice;
             my @k; for (my $k = $t->first; $k && $$k; $k = $k->sibling) { push @k, $k }
             my $container = $n eq 'aelemfast_lex' ? $t : $slice ? $k[-1] : $k[0];
             next unless $n eq 'aelemfast_lex' || $named->($container);
             next if $stores;
             next if _element_is_there($cv, $t, $sim);
-            return "GAP: an element " . ( $slice ? 'or a slice ' : '' ) . "perl's alias may make exist is not yet lowered"
-                 . " -- a foreach, map, grep or call over it creates it, and the wire does not\n";
+            return "GAP: a slice perl's alias may make elements of is not yet lowered"
+                 . " -- a foreach, map, grep or call over it creates them, and a slice is no place on the wire\n";
         }
         return undef;
     }
@@ -16322,28 +16401,6 @@ class SoN::FromOptree 0.01 {
     }
     sub _const_val ($cv, $o) { my $v = SoN::FromOptree::ModSets::_const_key($cv, $o); return $v eq '*' ? undef : $v }
 
-    # _iterator_written_unstored($cv, $root, $targ) -> true when an op under
-    # $root may write the iterator slot $targ other than by an `op=` (which is
-    # stored where it stands, element and slot: $store_at_write), leaving its
-    # write-back for the pass's end: an op taking the slot as its target
-    # (TARGMY, `$x .= "!"`), an assignment, an increment, a call that may store
-    # through $_[N]. (The walk learns a write at the loop's sealing, which a
-    # pass that always dies never reaches.)
-    sub _iterator_written_unstored ($cv, $root, $targ) {
-        for my $o ( _subtree_ops($root) ) {
-            next unless $o->can('targ') && $o->targ && $o->targ == $targ;
-            next if $o->name =~ /\A(?:enteriter|null)\z/;   # (a null's targ is the op type it was)
-            return 1 if $o->name ne 'padsv';
-            next unless $o->flags & B::OPf_MOD;
-            my $at = $o; $at = $at->parent while ${ $at->parent } && $at->parent->name eq 'null';
-            my $up = $at->parent;
-            next if $$up && B::class($up) eq 'BINOP' && ( $up->flags & 64 ) && $up->name ne 'sassign' && ${ $up->first } == $$at;
-            if ( $$up && $up->name eq 'entersub' ) { return 1 if _call_may_write_an_argument($cv, $up); next }
-            next if $$up && _is_comparison_optree_op($up->name);   # (a stale OPf_MOD: docs/memory/opf-mod-is-not-a-write.md)
-            return 1;
-        }
-        return 0;
-    }
 
     # _pass_may_leave_early($loop_root) -> true when a pass of the loop may end
     # other than at its end or by a `next`: a return, a goto, a `last` or
@@ -16715,12 +16772,15 @@ class SoN::FromOptree 0.01 {
             my @vals = map {
                 my $v = $_;
                 ($v->isa('SoN::IR::Node::PadAccess') && defined $v->targ
-                    && ($v->sigil // '$') eq '$')
+                    && ($v->sigil // '$') eq '$' && !$v->place)
                     ? ($sim->lookup($v->targ) // $v) : $v
             } $array->v1_inputs->@*;
             $array = $factory->make('ArrayLiteral', inputs => \@vals,
                 ($array->stamp ? (stamp => $array->stamp) : ()));
         }
+        # (the list as it is iterated, made where it stands if it makes an
+        # element exist)
+        _place_vivifying_list($sim, $array);
 
         # A DESTRUCTIVE s/// IS A WRITE THAT _body_writes_targ CANNOT SEE. It
         # scouts for assignment ops, and a subst rebinds its target through the
@@ -16978,7 +17038,28 @@ class SoN::FromOptree 0.01 {
                 ($SHARED_SLOTS && $SHARED_SLOTS->{$x_targ} ? (shared => 1) : ()),
                 mem => $sim->memory);
         };
-        if ($demoted_iter) {
+        # A DEMOTED ITERATOR IS ITS ELEMENT (aliases-as-places): while the
+        # body is walked, its slot is the element `Subscript [list, i]` -- a
+        # read of it reads the element at its version, a store (op-assign,
+        # TARGMY, through `\$x`, a callee's `$_[0]`) stores the element where
+        # it happens, so nothing is written back at the pass's end and a die
+        # leaving the pass leaves the element written (final audit class G).
+        # Over a list of temporaries (no one's variable) the slot is a copy.
+        my $iter_is_element = $demoted_iter
+            && !( $array->can('operation') && $array->operation eq 'ArrayLiteral'
+                  && !defined(eval { $array->symbol })
+                  && ( $array->stamp ? $array->stamp->type : '' ) ne 'ArrayRef'   # (a [...] is a container)
+                  && !grep { $_ isa SoN::IR::Node::Access && $_->place } $array->inputs->@* );
+        # (A LIST A CALL RETURNS -- `values %h`, a grep's -- may be perl's
+        # aliases of what the call read: its element is no place on the wire.)
+        die "GAP: a written foreach iterator over a list a call returns is not yet lowered -- perl's"
+          . " alias may be the value the call read (values, grep, sort), and that is no place on the wire\n"
+            if $demoted_iter
+            && ( $array isa SoN::IR::Node::Call
+                 || !$iter_is_element && grep { $_ isa SoN::IR::Node::Call } $array->inputs->@* )
+            && _iterator_may_be_written($cv, $loop_root, $x_targ);
+        $ALIAS_STATS{ 'iter-' . ( $iter_is_element ? 'place' : 'value' ) }++;
+        if ($demoted_iter && !$iter_is_element) {
             my $store = $factory->make('Assign', inputs => [$iter_slot->(), $elem]);
             _place($sim, $store);
         }
@@ -17026,12 +17107,9 @@ class SoN::FromOptree 0.01 {
                     inputs => [$array, $i_phi]);
                 _place($s, $factory->make('Assign', inputs => [$lvalue, $new]));
                 $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
-                # A DEMOTED ITERATOR IS READ THROUGH ITS SLOT, so the slot is
-                # stored too: only the element was, and `$x += 1; print $x`
-                # in an eval body printed the pass's start (final audit
-                # 2026-11-24; probes/f/n20 matched perl only by its die
-                # never firing).
-                if ($demoted_iter) {
+                # A DEMOTED ITERATOR'S COPY (over temporaries) is read through
+                # its slot, so the slot is stored too (probes/f/n20).
+                if ($demoted_iter && !$iter_is_element) {
                     my $slot = $factory->make('PadAccess', targ => $x_targ,
                         do { my ($sg, $sy) = _padparts($cv, $x_targ); (sigil => $sg, symbol => $sy) },
                         ($SHARED_SLOTS && $SHARED_SLOTS->{$x_targ} ? (shared => 1) : ()),
@@ -17040,42 +17118,14 @@ class SoN::FromOptree 0.01 {
                 }
             }
             : undef;
-        # (A DEMOTED ITERATOR a callee writes is stored after each call passed
-        # it, for the same reason; its pass-end write-back below stays for a
-        # write through `my $r = \$x`.)
-        my $after_call = $demoted_iter && !$writes_iter
-            && !( $array->can('operation') && $array->operation eq 'ArrayLiteral'
-                  && !defined(eval { $array->symbol }) )
-            ? sub ($s) {
-                my $slot = $factory->make('PadAccess', targ => $x_targ,
-                    do { my ($sg, $sy) = _padparts($cv, $x_targ); (sigil => $sg, symbol => $sy) },
-                    ($SHARED_SLOTS && $SHARED_SLOTS->{$x_targ} ? (shared => 1) : ()),
-                    mem => $s->memory);
-                my $lvalue = $factory->make('Subscript', kind => 'array', inputs => [$array, $i_phi]);
-                _place($s, $factory->make('Assign', inputs => [$lvalue, $slot], if_changed => 1));
-                $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
-            }
-            : undef;
-        # (the eval's ways out before the body: one the body adds leaves a
-        # pass, as a die does)
-        my $exc_frame = $EXC_FRAMES[-1];
-        $exc_frame = undef if $exc_frame && $exc_frame->{rethrow};
-        my $edges_before = $exc_frame ? scalar( ( $exc_frame->{edges} // [] )->@* ) : 0;
         {
             local $SoN::FromOptree::StackSim::ON_DEFINE{$x_targ} = $store_at_write;
-            local $AFTER_CALL_PASSING{$x_targ} = $after_call;
+            local @ITER_ELEMENT{ $iter_is_element ? ($x_targ) : () } = ( [ $array, $i_phi ] );
+            $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array
+                if $iter_is_element && $array->can('id');
             _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
                 undef, \@break_projs, 1);
         }
-        # A DEMOTED ITERATOR IS WRITTEN BACK AT THE PASS'S END (below), and a
-        # die the body may make into an eval of this graph passes it by: its
-        # way out carries the restores of `local`s, not the write-back (final
-        # audit 2026-11-24, class G: `1 2` for perl's `1! 2`).
-        die "GAP: a foreach iterator written in a pass a die may leave is not yet lowered -- its"
-          . " write-back is at the pass's end, and the die's way out does not carry it\n"
-            if $demoted_iter && $exc_frame
-            && scalar( ( $exc_frame->{edges} // [] )->@* ) > $edges_before
-            && _iterator_written_unstored($cv, $loop_root, $x_targ);
         # The iterator's write as guessed (it is checked before the sealing:
         # a wrong guess walks again either way).
         _check_writes($hint, $x_targ, $writes_iter, ( $sim->lookup($x_targ) // $elem )->resolved != $elem);
@@ -17138,22 +17188,6 @@ class SoN::FromOptree 0.01 {
             if $x_targ !~ /\A\d+\z/ && $array->can('id')
             && _iterator_may_be_written($cv, $loop_root, $x_targ);
 
-        # AND A DEMOTED ONE WRITES BACK what its slot holds: a callee writing
-        # through $_[0] (`bump($x)`) changed the slot, and perl's alias is the
-        # element. Not into an anonymous list -- `for my $x (1,2) { bump($x) }`
-        # dies in perl on the readonly value, and `(1,2)[0] = ...` is not
-        # assignable -- and not into a scalar's one-element wrapper.
-        if ($demoted_iter && !$writes_iter
-            && !( $array->can('operation') && $array->operation eq 'ArrayLiteral'
-                  && !defined(eval { $array->symbol }) )) {
-            my $lvalue = $factory->make('Subscript', kind => 'array',
-                inputs => [$array, $i_phi]);
-            my $store = $factory->make('Assign',
-                inputs => [$lvalue, $iter_slot->()], if_changed => 1);
-            _place($sim, $store);
-            $MUTATED_LITERALS{ Scalar::Util::refaddr($array) } = $array if $array->can('id');
-        }
-
         # THE STORE-BACK, and only when the body actually wrote the iterator.
         # Adding it unconditionally would put a memory effect in every foreach
         # that perl does not perform, and order reads that are currently free
@@ -17178,7 +17212,9 @@ class SoN::FromOptree 0.01 {
                 && $array->operation eq 'ArrayLiteral'
                 && scalar($array->v1_inputs->@*) == 1
                 && $array->v1_inputs->[0]->can('operation')
-                && $array->v1_inputs->[0]->operation eq 'PadAccess') {
+                && $array->v1_inputs->[0]->operation eq 'PadAccess'
+                # (a place is stored through, below: the variable itself)
+                && !$array->v1_inputs->[0]->place) {
                 # (CARRIED ROUND THE LOOP like any variable the body writes:
                 # a Phi at the Loop, its back edge the new value -- the pass
                 # is still a pass, and the loop leaves by its exit. Left
@@ -24575,6 +24611,11 @@ class SoN::FromOptree 0.01 {
                 return 1 if ( $SHARED_SLOTS && $SHARED_SLOTS->{$1} )
                     || ( $REFERENCED->{$1} );
             }
+            # (A CALL HANDED THE SCALAR whose callee stores through $_[N]: it
+            # is passed as its place, and the store is the variable's.)
+            return 1 if $o->name eq q{entersub}
+                && grep( { ( $var->( _strip_null($_) ) // '' ) eq $key } _entersub_args_and_invocant($o) )
+                && SoN::FromOptree::ModSets::call_stores_through_args($cv, $o);
             # A CALL WRITES A PACKAGE SCALAR some sub in the program stores, and
             # a string eval may store any.
             if ( $o->name =~ /\Aenter(?:sub|eval)\z/ && $key =~ /\Ag(.+)\z/s ) {

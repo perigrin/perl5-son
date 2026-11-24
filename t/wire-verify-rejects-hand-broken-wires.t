@@ -56,6 +56,9 @@ my %src = (
     # a restore of that local, so it is not live there -- probe p/lo22)
     t10 => 'our $g = 1; sub b { $g++ } for my $i (1..3) { b(); local $g = $g + 10; next if $i == 2; print "$g\n"; } print "$g\n";',
     t9 => 'eval \'package Other; sub g { "g$_[0]" } 1\' or die; sub f { return Other::g($_[0]) } print f(2), "\n";',
+    # (aliases as places: a call whose callee stores the argument by name and
+    # then reads @_)
+    t11 => 'our $x=1; sub f { $x=2; $_[0] } print f($x), "\n";',
 );
 sub rejected ( $what, $w, $rule ) {
     my @v = SoN::Verify::verify($w)->{violations}->@*;
@@ -191,4 +194,17 @@ sub rethrow_edge ($w) {
         or diag join '; ', map { "$_->{op}#$_->{node} $_->{rule} $_->{detail}" } @v;
 }
 
+# unplace($w, $node, $version): the place $node read as a value at $version --
+# the alias carried as a value where it is not private (aliases-as-places).
+sub unplace ( $node, $version ) {
+    delete $node->{fields}{place};
+    delete $node->{fields}{vivify};
+    $node->{mem_in} = $version;
+}
+{   my $w = wire( $src{t11} );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
+    unplace( $a, $c->{mem_in} );
+    rejected( 'M17 an argument a callee stores by name before reading @_, passed as a value', $w, qr/\Aalias-not-private\z/ );
+}
 done_testing;

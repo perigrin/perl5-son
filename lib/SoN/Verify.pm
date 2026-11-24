@@ -49,7 +49,100 @@ sub verify ($wire) {
         $res{graphs}++;
         _graph_v2( $name, $wire->{methods}{$name}, \%res );
     }
+    _alias_private( $wire, \%res );
     return \%res;
+}
+
+# (V12) AN ALIAS CARRIED AS A VALUE IS PRIVATE (docs/plans/2026-11-24-aliases-as-places.md):
+# a sub call's argument that is a read of a named variable at a version (not
+# a `place`) must not be stored, in any callee the wire holds, before that
+# callee reads @_ -- by its own store, or by a call whose subs (closed over
+# the wire) store it or cannot be told. A call of no sub known here (a code
+# value) is not checked. Alias-list items of a named variable are places
+# always (B::SoN refuses a body that stores a scalar its list holds).
+sub _alias_private ( $wire, $res ) {
+    my $m = $wire->{methods} // {};
+    my %by = map { my $g = $_; ( $g => { map { $_->{id} => $_ } ( $m->{$g}{nodes} // [] )->@* } ) } keys $m->%*;
+    # src($g, $node) -> the variable an access names (an element: any of its container's), or undef
+    my $src;
+    $src = sub ( $g, $n ) {
+        return undef unless $n;
+        my ( $op, $f ) = ( $n->{op}, _fields($n) );
+        return '$' . ( $f->{package} // 'main' ) . "::$f->{symbol}" if $op eq 'EntryDef' && ( $f->{sigil} // '' ) eq '$';
+        return 'agg:' . ( $f->{sigil} // '' ) . ( $f->{package} ? "$f->{package}::" : '' ) . $f->{symbol} if $op eq 'EntryDef';
+        return 'my:' . ( $f->{sigil} // '' ) . $f->{symbol} if $op eq 'PadAccess' && $f->{shared};
+        return 'agg:' . ( $f->{sigil} // '' ) . $f->{symbol} if $op =~ /\A(?:ArrayLiteral|HashLiteral)\z/ && defined $f->{symbol};
+        if ( $op eq 'Subscript' ) { my $c = $src->( $g, $by{$g}{ $n->{inputs}[0] // '' } ); return defined $c ? "elem:$c" : undef }
+        return undef;
+    };
+    # what each graph's own stores name, and the subs it calls (undef: one not known here)
+    my $callees = sub ( $g, $c ) {
+        my ( $k, $name ) = ( _fields($c)->{dispatch_kind} // '', _fields($c)->{name} // '' );
+        return [ grep { $m->{$_} } $name ] if $k eq 'direct' && $m->{$name};
+        if ( $k eq 'method' ) { my @t = grep { /::\Q$name\E\z/ } keys $m->%*; return @t ? \@t : undef }
+        return undef;
+    };
+    my %own;
+    for my $g ( keys $m->%* ) {
+        for my $n ( values $by{$g}->%* ) {
+            my @t = $n->{op} eq 'Assign' && !_fields($n)->{record} ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
+                  : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
+            for my $t ( grep { defined && !ref } @t ) { my $k = $src->( $g, $by{$g}{$t} ); $own{$g}{$k} = 1 if defined $k }
+        }
+    }
+    my %writes;    # graph -> { key => 1 } transitively, or 'any'
+    my $writes;
+    $writes = sub ( $g, $seen = {} ) {
+        return $writes{$g} if $writes{$g};
+        return {} if $seen->{$g}++;
+        my %w = ( $own{$g} // {} )->%*;
+        for my $c ( grep { $_->{op} eq 'Call' && ( _fields($_)->{dispatch_kind} // '' ) ne 'builtin' } values $by{$g}->%* ) {
+            my $t = $callees->( $g, $c ) or return $writes{$g} = { any => 1 };
+            for my $h ( $t->@* ) { my $hw = $writes->( $h, $seen ); return $writes{$g} = { any => 1 } if $hw->{any}; %w = ( %w, $hw->%* ) }
+        }
+        return $writes{$g} = \%w;
+    };
+    # stores($g, $v, $key) -> the version $v of graph $g may store $key
+    my $stores = sub ( $g, $v, $key ) {
+        my $n = $by{$g}{$v} or return 0;
+        if ( $n->{op} eq 'Call' && ( _fields($n)->{dispatch_kind} // '' ) ne 'builtin' ) {
+            my $t = $callees->( $g, $n ) or return 1;
+            return scalar grep { my $w = $writes->($_); $w->{any} || $w->{$key} } $t->@*;
+        }
+        my @t = $n->{op} eq 'Assign' ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
+              : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
+        return scalar grep { defined && !ref && ( $src->( $g, $by{$g}{$_} ) // '' ) eq $key } @t;
+    };
+    for my $g ( sort keys $m->%* ) {
+        for my $c ( sort { $a->{id} <=> $b->{id} } grep { $_->{op} eq 'Call' && ( _fields($_)->{dispatch_kind} // '' ) ne 'builtin' } values $by{$g}->%* ) {
+            my $t = $callees->( $g, $c ) or next;
+            for my $i ( 0 .. $#{ $c->{inputs} } ) {
+                my $a = $by{$g}{ $c->{inputs}[$i] // '' } or next;
+                next if _fields($a)->{place} || !defined $a->{mem_in};
+                my $key = $src->( $g, $a ) // next;
+                for my $h ( $t->@* ) {
+                    my %args = map { $_->{id} => 1 } grep { $_->{op} eq 'ArgsSource' } values $by{$h}->%*;
+                    # (each read of @_ at a version: $_[N], a shift, a list assign of it)
+                    for my $r ( grep { defined $_->{mem_in} && grep { defined && !ref && $args{$_} } ( $_->{inputs} // [] )->@* } values $by{$h}->%* ) {
+                        my ( @q, %seen ) = ( $r->{mem_in} );
+                        while ( defined( my $v = shift @q ) ) {
+                            next if $seen{$v}++;
+                            my $vn = $by{$h}{$v} or next;
+                            last if $vn->{op} eq 'MemStart' && !@q;
+                            if ( $stores->( $h, $v, $key ) ) {
+                                push $res->{violations}->@*, { graph => $g, node => $c->{id}, op => 'Call', rule => 'alias-not-private',
+                                    detail => "argument $i ($key) is read by $h after $vn->{op}#$v may store it" };
+                                @q = ();
+                                last;
+                            }
+                            push @q, $vn->{op} eq 'Phi' ? grep { defined && !ref } $vn->{inputs}->@* : grep { defined } $vn->{mem_in};
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return;
 }
 
 sub _fields ($n) { $n->{fields} // {} }
@@ -342,6 +435,9 @@ sub _graph_v2 ( $name, $g, $res ) {
             return $alias_list{ $c->{id} } = ( @u && !grep { !$is_place_use->(@$_) } @u ) ? 1 : 0;
         }
         return $i < ( $f->{targets} // 1 ) if $op eq 'Assign';
+        # (a control node's control predecessor -- an alias list made where it
+        # stands, as one that makes an element exist is -- is no value use)
+        return 1 if $op =~ /^(?:Loop|Region|Proj)$/ || $op eq 'If' && $i == 0;
         return $i == $#{ $c->{inputs} } if $op eq 'Slice';
         return 1 if $op eq 'Call' && ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || defined $c->{mem_in} );
         # (pos() names the variable whose position it is, not its value)

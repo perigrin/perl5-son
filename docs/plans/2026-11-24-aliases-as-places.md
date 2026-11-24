@@ -52,13 +52,14 @@ A die passes that write-back by.
 
 ### Wire change (WIRE, approved)
 
-**`fields.place: true`** on an access node: `PadAccess` (a `$` variable kept in memory), `EntryDef` (`$`), `Subscript`, or `FieldAccess` (`$`).
+**`fields.place: true`** on an access node: `PadAccess` (a `$` variable kept in memory), `EntryDef` (`$`), `Subscript`, `FieldAccess` (`$`), or `CellRead` (a captured variable: its cell).
 - The node names storage. It has no `mem_in`, `control_in` or `mem_out`.
 - Hash-consing keeps it apart from a read of the same variable, because `fields` are content.
 - It may be used only where perl binds an alias:
   - an input of a sub `Call` (`direct`, `method`, `indirect`, `dynamic_method`), the invocant included;
   - an item of an **alias list**: an `ArrayLiteral` with no `symbol` that a foreach, `map` or `grep` walks.
-- A `Subscript` place also carries **`fields.vivify: true`** where perl's binder makes the element exist: a foreach, `map` or `grep` item, or an element of a slice passed to a call. Perl's deferred element (`f($a[9])`) does not. This is a Perl fact, so the producer states it. Chalk does not guess it.
+- A `Subscript` place also carries **`fields.vivify: true`** where perl's binder makes the element exist: a foreach, `map` or `grep` item. Perl's deferred element (`f($a[9])`) does not. This is a Perl fact, so the producer states it. Chalk does not guess it.
+- **An alias list holding a `vivify` place is a store.** It is a memory version made where it stands (`control_in`, `mem_in`, `mem_out`), so a read of the aggregate after it (`exists $h{k}`) names it.
 
 **An alias carried as a value** is any other node in those positions: a read with `mem_in`, a constant, a computed value. It means the producer proved the alias private, or perl's alias is of a temporary.
 
@@ -78,17 +79,22 @@ Nothing else on the wire changes:
 ### What the producer does
 
 **Calls (classes C, H; and design 3's `inc($x += 1)`).**
-- At each sub call, the producer asks the privacy question already written as `ModSets::arg_stored_by_call`: does a sub the call reaches store the argument's variable by name and then read `@_`? For a method's invocant, it asks `ModSets::stores_invocant`.
+- At each sub call, the producer asks the privacy question already written as `ModSets::arg_stored_by_call`: does a sub the call reaches store the argument's variable by name and then read `@_`? For a method's invocant, it asks `ModSets::stores_invocant`. A sub that stores through `$_[N]` (`ModSets::call_stores_through_args`) is passed places too: a written alias is always a place.
+- A call the walk cannot see into (a code value, or one the callee makes before it reads `@_`) proves nothing. Its arguments are places unless each is a `my` variable that no closure or reference reaches. This closes the old shortcut "an unknown call is not counted" (probe al/c08 was a silent wrong answer).
 - Where the alias is not private, the argument is a `place`. A `my` scalar so passed is demoted, so it lives in memory (`$ADDR_TAKEN`, as `\$x` demotes it). Every later read of it is a versioned read after the call.
 - The two GAPs go: `a variable passed to a sub that stores it by name and reads its arguments` and `a method that stores $_[0]`.
 
 **Alias lists (class E).**
 - A foreach, `map` or `grep` over a list of items builds its `ArrayLiteral` from places for each package scalar, demoted `my` scalar and element. Each element place carries `vivify`.
 - The per-pass read is a memory read through the alias. A write is an `Assign` to that same `Subscript`.
-- `_alias_list_gap` and `_element_is_there` go.
+- A `my` scalar in a foreach list whose alias may be written lives in memory, so it is a place too.
+- `_alias_list_gap` keeps one job: a **slice** perl's alias makes elements of (`for (@a[0,1]) {}`) is refused by name. A slice is no access node, so a slice place would be a further wire shape. That is left for a later approval.
 
 **The foreach iterator (class G).**
 - A demoted iterator is no longer a copy in its pad slot. While the pass runs, `$x` IS the element `Subscript [list, i]`: a read of it reads the element at the current version, and a store to it (op-assign, `TARGMY`, `\$x`, a callee's `$_[0]`) stores the element.
+- The mechanism is one rule in the node factory. While the body is walked (`%SoN::FromOptree::ITER_ELEMENT`, local to each CV's walk), a `PadAccess` of the iterator's slot is built as the element `Subscript [list, i]`.
+- Over an anonymous list of temporaries (no one's variable, no place among its items), the slot stays a copy. A `[...]` is a container, not temporaries.
+- A written iterator over a list a call returns (`values %h`, a grep's or a sort's list) is refused by name. perl's alias may be what the call read, and that is no place on the wire.
 - So every write is a store where it happens, and nothing is left to write back. These go:
   - the pass-end write-back (`if ($demoted_iter && !$writes_iter ...)`);
   - `%AFTER_CALL_PASSING` and its `$after_call`;
@@ -106,6 +112,8 @@ Nothing else on the wire changes:
 The producer counts each decision. `tools/alias-fastpath.pl` reports them over chalk's lib wires.
 
 ### The proof rule (verifier V12, `alias-not-private`)
+
+V12 checks the call half. An alias-list item of a named variable is always a place, and B::SoN refuses a body that stores a scalar its list holds (`_foreach_body_writes_its_scalar`). So no value item of a named source reaches the wire, and the list half below has nothing to check. Its mutation case could not be built from a program B::SoN translates, and it was dropped.
 
 V12 applies to an alias carried as a value whose source is named: a read with `mem_in` of a package scalar, a `my` scalar in memory, a field, or an element of a named aggregate. It must hold:
 
