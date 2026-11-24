@@ -5834,21 +5834,24 @@ class SoN::FromOptree 0.01 {
     # (the foreach walker sets it, local to the body walk). targ => code($sim).
     our %AFTER_CALL_PASSING;
     sub _handle_entersub ($cv, $op, $sim, $factory, $ctx) {
-        # AN ARGUMENT THAT IS AN ASSIGNMENT OR A ?: passes the variable it
-        # stores or picks, and a sub that writes $_[N] writes that variable:
+        # AN ARGUMENT THAT IS AN ASSIGNMENT passes the variable it stores,
+        # and a sub that writes $_[N] writes that variable:
         # the wire passes the value, so the write would be lost (final audit
         # 2026-11-24, class D: `inc($x += 1)` left $x at 2 for perl's 3).
         for my $a (_entersub_args_and_invocant($op)) {
             my $t = $a;
             $t = $t->first while $$t && $t->name eq 'null' && $t->can('first') && ${$t->first};
+            # (not a ?:, whose arm the call is handed as an alias: lowered)
             my $what = !$$t ? undef
-                : $t->name eq 'cond_expr' ? 'a ?:'
                 : $t->name =~ /\A(?:sassign|padsv_store|(?:i_)?pre(?:inc|dec))\z/
                     || B::class($t) eq 'BINOP' && ( $t->flags & 64 ) && $t->name ne 'sort'
                     || $t->name eq 'multiconcat' && ( $t->flags & 64 ) ? 'an assignment'
                 : undef;
+            # (a sub known to store through $_[N]; shortcut: one that makes a
+            # call nothing can be said of is not counted, as before this rule
+            # -- Carp's `caller_info(++$i)`; upgrade when one is seen writing)
             die "GAP: $what used as the target of a sub's write through \$_[N] is not yet lowered -- the store would be lost\n"
-                if $what && _call_may_write_an_argument($cv, $op);
+                if $what && SoN::FromOptree::ModSets::call_stores_through_args($cv, $op);
         }
         if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
         die "GAP: a method that stores \$_[0] is not yet lowered -- \$_[0] is the caller's invocant"
@@ -11312,10 +11315,10 @@ class SoN::FromOptree 0.01 {
         # yet). Non-constant bounds are refused: the synthesized
         # continuation condition needs high+1 at translation time.
         if ($name eq 'enteriter') {
-            if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
             die "GAP: a foreach over a scalar variable its body may write is not yet lowered -- the"
               . " iterator is perl's alias of the variable, and the walk binds it to the value\n"
                 if _foreach_body_writes_its_scalar($cv, $op, $ctx);
+            if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
             local $CONTINUE_START = _continue_start($op);
             # The iteration variable's pad slot rides on the enteriter op
             # itself (LVINTRO). Implicit $_ and package-var iterators have
@@ -11734,8 +11737,10 @@ class SoN::FromOptree 0.01 {
                             && $pkg_target->v1_inputs->@* == 1 );
                 # A DESTINATION NEITHER TAKES is refused, not dropped (final
                 # audit 2026-11-24, class D: `($x = 1) .= "z"` lost the append).
-                if ( $pkg_target && !$elem_dest && !$pkg_target->isa('SoN::IR::Node::EntryDef') ) {
-                    my $t = ( $op->private & 0x40 ) ? $op->first : $op->last;
+                # (An APPEND's: a plain stacked one's element or deref is
+                # stored below, and anything else there refused below.)
+                if ( ( $op->private & 0x40 ) && $pkg_target && !$elem_dest && !$pkg_target->isa('SoN::IR::Node::EntryDef') ) {
+                    my $t = $op->first;
                     $t = $t->first while $$t && $t->name eq 'null' && $t->can('first') && ${$t->first};
                     die "GAP: an assignment used as the target of an op= is not yet lowered -- its store would be lost\n"
                         if $$t && ( $t->name =~ /\A(?:sassign|padsv_store)\z/ || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) ) );
@@ -16166,16 +16171,20 @@ class SoN::FromOptree 0.01 {
                 next unless $uses->($o);
                 my $at = $o; $at = $at->parent while ${ $at->parent } && $at->parent->name eq 'null';
                 my $p = $at->parent;
-                if ( $$p && $p->name eq 'sassign' && ${ $p->last } == $$at ) { $stores = 1; next }
+                if ( $$p && $p->name eq 'sassign' && $p->can('last') && ${ $p->last } == $$at ) { $stores = 1; next }
                 $reads = 1;
                 $stores = 1 if $$p && ( $p->name =~ /\A(?:orassign|dorassign)\z/ || B::class($p) eq 'BINOP' && ( $p->flags & 64 ) ) && ${ $p->first } == $$at;
                 $stores = 1 if $$p && $p->name eq 'entersub';   # (a call may store it through $_[N])
             }
         }
+        # (not a stash, `$::{"P::"}`: Carp aliases an entry it has just
+        # checked exists -- shortcut: an `exists` guard is not proved, upgrade
+        # when a stash entry is aliased unguarded)
         my $named = sub ($c) {
             $c = _strip_null($c);
             return 1 if $c->name =~ /\A(?:padav|padhv)\z/;
-            return $c->name =~ /\A(?:rv2av|rv2hv)\z/ && ${ $c->first } && _strip_null( $c->first )->name eq 'gv';
+            return 0 unless $c->name =~ /\A(?:rv2av|rv2hv)\z/ && ${ $c->first } && _strip_null( $c->first )->name eq 'gv';
+            return ( eval { _op_gv($cv, _strip_null( $c->first ))->NAME } // '' ) !~ /::\z/;
         };
         for my $t (@items) {
             my $n = $t->name;

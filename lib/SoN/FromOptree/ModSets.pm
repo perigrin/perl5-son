@@ -428,7 +428,10 @@ sub arg_stored_by_call ( $cv, $call ) {
     for my $a (@args) {
         my $o = _strip($a);
         if    ( $o->name =~ /\A(?:padsv|gvsv|rv2sv)\z/ ) { push @places, [ loc => $_->{loc} ] for _target_effects( $cv, $o ) }
-        elsif ( my $p = place( $cv, $o ) )                 { push @places, [ place => $p ] }
+        # (shortcut: an argument that is the caller's own $_[N] aliases what
+        # nothing here names -- any store meets it; not counted, upgrade when
+        # a sub hands its $_[N] on to one storing that variable by name)
+        elsif ( my $p = place( $cv, $o ) ) { push @places, [ place => $p ] if $p->{levels}[-1]{loc} ne 'P' }
     }
     return 0 unless @places;
     my $hits = sub (@eff) {
@@ -446,7 +449,7 @@ sub arg_stored_by_call ( $cv, $call ) {
 # store $hits names (its own, not a `local`; or a call's) comes before a read
 # of @_ (_reads_args_op).
 sub _read_after_store ( $sub, $hits ) {
-    my $root = _root($sub) or return 1;
+    my $root = _root($sub) or return 0;    # (no body here -- XS: it stores none of the program's variables by name)
     my $stored = 0;
     for my $o ( _post_order($root) ) {
         return 1 if $stored && _reads_args_op( $sub, $o );
@@ -481,6 +484,13 @@ sub _post_order ($root) {
 sub _is_local ($o) {
     my $t = $o->name eq 'sassign' && $o->can('last') ? _strip( $o->last ) : $o;
     return ( $t->name =~ /\A(?:gvsv|rv2sv|rv2av|rv2hv)\z/ && ( $t->private & 128 ) ) ? 1 : 0;   # OPpLVAL_INTRO
+}
+
+# call_stores_through_args($cv, $call) -> true when a sub the call reaches
+# stores through its arguments ($_[N], aliases): a P effect in its summary.
+sub call_stores_through_args ( $cv, $call ) {
+    my ($cvs) = _callees( $cv, $call ) or return 0;
+    return scalar grep { grep { $_->{loc} eq 'P' } summary($_)->@* } ( $cvs // [] )->@*;
 }
 
 # stores_invocant($cv, $call) -> true for a method call a sub of whose name
