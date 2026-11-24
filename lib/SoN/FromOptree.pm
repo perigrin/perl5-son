@@ -8226,6 +8226,16 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'padav' || $name eq 'padhv') {
             my $targ = $op->targ;
             my $existing = $sim->lookup($targ);
+            # A `my` AGGREGATE IS ITS OWN LOCATION (design A): a copy is a new
+            # literal, and nothing here aliases one name to another's. Bound to
+            # another name's literal, a write through either changed both (the
+            # re-audit's class A): loud, not a wrong answer.
+            die sprintf "GAP: a `my` aggregate bound to another's location (%s%s is %s's literal)\n",
+                ( _padparts($cv, $targ) )[0, 1], $existing->symbol
+                if $existing && $existing->can('operation')
+                && $existing->operation =~ /\A(?:Array|Hash)Literal\z/
+                && defined $existing->symbol
+                && $existing->symbol ne ( _padparts($cv, $targ) )[1];
             # IN A LOOP, A MUTATION LATER IN THE BODY RAN ON AN EARLIER
             # ITERATION, before this read -- but it is walked after it, so
             # nothing has marked the literal yet. The sub-wide slot scan
@@ -8294,7 +8304,10 @@ class SoN::FromOptree 0.01 {
                     && !$ctx->{mutated_aggregate}{$targ}
                     && !$MUTATED_LITERALS{ Scalar::Util::refaddr($existing) }
                     && $existing->operation eq 'ArrayLiteral'
-                    && !grep { $_->isa('SoN::IR::Node::TernaryExpr') } $existing->v1_inputs->@*) {
+                    # (nor a `my` hash flattened into it: that hash is a location,
+                    # and pushed here it was read after a later store to it)
+                    && !grep { $_->isa('SoN::IR::Node::TernaryExpr')
+                        || ( $_->isa('SoN::IR::Node::HashLiteral') && defined $_->symbol ) } $existing->v1_inputs->@*) {
                 $sim->push_node($_) for $existing->v1_inputs->@*;
                 return ($op->next, 'handled');
             }
@@ -12172,31 +12185,18 @@ class SoN::FromOptree 0.01 {
                             && $MUTATED_SLOTS->{ $target->targ }
                             && grep { $only->isa("SoN::IR::Node::$_") }
                                 qw(ArgsSource PadAccess EntryDef FieldAccess PostfixDeref);
-                        # ...OR A `my` HASH THE PROGRAM WRITES (an element
-                        # store, a delete, a reference to an element): bound
-                        # as its literal, the copy was the hash itself -- `my
-                        # %g = %h; $h{a} = 5; print $g{a}` read 5 for perl's 1.
-                        # Its pairs are read where the copy is made (the
-                        # literal below, pinned there).
-                        my $copies_written_hash = $only->isa('SoN::IR::Node::HashLiteral')
+                        # ...OR A `my` HASH: A COPY IS A NEW LOCATION (design A,
+                        # docs/plans/2026-11-24-copy-and-local-unwind.md). Bound
+                        # as the source's literal, the copy was the hash itself:
+                        # `my %g = %h; $h{a} = 5; print $g{a}` read 5 for perl's
+                        # 1, and `my %opt = %defaults; $opt{color} = "blue"`
+                        # changed %defaults (re-audit class A). Eliding the copy
+                        # was sound only where a syntactic scan proved neither
+                        # side written; the scan had holes, so it always copies:
+                        # the literal below, its pairs read where it is made.
+                        $names_storage ||= $only->isa('SoN::IR::Node::HashLiteral')
                             && defined $only->symbol
-                            && _copies_written_pad_hash($op);
-                        $names_storage ||= $copies_written_hash;
-                        # ...AND OTHERWISE IT IS THE SOURCE'S NODE, which is
-                        # only right while neither side is written: `my %opt
-                        # = %defaults; $opt{color} = "blue"` changed
-                        # %defaults (re-audit 2026-11-23, class A). The copy
-                        # wants a node of its own, a design not made yet.
-                        if ($sigil eq '%' && !$names_storage
-                            && $only->isa('SoN::IR::Node::HashLiteral') && defined $only->symbol) {
-                            my $src = _copied_pad_hash_targ($op);
-                            die "GAP: a copy of a hash that may then be written is not yet lowered"
-                              . " -- the wire binds it to the original's node, so a write to either"
-                              . " would change both\n"
-                                if !$is_pad
-                                || grep { $MUTATED_SLOTS->{$_} || $HASH_WRITTEN->{$_} || $ctx->{shared_lexicals}{$_} }
-                                    $target->targ, $src // ();
-                        }
+                            && _copies_pad_hash($op);
                         if (($is_aggregate_value && !$names_storage)
                             || $is_list_builtin) {
                             # A DEREFERENCE BOUND AS A NAMED AGGREGATE IS A
@@ -12309,9 +12309,11 @@ class SoN::FromOptree 0.01 {
                         $_->isa('SoN::IR::Node::PadAccess')
                             && ($_->sigil // '') =~ /\A[\@%]\z/
                     } $rhs->@*;
-                    # (a `my` hash the program writes, copied: read here too)
-                    $copies_container ||= $rhs->@* == 1 && $rhs->[0]->isa('SoN::IR::Node::HashLiteral')
-                        && defined $rhs->[0]->symbol && _copies_written_pad_hash($op);
+                    # (a `my` hash, copied or among other pairs: read here too;
+                    # floating, `my %d = (%h, x => 1); $h{a} = 2` read the store)
+                    $copies_container ||= grep {
+                        $_->isa('SoN::IR::Node::HashLiteral') && defined $_->symbol
+                    } $rhs->@*;
                     # A PACKAGE OR SHARED AGGREGATE ASSIGNED IN A LOOP BODY is
                     # made there too: its store below writes this literal, and
                     # floating, the literal was spelled above the loop with the
@@ -20456,13 +20458,8 @@ class SoN::FromOptree 0.01 {
     # its own.
     # _aassign_introduces($aassign) -> true when the list assignment's target
     # is a `my` aggregate: a padav/padhv on its LHS carries OPpLVAL_INTRO.
-    # _copies_written_pad_hash($aassign) -> its right side is one `my` hash
-    # (`... = %h`) the sub writes somewhere ($MUTATED_SLOTS: an element store,
-    # a delete, a reference to an element).
-    sub _copies_written_pad_hash ($aassign) {
-        my $t = _copied_pad_hash_targ($aassign);
-        return $t && $MUTATED_SLOTS && $MUTATED_SLOTS->{$t} ? 1 : 0;
-    }
+    # _copies_pad_hash($aassign) -> its right side is one `my` hash (`... = %h`).
+    sub _copies_pad_hash ($aassign) { return _copied_pad_hash_targ($aassign) ? 1 : 0 }
     # _copied_pad_hash_targ($aassign) -> the targ of the one `my` hash its
     # right side is, or undef.
     sub _copied_pad_hash_targ ($aassign) {
