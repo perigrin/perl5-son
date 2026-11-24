@@ -171,55 +171,11 @@ class SoN::Deparse 0.01 {
         ftzero => sub { sprintf('(-z %s)', $_[0]) },
     );
 
-    our %MEM_MIN_INPUTS = (
-        Call         => 1,   # [arg, ..., memory]
-        EntryWrite   => 2,   # [slot, value, memory]
-        # NOT Assign: the producer builds none with a memory input (every
-        # construction is [targets..., values...]), and listed here a list
-        # assign ending in a `shift` or `each` -- a memory point, and a VALUE
-        # -- had that value taken for an edge: unbound, it ran twice.
-        Delete       => 2,   # [container, key, memory]
-        # A `local` element's restore at its block's exit.
-        ElemRestore  => 4,   # [container, key, saved, existed, memory]
-        # THE SAME SHAPE AS Delete, one operator over, and it was missing --
-        # so `exists $h{k}` counted its memory edge as a VALUE, bound the
-        # EntryWrite that produced it, and then asked to render a store as an
-        # expression: "no rule for value node `EntryWrite`" on comp/require.t.
-        # t/deparse-memory-table-matches-producer.t scrapes FromOptree for the
-        # construction sites so this table cannot drift from it again.
-        Exists       => 2,   # [container, key, memory]
-        Subscript    => 2,   # [container, index, memory]
-        Count        => 1,   # [aggregate, memory]
-        # `ref EXPR` reads the referent's class, which a bless changes.
-        RefType      => 1,   # [reference, memory]
-        PostfixDeref => 1,   # [container, memory]
-        # A reference to an element is to the one there where it is taken.
-        Ref          => 1,   # [location, memory]
-        EntryDef     => 0,   # [memory] -- ordering only
-        # A pad slot that is address-taken lives in memory, so its READ
-        # carries a memory version too -- measured, `my $x=1; my $r=\$x`
-        # gives `PadAccess(6) in=[Assign]`, the store it observes. Counting
-        # that as a value bound the Assign and asked to render it as one.
-        PadAccess    => 0,   # [memory] -- ordering only
-        # A class field's read: the field store before it is its version.
-        FieldAccess  => 0,   # [memory] -- ordering only
-        # A destructive s/// stores into its target, so it advances the chain
-        # and carries it. Its optional slots make the operand count vary, so
-        # the table cannot express it -- _subst_operands resolves those from
-        # `pattern_is_input` and the `replacement` field, and the memory edge
-        # is whatever is left. Listed at 1 so the reads scan drops a trailing
-        # memory input; the renderer never consults this entry.
-        RegexSubst   => 1,
-        # A destructive tr/// stores into its target, so it advances the
-        # memory chain and carries the version it supersedes. Without this the
-        # trailing memory edge counted as a VALUE, which bound the EntryWrite
-        # that produced it and then asked to render a store as an expression
-        # -- "no rule for value node `EntryWrite`".
-        Transliterate => 1,
-        MakeCell     => 1,   # [init_value, memory]
-        CellRead     => 1,   # [cell, memory]
-        CellWrite    => 2,   # [cell, value, memory]
-    );
+    # WHICH INPUT IS MEMORY is the wire's to say, not a count of inputs:
+    # SoN::Wire::as_v1 appends a node's named mem_in and marks it
+    # `memory_input` (final audit, clause 3: the table of how many inputs
+    # each kind has was positional memory, and a kind missing from it --
+    # Exists once -- bound a store as a value). _mem_input reads the mark.
     field %rendered;   # id => Perl expression text
 
     # THE NODES IN ID ORDER, every time. A walk over `values %$nodes` runs in
@@ -1528,10 +1484,7 @@ class SoN::Deparse 0.01 {
             my @in = ($n->{inputs} // [])->@*;
             # A CALL SAYS WHETHER IT HAS ONE (memory_input): a `shift` passed
             # as its last argument is a memory point too, and is an argument.
-            pop @in if @in > ($MEM_MIN_INPUTS{ $n->{op} // '' } // 99)
-                    && (($n->{op} // '') eq 'Call'
-                        ? (($n->{fields} // {})->{memory_input})
-                        : $self->_is_memory($in[-1]));
+            pop @in if defined $self->_mem_input($n);
 
             $reads{$_}++ for @in;
         }
@@ -1731,10 +1684,9 @@ class SoN::Deparse 0.01 {
         # that produced it, which is where the value is still correct.
         my %mem_next;
         for my $n ($self->_nodes_in_order) {
-            my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in > ( $MEM_MIN_INPUTS{ $n->{op} // '' } // 99 );
-            next unless $self->_is_memory( $in[-1] );
-            push $mem_next{ $in[-1] }->@*, $n;
+            my $m = $self->_mem_input($n) // next;
+            next unless $self->_is_memory($m);
+            push $mem_next{$m}->@*, $n;
         }
         # A READ THE LOOP RE-READS CANNOT BE CAPTURED ONCE. A `while` or C-style
         # `for` evaluates its condition every pass -- the Loop says so with
@@ -2683,7 +2635,7 @@ class SoN::Deparse 0.01 {
                 # value into `$eff23` before the store, and round-trips.
                 next if defined $n->{control_in} || exists $bound{ $n->{id} };
                 my @in = ( $n->{inputs} // [] )->@*;
-                next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
+                next unless defined $self->_mem_input($n);
                 # A FOREACH ALIAS'S READ BY INDEX -- the arm a hole takes, an
                 # `exists` over the same element choosing it -- is perl's alias
                 # read where it is used: `$h{ k($x) } = $x` reads the right side
@@ -3072,12 +3024,12 @@ class SoN::Deparse 0.01 {
             next unless ( $consumers{ $n->{id} } // [] )->@*;
             # (a class name is a string of its own: nothing aliases it)
             next unless $class_read || $safe_read->( $n->{id} );
-            # MEMORY BY POSITION, as %MEM_MIN_INPUTS says: a call that is a
-            # memory barrier produces a version without consuming one, so
-            # _is_memory does not recognise it, and a read after it is
+            # MEMORY BY ITS NAME (memory_input), not by _is_memory: a call
+            # that is a memory barrier produces a version without consuming
+            # one, so _is_memory does not recognise it, and a read after it is
             # exactly the read that goes stale.
             my @in = ( $n->{inputs} // [] )->@*;
-            next unless $list_call || $class_read && $rop eq 'Call' || @in > ( $MEM_MIN_INPUTS{$rop} // 99 );
+            next unless $list_call || $class_read && $rop eq 'Call' || defined $self->_mem_input($n);
             my $version = $nodes->{ $in[-1] } or next;
             # A READ PINNED WHERE IT STANDS (it may die) is a memory version
             # that changes nothing: the memory it reads is the memory after it.
@@ -4718,10 +4670,7 @@ class SoN::Deparse 0.01 {
             # memory Phi led to the store before it, hoisted as a value.
             next if $self->_is_memory($id) && !$self->_read_as_value($id);
             my @in = ($n->{inputs} // [])->@*;
-            pop @in if @in > ($MEM_MIN_INPUTS{ $n->{op} // '' } // 99)
-                    && (($n->{op} // '') eq 'Call'
-                        ? (($n->{fields} // {})->{memory_input})
-                        : $self->_is_memory($in[-1]));
+            pop @in if defined $self->_mem_input($n);
             push @queue, @in;
         }
         return @roots;
@@ -7819,6 +7768,10 @@ class SoN::Deparse 0.01 {
         my $n = $nodes->{$id} or die "GAP: dangling input $id\n";
         my $op = $n->{op};
         my @in = ($n->{inputs} // [])->@*;
+        # (the memory a node reads is no operand: the wire names it, and a
+        # call's is left to _call_expr)
+        my $mem = $op eq 'Call' ? undef : $self->_mem_input($n);
+        pop @in if defined $mem;
 
         my $text;
         if ($op eq 'Constant') {
@@ -8005,7 +7958,7 @@ class SoN::Deparse 0.01 {
                 $lv, $cpat, $crep, $flags);
         }
         elsif ($op eq 'Subscript') {
-            # AN ELEMENT READ, and its third input is the MEMORY it observes.
+            # AN ELEMENT READ, and the MEMORY it observes is its named mem_in.
             # A read threaded to a store sees the stored value; one threaded
             # past it sees the old one. That ordering is the whole question
             # this oracle exists to check.
@@ -8013,7 +7966,7 @@ class SoN::Deparse 0.01 {
               . " rendered\n" if @in < 2;
             # A READ HAS ITS MEMORY INPUT; a store's target has none.
             $text = $self->_element($in[0], $self->_expr($in[1]),
-                                    ($n->{fields} // {})->{kind}, @in > 2);
+                                    ($n->{fields} // {})->{kind}, defined $mem);
         }
         elsif ($op eq 'Count') {
             # scalar(@a) -- the element count, and a memory-dependent read like
@@ -8441,8 +8394,8 @@ class SoN::Deparse 0.01 {
             # Parenthesised because `\$x . "y"` takes a reference to the
             # CONCATENATION, a different value.
             # (A REFERENCE TO AN ELEMENT reads the memory where it is taken:
-            # spelled where it stands, the element is the one there.)
-            pop @in if @in == 2;
+            # spelled where it stands, the element is the one there -- its
+            # named mem_in, left out above.)
             die "GAP: a Ref with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
 
@@ -8494,7 +8447,7 @@ class SoN::Deparse 0.01 {
             # `ref EXPR` -- a unary whose op_str is already `ref`.
             # Parenthesised because `ref $x . "y"` parses as `ref($x . "y")`,
             # a different question.
-            # (its second input is the memory it reads: %MEM_MIN_INPUTS)
+            # (its second input is the memory it reads: _mem_input)
             die "GAP: a RefType with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1 || @in == 2;
             $text = sprintf('ref(%s)', $self->_expr($in[0]));
@@ -8906,7 +8859,7 @@ class SoN::Deparse 0.01 {
     }
 
     # The id of the latest chain STORE that $n's value reads through pure
-    # nodes, or undef. A value node's memory input is its last input; a node
+    # nodes, or undef. A value node's memory input is its named mem_in; a node
     # on the control chain is where the search stops -- it is a statement,
     # already ordered, not part of this value. "Latest" is the highest id:
     # the wire numbers nodes in topological order, and a memory version is
@@ -8919,11 +8872,11 @@ class SoN::Deparse 0.01 {
             my $c = $nodes->{$id} or next;
             next if defined $c->{control_in};
             my @in = ( $c->{inputs} // [] )->@*;
-            if ( @in && $self->_is_memory( $in[-1] ) ) {
-                my $m = $nodes->{ $in[-1] };
-                $latest = $in[-1]
+            if ( defined( my $mi = $self->_mem_input($c) ) ) {
+                my $m = $nodes->{$mi};
+                $latest = $mi
                     if $m && defined $m->{control_in}
-                    && ( !defined $latest || $in[-1] > $latest );
+                    && ( !defined $latest || $mi > $latest );
                 pop @in;
             }
             push @queue, @in;
@@ -8942,6 +8895,12 @@ class SoN::Deparse 0.01 {
         return ( $n->{op} // '' ) eq 'Call' && defined $n->{control_in}
             && ( ( $f->{dispatch_kind} // '' ) ne 'builtin'
                  || defined $f->{sort_cmp_body} ) ? 1 : 0;
+    }
+
+    # _mem_input($n) -> the id of $n's memory input (its named mem_in, which
+    # SoN::Wire::as_v1 put last and marked), or undef.
+    method _mem_input ($n) {
+        return ( $n->{fields} // {} )->{memory_input} ? ( $n->{inputs} // [] )->[-1] : undef;
     }
 
     method _is_memory ($id) {
@@ -9005,10 +8964,7 @@ class SoN::Deparse 0.01 {
         for my $i (grep { ($in[$_] // -1) == $id } 0 .. $#in) {
             return 1 if $op eq 'Phi' && $self->_read_as_value($c->{id});
             next if $op eq 'Phi';
-            next if $op eq 'Call' && $i == $#in && @in > 1 && (($c->{fields} // {})->{memory_input});
-            return 1 if $op eq 'Call';
-            my $min = $MEM_MIN_INPUTS{$op};
-            next if defined $min && $i >= $min;
+            next if $i == $#in && defined $self->_mem_input($c);
             return 1;
         }
         return 0;
@@ -9019,7 +8975,7 @@ class SoN::Deparse 0.01 {
     # from a merge of two memory states when an input is a call: a call is
     # both, and `$n < 2 ? $n : fib(...)`, whose `$n` is the `shift` call,
     # merged as "memory" and was never bound. A memory merge is only ever read
-    # where memory goes: the trailing input of a %MEM_MIN_INPUTS node, a
+    # where memory goes: the trailing input a node marks memory_input, a
     # call's last input, or another Phi.
     #
     # A PHI CONSUMER PASSES THE QUESTION ON. A slot carrying `shift` whose only
@@ -9038,11 +8994,7 @@ class SoN::Deparse 0.01 {
                 }
                 # A CALL SAYS WHETHER ITS LAST INPUT IS MEMORY (memory_input);
                 # without it, the last input is an argument -- `n("i", $c ? $v : [])`.
-                next if $op eq 'Call' && $i == $#in && @in > 1
-                    && (($c->{fields} // {})->{memory_input});
-                return 1 if $op eq 'Call';   # the flag above decided
-                my $min = $MEM_MIN_INPUTS{$op};
-                next if defined $min && $i >= $min;
+                next if $i == $#in && defined $self->_mem_input($c);
                 return 1;
             }
         }

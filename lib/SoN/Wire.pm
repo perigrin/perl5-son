@@ -12,7 +12,8 @@ use B::SoN::EffectTable ();
 # decoded v2 wire (docs/plans/2026-11-20-wire-v2.md, stage 4):
 #
 # - `mem_in` goes back to the end of `inputs` where v1 had it as an operand,
-#   and a builtin Call that gets one says so (`memory_input`);
+#   and a node that gets one says so (`memory_input`): what was the named
+#   mem_in, which the deparser reads instead of counting inputs;
 # - `mem_in`, `mem_out` and `record` are dropped, and `version` is 1;
 # - a MakeCell leaves the control chain (v1 never put it there);
 # - the memory Phi where a sub's exits merge (`exits`; v1 has no place for
@@ -95,8 +96,9 @@ sub as_v1 ($wire) {
             delete $n->{fields}{record} if $n->{fields};
             next unless defined $m && $operand;
             push $n->{inputs}->@*, $m;
-            $n->{fields}{memory_input} = JSON::PP::true()
-                if $n->{op} eq 'Call';
+            # (every node that had its mem_in appended says so: the deparser
+            # reads this, the named mem_in, never a count of inputs)
+            $n->{fields}{memory_input} = JSON::PP::true();
         }
 
         # What v1 reaches: the writer walks from Start and the Returns along
