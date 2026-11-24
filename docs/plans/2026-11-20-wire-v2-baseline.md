@@ -593,3 +593,27 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 2 [29m09
 ```
 
 (The run read the producer at 1f402b9 with this section and the memory note's a12 paragraph uncommitted: docs only. Earlier runs: at chalk 3cc2195a two chalk tests held a refusal whose cause had moved into B::SoN (b8061d83 names both); at b8061d83 chalk's wire-verify.t met r/a12 (then held, now fixed); two runs were killed by container restarts.)
+
+## 22. A copy is a new location; a `local` has a way out (branch `copy-unwind`)
+
+Heads: producer `copy-unwind` f0a62b5 (from ba42f34: plan 28efa37, A daa58bd and ae5675a, B1 286dd2d and 98360e9, V10 6a60088 and f0a62b5), chalk `copy-unwind` 34783892 (from 4ba00e14: probes 7e31e2a3 and bbc309fa, B1 5cc0e7d0, L7 9459e93d, 53fc9f6a, 34783892; BASELINE.tsv 93c01e4c). The two designs of `docs/plans/2026-11-24-copy-and-local-unwind.md`, approved by perigrin, lower the re-audit's classes A and B (section 21), which were refused.
+
+**A, always copy (no wire change).** `my %c = %h` makes a HashLiteral of its own, read from the source where it is made; the elision guarded by `$MUTATED_SLOTS`/`$HASH_WRITTEN` and the GAP `a copy of a hash that may then be written` are gone. A `my` array copied from a literal the list shortcut cannot flatten (a ternary among its elements) was elided the same way -- `my @d = @b; $d[0] = 9` changed @b (cpa33, cpa34, silent wrongs at base) -- and is copied too. Two more silent wrongs of the family, at base: a `my` hash among other pairs floated past a later store (`my %d = (%h, x => 1)`, cpa21), and the padav list shortcut pushed a named literal among an array's inputs, so `"@l"` read %h itself (cpa23, cpa30, cpa31). A `my` aggregate bound to another name's literal is a GAP by name where it is looked up (`a `my` aggregate bound to another's location`), as the name is spelled (%PAD_SYMBOL); it found the array case.
+
+**B1, a rethrow edge (wire change: an Exc outside an eval; Unwind `fields.rethrow`).** Each graph has a sub frame below its eval frames; where no eval of the graph is open, a node that may die while a `local` of the graph is live gets an Exc, the restores, and an Unwind marked rethrow (input the Exc, `mem_in` the last restore). chalk's `after_call` takes it (`rethrow_way`) and returns with the dying flag set; an edge T2 never takes is refused by name. W6 deleted. SoN::Verify V10: a thrower under a live local outside an eval has an edge that puts it back, an Exc outside an eval ends in its own rethrow, a rethrow is of its own edge's Exc (M12-M16, each rule disabled in turn and caught). WireInvariant L7: the edge's shape (the two structural rules, each disabled in turn and caught); that every such point has an edge is not L7's, because the wire cannot tell `local $G = 0` from `my $c = $G; $G = 0; ...; $G = $c` (Test::Chalk::subtest), so only V10 checks it, over the ratchet's wires. An Exc is an eval's by where its edge goes (a die in a sort block inlined in an eval has no `eval_id`).
+
+Probes: 1451 (35 new: cpa01-35), SAME 1145, REFUSED 297, LOUD 9, WRONG 0 (at ba42f34 / 4ba00e14: 1416, SAME 1065, REFUSED 343, LOUD 8, WRONG 0). 48 REFUSED -> SAME: 26 of the 28 class-A rows and 22 of the 24 W6 rows, r/c02 and r/c03 (chalk rec02, rec03) among them. Refused by name still, each the same without the copy or the `local`: ren26 (T2: a list perl may alias passed where a sub writes @_), ren35 (T2: a value stamped List), req32 (T2: a sub returning a list as one value); req35 REFUSED -> LOUD (T2's run-time refusal of a call of undef). cpa05, cpa06 (package to package, T2: a statement EntryWrite) and cpa25 (T2: PadAccess) refused by T2.
+
+`tools/gates.sh` at producer f0a62b5, chalk 34783892:
+
+```
+producer-suite  PASS  804 files, 0 failing [9m48s]
+chalk-suite     PASS  937 files, 0 failing [70m18s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m40s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [4m48s]
+probes          PASS  LOUD=9 REFUSED=297 SAME=1145; WRONG 0, SAME lost 0, changed 49 [3m49s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [29m26s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [2m49s]
+```
+
+(Earlier runs: gates1 was abandoned when verify-holds merged; gates2 found the guard on arrays and on a re-declared name, and a hand-set control_in (`placement-one-constructor.t`); gates3 found V10/L7 calling a call at a loop's top live past the pass-end restore (lo22), L7's liveness rule refusing every Test::Chalk program, and `list_only` taking a rethrow Exc for a scalar use (c178). The interval oracle needed no re-keying.)
