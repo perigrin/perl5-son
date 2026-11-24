@@ -59,4 +59,14 @@ subtest 'a modulus by a constant that truncates to zero may fault' => sub {
     ok defined $div->{control_in}, 'it has a control_in';
 };
 
+# AN ARGUMENT OF sprintf is flagged OPf_MOD (it may be %n's target), and the
+# pin skipped it: `sprintf("%d", 1/$_[0])` floated (final audit 2026-11-24,
+# clause 2; verifier rule effect-floating). A division is never a store.
+subtest 'a division that may fault among sprintf\'s arguments' => sub {
+    my ( $w, @n ) = nodes(q{my $d = @ARGV; my $s = sprintf("%d", 1/$d); print "before\n"; print "$s\n";});
+    my ($div) = grep { $_->{op} eq 'Divide' } @n or return fail 'no Divide';
+    ok defined $div->{control_in}, 'it has a control_in';
+    is [ map { $_->{rule} } SoN::Verify::verify($w)->{violations}->@* ], [], 'the verifier finds nothing';
+};
+
 done_testing;

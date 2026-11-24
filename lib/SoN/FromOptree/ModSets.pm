@@ -411,6 +411,116 @@ sub _call_args ($call) {
     return grep { $_->name ne 'pushmark' } @items;
 }
 
+# arg_stored_by_call($cv, $call) -> true when the call is passed a variable or
+# an element -- $_[N] is that location, not a copy -- that a sub it reaches
+# stores by name and then reads through @_: the wire passes the value as it
+# was, so the read gives the old one (final audit 2026-11-24, class C). In the
+# sub's own order: a read of @_ before the store took the value it had; a
+# `local` is a new variable, not the one $_[N] names; reshaping an aggregate
+# leaves its element where $_[N] holds it; a store through $_[N] itself is the
+# argument's copy-out, lowered.
+sub arg_stored_by_call ( $cv, $call ) {
+    my @args = _call_args($call) or return 0;
+    my $site = _site( $cv, $call );
+    return 0 if $site->{unknown};
+    local $KEEP_OWN = 1;
+    my @places;
+    for my $a (@args) {
+        my $o = _strip($a);
+        if    ( $o->name =~ /\A(?:padsv|gvsv|rv2sv)\z/ ) { push @places, [ loc => $_->{loc} ] for _target_effects( $cv, $o ) }
+        elsif ( my $p = place( $cv, $o ) )                 { push @places, [ place => $p ] }
+    }
+    return 0 unless @places;
+    my $hits = sub (@eff) {
+        @eff = grep { $_->{loc} ne 'P' && $_->{loc} ne 'U' && !$_->{reshape} } @eff;
+        for my $pl (@places) {
+            return 1 if $pl->[0] eq 'loc' ? scalar( grep { $_->{loc} eq $pl->[1] } @eff ) : ( conflict( $pl->[1], \@eff ) // '' ) eq 'store';
+        }
+        return 0;
+    };
+    for my $sub ( ( $site->{cvs} // [] )->@* ) { return 1 if _read_after_store( $sub, $hits ) }
+    return 0;
+}
+
+# _read_after_store($sub, $hits) -> true when, in $sub's ops in order, a
+# store $hits names (its own, not a `local`; or a call's) comes before a read
+# of @_ (_reads_args_op).
+sub _read_after_store ( $sub, $hits ) {
+    my $root = _root($sub) or return 1;
+    my $stored = 0;
+    for my $o ( _post_order($root) ) {
+        return 1 if $stored && _reads_args_op( $sub, $o );
+        next if $stored;
+        if ( _is_call($o) ) {
+            my $s = _site( $sub, $o );
+            $stored = 1 if !$s->{unknown} && $hits->( map { summary($_)->@* } ( $s->{cvs} // [] )->@* );
+        }
+        elsif ( !_is_local($o) ) {
+            $stored = 1 if $hits->( _stores( $sub, $o ) );
+        }
+    }
+    return 0;
+}
+
+# _post_order($root) -> its ops, each after its kids: the order straight code
+# runs in (a store after the operands it reads).
+sub _post_order ($root) {
+    my @out;
+    my $walk;
+    $walk = sub ($o) {
+        if ( $o->flags & B::OPf_KIDS ) { for ( my $k = $o->first; ref($k) && $$k; $k = $k->sibling ) { $walk->($k) } }
+        push @out, $o;
+    };
+    $walk->($root);
+    undef $walk;
+    return @out;
+}
+
+# _is_local($op) -> true for a `local` of a package variable: a new one the
+# old is saved from, not a store into it.
+sub _is_local ($o) {
+    my $t = $o->name eq 'sassign' && $o->can('last') ? _strip( $o->last ) : $o;
+    return ( $t->name =~ /\A(?:gvsv|rv2sv|rv2av|rv2hv)\z/ && ( $t->private & 128 ) ) ? 1 : 0;   # OPpLVAL_INTRO
+}
+
+# stores_invocant($cv, $call) -> true for a method call a sub of whose name
+# may store its $_[0] -- the caller's invocant variable, which the wire passes
+# as a value (final audit 2026-11-24, class H). (Moving @_, a shift, is no
+# store; nor is a store through the invocant, `$_[0]{k} = 1`.)
+sub stores_invocant ( $cv, $call ) {
+    my @k = _kids($call);
+    my @items = @k == 1 && ( $k[0]->flags & B::OPf_KIDS ) ? _kids( $k[0] ) : @k;
+    return 0 unless @items && _strip( $items[-1] )->name =~ /\Amethod/;
+    # (a `my` scalar's: an element or a package scalar invocant is passed as
+    # its location, and its store reaches it)
+    my ($inv) = _call_args($call);
+    return 0 unless $inv && _strip($inv)->name eq 'padsv';
+    my ($cvs) = _callees( $cv, $call ) or return 0;
+    for my $sub ( ( $cvs // [] )->@* ) {
+        return 1 if grep { $_->{loc} eq 'P' && !$_->{reshape} && ( $_->{key} eq '0' || $_->{key} eq '*' ) } summary($sub)->@*;
+    }
+    return 0;
+}
+
+# _reads_args_op($sub, $op) -> true for an op of $sub that reads its @_: an
+# element of it, all of it, a shift or pop of it, `&f;` or `goto &f` handing
+# it on (a multideref is counted: it may start at @_). Not a foreach's list:
+# its alias reads each element where the body does (T2 reads them so).
+sub _reads_args_op ( $sub, $o ) {
+    my $n = $o->name;
+    return 1 if $n =~ /\A(?:shift|pop)\z/ && !( $o->flags & B::OPf_KIDS );
+    return 1 if $n eq 'multideref' || $n eq 'goto';
+    return 1 if $n eq 'entersub' && !( $o->flags & B::OPf_STACKED );   # `&f;`
+    return 0 unless $n =~ /\A(?:aelemfast|gv)\z/;
+    my $gv = eval { _fo('_op_gv')->( $sub, $o ) } or return 0;
+    return 0 unless $gv->NAME eq '_';
+    return 1 if $n eq 'aelemfast';
+    my $av = $o->parent;
+    return 0 unless $$av && $av->name eq 'rv2av';
+    my $up = $av->parent; $up = $up->parent while $$up && $up->name =~ /\A(?:null|list)\z/;
+    return $$up && $up->name eq 'enteriter' ? 0 : 1;
+}
+
 # _is_call($op) -> true for an op that runs code of the program: a sub or
 # method call, a string eval, a require or do FILE, a tie.
 sub _is_call ($o) { return $o->name =~ /\A(?:entersub|entereval|require|dofile|tie|untie|goto)\z/ ? 1 : 0 }

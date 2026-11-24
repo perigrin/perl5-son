@@ -42,6 +42,18 @@ for my $i ( 0 .. $#lines ) {
 is \@versions_by_hand, [], 'no handler makes a memory version by hand';
 is \@by_hand, [], 'no handler takes control_in from the sim by hand';
 
+# AND NO control_in IS WRITTEN ANYWHERE BUT _seat, in any spelling (final
+# audit 2026-11-24, clause 2: three were written by hand -- a guarded exit's
+# arm re-seated on its Proj, and two Returns seated on an exit's recorded
+# control -- and the test above matched only the `$sim->control` spelling).
+my ( $s3, @control_by_hand );
+for my $i ( 0 .. $#lines ) {
+    $s3 = $1 if $lines[$i] =~ /^\s*sub (\w+)/;
+    push @control_by_hand, sprintf( '%s:%d (in %s)', $file, $i + 1, $s3 // 'file' )
+        if $lines[$i] =~ /set_control_in\s*\(/ && ( $s3 // '' ) ne '_seat';
+}
+is \@control_by_hand, [], 'control_in is written by _seat alone';
+
 # _place is _pin plus the memory version, and nothing else.
 my ($body) = join( '', @lines ) =~ /^\s*sub _place \(\$sim, \$node\) \{\n(.*?)^\s*\}\n/ms;
 like $body // '', qr/_pin\(\$sim, \$node, 1\);.*\$node->set_mem_out\(1\);.*\$sim->set_memory\(\$node\)/s,
