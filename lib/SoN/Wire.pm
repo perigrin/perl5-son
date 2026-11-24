@@ -55,6 +55,9 @@ sub _operand ($n) {
     return 0 if $op eq 'Call' && ( B::SoN::EffectTable::reads_state( ( $n->{fields} // {} )->{name} ) // '' ) eq 'external';
     return 0 if $op eq 'Call' && ( ( $n->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin';
     return 0 if $ORDERED_READ{$op} && defined $n->{control_in} && !$n->{mem_out};
+    # (an alias list that makes an element exist is a version it FOLLOWS:
+    # aliases-as-places; v1 had no such list)
+    return 0 if $op eq 'ArrayLiteral' && $n->{mem_out} && !defined( ( $n->{fields} // {} )->{symbol} );
     return 1;
 }
 
