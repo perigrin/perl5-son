@@ -18,9 +18,14 @@
   `t/data/audit-probes` as `re` plus their name (`a01.pl` is `rea01`).
   `probes/f/`: the 847 probes of the 2026-11-24 final audit
   (../2026-11-24-memory-model-final-audit.md, section 3); `_run1.log` is their
-  sweep (111 WRONG), `_base.log` the wrong ones at the re-audit's heads;
-  `unverified/` holds three whose wires break a verifier rule, out of the
-  ratchet's reach. Not in chalk's `t/data/audit-probes`.
+  sweep (111 WRONG), `_base.log` the wrong ones at the re-audit's heads.
+  The three whose wires broke a verifier rule (a55, d61, o11) sat in
+  `unverified/` until branch `final-audit` fixed the producer; they are in
+  `f/` now. In chalk's `t/data/audit-probes` as `fa` plus their name
+  (`a01.pl` is `faa01`), gated with WRONG 0 since `final-audit`.
+  `probes/cpa/`: cpa01-cpa35, the fix probes of designs A and B1
+  (docs/plans/2026-11-24-copy-and-local-unwind.md), copied from chalk's
+  `t/data/audit-probes` beside the audit's own.
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),
