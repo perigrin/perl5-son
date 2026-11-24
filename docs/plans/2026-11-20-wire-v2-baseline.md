@@ -617,3 +617,39 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [29m26
 ```
 
 (Earlier runs: gates1 was abandoned when verify-holds merged; gates2 found the guard on arrays and on a re-declared name, and a hand-set control_in (`placement-one-constructor.t`); gates3 found V10/L7 calling a call at a loop's top live past the pass-end restore (lo22), L7's liveness rule refusing every Test::Chalk program, and `list_only` taking a rethrow Exc for a scalar use (c178). The interval oracle needed no re-keying.)
+
+## 23. The final audit's wrong answers lowered or refused by name (branch `final-audit`)
+
+Heads: producer `final-audit` 21457b0 (from 40e86a6: 1dc13d9, 83564dc, ed66c63, 21457b0), chalk `final-audit` add5ce17 (from 93c01e4c: 7a1b43e8 F, 6b7756b2 B, ddb10251 I, bf532dcf, e9407350 loader, b21dda85 probes, add5ce17). The final audit (`docs/research/2026-11-24-memory-model-final-audit.md`) found 111 silent wrong answers in 847 probes (`probes/f`), in nine classes; all 111 now print perl's answer or are refused by name.
+
+| class | n | outcome | where |
+|---|---|---|---|
+| A copy of a shared `my` array read as its source | 12 | SAME | B::SoN: the padav list shortcut does not flatten a literal holding a whole aggregate read at a version or shared |
+| B copy through a reference made late | 17 | SAME | chalk: Count/keys of a copy read the copy; an rvalue whole deref reads_before makes is a copy |
+| C callee stores a variable by name, then reads `$_[N]` | 19 | REFUSED | `a variable passed to a sub that stores it by name and reads its arguments` (ModSets::arg_stored_by_call, in the sub's own order) |
+| D assignment or ?: as an lvalue, store dropped | 14 | REFUSED | `a ?: used as the target of an assignment/op=/increment`, `an assignment used as the target of an op=`, `... of a sub's write through $_[N]`; the sassign catch-all is a GAP but for a call's result |
+| E package scalars / new elements in an alias list | 18 | REFUSED | `a package scalar aliased by a foreach, map or grep`, `an element (or a slice) perl's alias may make exist` |
+| F chop's value | 10 | SAME | chalk: ChopChar |
+| G foreach write-back lost on a die | 13 | REFUSED | `a foreach iterator written in a pass a die may leave`; an op= now stores the demoted iterator's slot too (a silent wrong at base: `$x += 1; print $x` in an eval body) |
+| H `$_[0] = ...` on a `my` invocant | 2 | REFUSED | `a method that stores $_[0]` |
+| I `$1` scoped to its block; `$2` past the groups | 6 | SAME | B::SoN restores the last match at a block's or loop's end; chalk: a group past the result is undef |
+
+Clause 2: a may-fault division under OPf_MOD (sprintf's arguments) is pinned; `_seat` is the one write of `control_in` (a Return on an exit's recorded control and a guarded exit's re-seat are not placements, and stay outside `_pin`), and `t/placement-one-constructor.t` catches any spelling. Clause 4: a55, d61, o11 verify clean and are in `probes/f/`; chalk's loader holds every wire to WireInvariant and WireCheck but one chalk wrote (`writer: chalk`, from to_json; eleven tests' hand-built wires say so; four old fixtures fixed). Clause 1: `probes/cpa/` holds cpa01-35.
+
+Probes: 2298 in chalk (847 new: `fa<name>`), SAME 1748, REFUSED 535, LOUD 15, WRONG 0. fa: SAME 603, REFUSED 238, LOUD 6 (at the audit's heads 557 / 173 / 6 / 111). No older probe changed verdict; three refusals are named by the new rules first (lw25, ree30, req12). All 847 f wires and the 35 cpa wires pass SoN::Verify.
+
+Open design items (refused, not lowered): aliases on the wire (C, E, H); a write-back on every way out (G); an lvalue `?:`/assignment (D). Shortcuts named in the code: an unknown call is not counted by the call-argument rule; a caller's own `$_[N]` argument is not counted by C; an element through a reference or of a stash is not refused by E.
+
+`tools/gates.sh` at producer 21457b0, chalk add5ce17:
+
+```
+producer-suite  PASS  812 files, 0 failing [10m29s]
+chalk-suite     PASS  940 files, 0 failing [77m15s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m49s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [5m02s]
+probes          PASS  LOUD=15 REFUSED=535 SAME=1748; WRONG 0, SAME lost 0, changed 0 [6m20s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [35m40s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m06s]
+```
+
+(gates1 was stopped: its producer suite failed 16 files and the ratchet lost 6 corpus graphs, all refusals reaching past their class -- ed66c63. gates2: five chalk tests refused programs that matched perl -- slices and hash keys known to be there, `"@_"` read whole, a hash copy of an undef reference -- 21457b0, add5ce17.)
