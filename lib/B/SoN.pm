@@ -408,6 +408,7 @@ sub _data_section {
 # graphs and collecting feature-class structure. Returns ($graphs, $classes):
 # $graphs is fully-qualified name => graph; $classes is class name => declarative
 # class structure (parent, fields, methods) for the MOP replay.
+our %TRANSLATED_ONCE;
 sub _discover_and_translate {
     my ($filter) = @_;
     my %graphs;
@@ -436,6 +437,7 @@ sub _discover_and_translate {
     # Per-run, like the body registry: the marked nodes of a previous
     # compilation unit are not held past it.
     %SoN::FromOptree::MUTATED_LITERALS = ();
+    %TRANSLATED_ONCE = ();
 
     _walk_package( \%graphs, \%classes, 'main', \%main::, $filter );
 
@@ -2584,6 +2586,24 @@ sub _translate_class_subs {
     return;
 }
 
+# _translate_once($cv) -> the graph of $cv, translated once in a pass (or its
+# refusal, died again). A CLASS METHOD WAS WALKED TWICE: _extract_class
+# translates it for its return type, before the stash walk or
+# _translate_class_methods translates it for its graph (clause 3: a sub is
+# walked once). The graph the first walk made is the one kept. Holds the
+# code, so no other CV takes its address. (%TRANSLATED_ONCE: per pass,
+# cleared in _discover_and_translate.)
+sub _translate_once {
+    my ($cv) = @_;
+    my $t = $TRANSLATED_ONCE{$$cv} //= do {
+        my $code = $cv->object_2svref;
+        my $g = eval { SoN::FromOptree->translate($code) };
+        [ $code, $g, $@ ];
+    };
+    die $t->[2] unless defined $t->[1];
+    return $t->[1];
+}
+
 # _translate_class_methods(\%graphs, $pkg_name, $stash, $methods) — translate
 # each of a referenced class's method CVs into $graphs, keyed by the same
 # fully-qualified key _extract_class recorded in $methods. Mirrors the CV
@@ -2607,8 +2627,7 @@ sub _translate_class_methods {
         next unless defined $start && $$start;
 
         try {
-            $graphs->{$full_name} =
-                SoN::FromOptree->translate( $cv->object_2svref );
+            $graphs->{$full_name} = _translate_once($cv);
         }
         catch ($e) {
             # A deliberate GAP refusal is the translator speaking; surface it
@@ -2760,7 +2779,7 @@ sub _walk_package {
         next if exists $graphs->{$full_name};
 
         try {
-            my $graph = SoN::FromOptree->translate( $cv->object_2svref );
+            my $graph = _translate_once($cv);
             $graphs->{$full_name} = $graph;
             # Record the sub's METADATA while the CV is still in hand. See
             # _record_sub: these are facts this walk knows and the emitted
@@ -3548,7 +3567,7 @@ sub _extract_class {
             # walk that owns that method reports it.
             my $g = $graphs->{"${pkg_name}::${name}"};
             unless ($g) {
-                try { $g = SoN::FromOptree->translate( $cv->object_2svref ) }
+                try { $g = _translate_once($cv) }
                 catch ($e) {
                     warn "B::SoN: INTERNAL ERROR deriving return type for "
                        . "${pkg_name}::${name} (it will read Unknown): $e"
