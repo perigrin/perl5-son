@@ -763,6 +763,9 @@ class SoN::FromOptree 0.01 {
     # body is walked: SoN::IR::NodeFactory builds the iterator's PadAccess as
     # that element (aliases-as-places). Local to each CV's walk.
     our %ITER_ELEMENT;
+    # THE ELEMENT AN op= STORED, op address => its Subscript place, for an
+    # op= whose target is that op= (design 3). Local to each CV's walk.
+    our %ASSIGN_LVALUE;
     # The main walk's closure cells, for the same walkers: a capture read in an
     # arm or loop body is a cell read, and a fresh ctx without them made it a
     # PadAccess naming a slot the closure does not own (`$w` in a recursive
@@ -1948,6 +1951,8 @@ class SoN::FromOptree 0.01 {
                     for my $k (_entersub_args($op)) {
                         $taken{ $k->targ } = 1
                             if $k->name eq 'padsv' && $k->targ;
+                        # (AN ASSIGNMENT ARGUMENT passes its variable too: design 3)
+                        if ( my $t = _arg_place_target($k) ) { $taken{ $t->targ } = 1 if $t->name =~ /\Apadsv/ }
                         # SO IS A PAD SCALAR A TERNARY ARGUMENT'S ARM NAMES:
                         # `f($c ? ($x) : ())` passes $x itself.
                         my $t = $k;
@@ -2890,6 +2895,7 @@ class SoN::FromOptree 0.01 {
         local $CELLS        = { map { $_ => $ctx->{$_} } qw(cells cell_params cells_written) };
         local %PAD_SYMBOL   = _pad_aggregate_renames($cv)->%*;
         local %ITER_ELEMENT = ();
+        local %ASSIGN_LVALUE = ();
         local %SHARED_SYMBOL = _shared_scalar_renames($cv, $ctx->{is_program})->%*;
         # A SLOT ANOTHER SUB SHARES is written behind this graph's back, so
         # it reads as mutated from the start.
@@ -5932,8 +5938,10 @@ class SoN::FromOptree 0.01 {
             # (a sub known to store through $_[N]; shortcut: one that makes a
             # call nothing can be said of is not counted, as before this rule
             # -- Carp's `caller_info(++$i)`; upgrade when one is seen writing)
+            # (an assignment of a variable passes that variable: its place,
+            # below -- design 3; a target it cannot name stays refused)
             die "GAP: $what used as the target of a sub's write through \$_[N] is not yet lowered -- the store would be lost\n"
-                if $what && SoN::FromOptree::ModSets::call_stores_through_args($cv, $op);
+                if $what && !_arg_place_target($t) && SoN::FromOptree::ModSets::call_stores_through_args($cv, $op);
         }
         if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
         # AN ALIAS NOT PROVED PRIVATE IS A PLACE: a method that stores $_[0]
@@ -5955,7 +5963,14 @@ class SoN::FromOptree 0.01 {
         # (the arguments, not the code a direct or indirect call names last)
         if ($ARGS_ARE_PLACES) {
             my $n = defined $ctx->{pending_method} ? scalar $args->@* : $args->$#*;
-            $args->[$_] = _alias_place( $args->[$_], $factory ) // $args->[$_] for 0 .. $n - 1;
+            # (AN ASSIGNMENT passes the variable it stored: `inc($x += 1)`,
+            # design 3 -- by position, where the ops line up with the values)
+            my @ops = _entersub_args_and_invocant($op);
+            for my $i ( 0 .. $n - 1 ) {
+                my $t = @ops == $n ? _arg_place_target( $ops[$i] ) : undef;
+                $args->[$i] = ( $t ? _target_place( $cv, $t, $factory ) : undef )
+                    // _alias_place( $args->[$i], $factory ) // $args->[$i];
+            }
         }
 
         if (defined $ctx->{pending_method}) {
@@ -11045,12 +11060,23 @@ class SoN::FromOptree 0.01 {
                 _place($sim, $store);
                 $targ = undef;
             }
+            # A ?: OF TWO `my` SCALARS: each arm's variable incremented where
+            # the ?: chose it (design 3).
+            elsif (!defined $targ && _store_through_ternary( $sim, $factory, $op->first, $old, sub ($o) {
+                    my $t = ( $o->can('stamp') && $o->stamp ) ? $o->stamp->type : 'Unknown';
+                    ( $dir eq 'inc' && $t !~ /\A(?:Int|Num|Boolean)\z/ )
+                        ? $factory->make('Increment', inputs => [$o], stamp => SoN::IR::Stamp->new(type => 'Scalar'))
+                        : $factory->make($node_type, inputs => [ $o, $one ], map { defined $_ ? ( stamp => $_ ) : () } _result_stamp($node_type, [ $o, $one ]));
+                } )) {
+                # (each arm stored; the value pushed below is the ?:'s)
+            }
             # ANY OTHER OPERAND has no store here: refused, not dropped (final
             # audit 2026-11-24, class D: `($c ? $a : $b)++` changed neither).
             elsif (!defined $targ) {
                 my $t = $op->first;
                 $t = $t->first while $$t && $t->name eq 'null' && $t->can('first') && ${$t->first};
-                die "GAP: a ?: used as the target of an increment is not yet lowered -- its store would be lost\n"
+                die "GAP: a ?: used as the target of an increment is not yet lowered -- its store would be lost"
+                  . " (one of two `my` scalars is: an arm that is a package scalar, an element or another ?: would need an If)\n"
                     if $$t && $t->name eq 'cond_expr';
                 die "GAP: an increment of " . ($$t ? $t->name : 'nothing') . " (a " . (ref($old) =~ s/.*:://r)
                   . ") is not yet lowered -- its store would be lost\n";
@@ -11392,6 +11418,11 @@ class SoN::FromOptree 0.01 {
             elsif ($target->isa('SoN::IR::Node::Call')) {
                 $sim->push_node($value);
             }
+            # A ?: OF TWO `my` SCALARS: the store in each arm (design 3).
+            elsif ( $op->last && $op->last->$*
+                    && _store_through_ternary( $sim, $factory, $op->last, $target, sub ($old) { $value } ) ) {
+                $sim->push_node($value);
+            }
             # ANY OTHER TARGET NO ARM ABOVE TAKES is refused, not dropped: the
             # value was pushed and the store never reached the wire, with no
             # GAP (final audit 2026-11-24, class D: `($c ? $a : $b) = 9` left
@@ -11400,7 +11431,8 @@ class SoN::FromOptree 0.01 {
             else {
                 my $t = $op->last && ${$op->last} ? $op->last : undef;
                 $t = $t->first while $t && $t->name eq 'null' && $t->can('first') && ${$t->first};
-                die "GAP: a ?: used as the target of an assignment is not yet lowered -- its store would be lost\n"
+                die "GAP: a ?: used as the target of an assignment is not yet lowered -- its store would be lost"
+                  . " (one of two `my` scalars is: an arm that is a package scalar, an element or another ?: would need an If)\n"
                     if $t && $t->name eq 'cond_expr';
                 die "GAP: an assignment whose target is " . ($t ? $t->name : 'unknown') . " (a "
                   . (ref($target) =~ s/.*:://r) . ") is not yet lowered -- its store would be lost\n";
@@ -13387,12 +13419,21 @@ class SoN::FromOptree 0.01 {
                 # An emission that does not compile is worse than a wrong
                 # answer, because nothing downstream can run it to notice.
                 # `pos` and `tied` are the same single-operand shape.
+                # AN ASSIGNMENT AS THE TARGET (`($x += 2) *= 3`, `($x = 5) += 2`,
+                # `(my $t = $a[0]) *= 10`): the inner op ran first and stored;
+                # this one stores into the same variable, its operand the
+                # variable as the inner store left it (design 3 of
+                # docs/plans/2026-11-24-aliases-as-places.md). $first is the
+                # target op either way.
+                my $inner_target = ( $op->flags & 64 ) && B::class($op) eq 'BINOP' && $name ne 'sort'
+                    && $op->can('first') && $op->first->$* ? _assign_target( $op->first ) : undef;
+                my $first = $inner_target // ( $op->can('first') ? $op->first : undef );
                 my $is_compound =
                        @inputs >= 2
                     && !_is_comparison_optree_op($op->name)
-                    && $op->can('first')
-                    && $op->first->name =~ /^padsv|^padav|^padhv/
-                    && ($op->first->flags & 32)   # OPf_MOD
+                    && $first
+                    && $first->name =~ /^padsv|^padav|^padhv/
+                    && ($first->flags & 32 || $inner_target)   # OPf_MOD
                     && ( $inputs[0]->isa('SoN::IR::Node::PadAccess')
                          # OPf_STACKED (the `op=` form) recovers the case where
                          # the lvalue PadAccess did not survive the stack. It
@@ -13412,7 +13453,7 @@ class SoN::FromOptree 0.01 {
                     # branch-RHS case this fix exists for.
                     $lvalue_targ = $inputs[0]->isa('SoN::IR::Node::PadAccess')
                         ? $inputs[0]->targ
-                        : $op->first->targ;
+                        : $first->targ;
                     # A CAPTURED SLOT IS ITS CELL: the lvalue padsv pushed the
                     # handle (the CellParam in the body, the MakeCell in the
                     # scope that made it). Taken as the operand, `$n *= 3`
@@ -13447,8 +13488,8 @@ class SoN::FromOptree 0.01 {
                     && $inputs[0]->isa('SoN::IR::Node::FieldAccess')
                     && ($op->flags & 64)          # OPf_STACKED (the op= form)
                     && $op->can('first')
-                    && $op->first->name =~ /^padsv/
-                    && ($op->first->flags & 32);  # OPf_MOD (lvalue read)
+                    && $first && $first->name =~ /^padsv/
+                    && ($first->flags & 32);  # OPf_MOD (lvalue read)
                 # ITS OLD VALUE IS READ AT THIS MEMORY VERSION, as a scalar
                 # field's read is; the lvalue was the place, read at none
                 # (`$x += $d` after `push @h, $x`: V6 `field`, final audit
@@ -13516,6 +13557,14 @@ class SoN::FromOptree 0.01 {
                     # side of a call that wrote the scalar.
                     $inputs[0] = _entry_live_value($factory, $sim, $pkg_lvalue);
                 }
+                # (A PACKAGE SCALAR an inner assignment stored: its name, read
+                # where the inner store left it)
+                if (!$is_compound && !defined $pkg_lvalue && $inner_target && @inputs >= 1
+                        && ( my $g = _scalar_gv_op($inner_target) )) {
+                    my $gv = _op_gv($cv, $g);
+                    $pkg_lvalue = $factory->make('EntryDef', package => $gv->STASH->NAME, sigil => '$', symbol => $gv->NAME);
+                    $inputs[0] = _entry_live_value($factory, $sim, $pkg_lvalue);
+                }
 
                 # Element compound assignment (`$a[0] += 5`): the FIRST operand
                 # is a 2-input lvalue Subscript (a store ADDRESS) and the op
@@ -13540,6 +13589,14 @@ class SoN::FromOptree 0.01 {
                         inputs => [$elem_lvalue->v1_inputs->[0],
                                    $elem_lvalue->v1_inputs->[1]], mem => $sim->memory);
                 }
+                # (AN ELEMENT an inner op= stored, `($a[0] += 2) *= 3`: the
+                # same element, read where the inner store left it)
+                elsif (!$is_compound && !defined $pkg_lvalue && $inner_target && @inputs >= 1
+                       && ( my $lv = $ASSIGN_LVALUE{ _strip_null( $op->first )->$* } )) {
+                    $elem_lvalue = $lv;
+                    $inputs[0] = $factory->make('Subscript', kind => $lv->kind,
+                        inputs => [ $lv->v1_inputs->@[ 0, 1 ] ], mem => $sim->memory);
+                }
                 # A SCALAR DEREF IS THE SAME LOCATION SHAPE (`$$r += 2`): rv2sv
                 # pushed a 1-input PostfixDeref and nothing claimed it, so the
                 # Add was built and reached no store -- `print $v` emitted 1
@@ -13557,6 +13614,9 @@ class SoN::FromOptree 0.01 {
                         sigil  => '$',
                         stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
                 }
+
+                $ASSIGN_LVALUE{ $$op } = $elem_lvalue
+                    if $elem_lvalue && $elem_lvalue->isa('SoN::IR::Node::Subscript');
 
                 # A STACKED DESTINATION IS THE STORE, AND THERE IS NO
                 # sassign TO FIND IT. `my $s = <$fh>` compiles with the
@@ -13644,7 +13704,18 @@ class SoN::FromOptree 0.01 {
                     && !$is_compound && !$field_compound && !defined $elem_lvalue && !defined $pkg_lvalue && !defined $stacked_dest) {
                     my $t = $op->first;
                     $t = $t->first while $t->name eq 'null' && $t->can('first') && ${$t->first};
-                    die "GAP: a ?: used as the target of an op= is not yet lowered -- its store would be lost\n"
+                    # A ?: OF TWO `my` SCALARS: the op= in each arm (design 3).
+                    # The value is the ?: of the variables as they are now.
+                    my @rhs = @inputs[ 1 .. $#inputs ];
+                    if ( $t->name eq 'cond_expr' && $node_type =~ /\A(?:Add|Subtract|Multiply|Concat)\z/ && @inputs >= 2
+                         && _store_through_ternary( $sim, $factory, $t, $inputs[0], sub ($old) { $factory->make($node_type, inputs => [ $old, @rhs ]) } ) ) {
+                        my @arm = map { _strip_null($_) } ( $t->first->sibling, $t->first->sibling->sibling );
+                        $sim->push_node( $factory->make('TernaryExpr', inputs => [ $inputs[0]->inputs->[0], map { $sim->lookup( $_->targ ) } @arm ]) )
+                            unless ( $op->flags & 3 ) == 1;   # OPf_WANT_VOID
+                        return ($op->next, 'handled');
+                    }
+                    die "GAP: a ?: used as the target of an op= is not yet lowered -- its store would be lost"
+                      . " (one of two `my` scalars by + - * . is: another arm or op would need an If)\n"
                         if $t->name eq 'cond_expr';
                     die "GAP: an assignment used as the target of an op= is not yet lowered -- its store would be lost\n"
                         if $t->name =~ /\A(?:sassign|padsv_store)\z/ || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) );
@@ -16394,6 +16465,69 @@ class SoN::FromOptree 0.01 {
         # (a call: what it may reshape)
         return !grep { $_->{loc} eq 'U' || $_->{loc} eq $loc && $_->{reshape} }
             SoN::FromOptree::ModSets::op_effects( $cv, $root );
+    }
+    # _assign_target($op) -> the op an assignment stores into, through nested
+    # ones (`($x += 2) *= 3` -> $x), or undef for an op that is no assignment.
+    sub _assign_target ($o) {
+        $o = _strip_null($o);
+        my $n = $o->name;
+        return $o if $n eq 'padsv_store';
+        return _assign_target( $o->last ) // _strip_null( $o->last )
+            if $n eq 'sassign' && ( $o->flags & 4 ) && !( $o->private & B::OPpASSIGN_BACKWARDS() );
+        return _assign_target( $o->first ) // _strip_null( $o->first )
+            if B::class($o) eq 'BINOP' && ( $o->flags & 64 ) && $n !~ /\A(?:sassign|sort)\z/;
+        return undef;
+    }
+    # _store_through_ternary($sim, $factory, $cond_expr, $target, $new_of) ->
+    # true when `($c ? $a : $b) OP ...` stored: each arm a `my` scalar the walk
+    # binds as a value, each rebound to `$c ? NEW : OLD` -- the merge an If
+    # with the store in each arm makes (design 3 of
+    # docs/plans/2026-11-24-aliases-as-places.md). $new_of->($old) is an arm's
+    # new value. False for anything else (a nested ?:, a package scalar, an
+    # element, a variable kept in memory or captured): the caller refuses it.
+    sub _store_through_ternary ($sim, $factory, $t, $target, $new_of) {
+        $t = _strip_null($t);
+        return 0 unless $t->name eq 'cond_expr' && $target isa SoN::IR::Node::TernaryExpr;
+        my $c = $target->inputs->[0];
+        my @arm = map { _strip_null($_) } ( $t->first->sibling, $t->first->sibling->sibling );
+        return 0 if grep {
+            !$$_ || $_->name ne 'padsv' || !$_->targ
+                || ( $ADDR_TAKEN && $ADDR_TAKEN->{ $_->targ } )
+                || ( $CELLS && ( $CELLS->{cells}{ $_->targ } || $CELLS->{cell_params}{ $_->targ } ) )
+                || !defined $sim->lookup( $_->targ )
+        } @arm;
+        for my $i ( 0, 1 ) {
+            my $old = $sim->lookup( $arm[$i]->targ );
+            my $new = $new_of->($old);
+            $sim->define( $arm[$i]->targ, $factory->make('TernaryExpr', inputs => $i == 0 ? [ $c, $new, $old ] : [ $c, $old, $new ]) );
+        }
+        return 1;
+    }
+    # _arg_place_target($op) -> the `$` variable an assignment argument stores
+    # (a padsv or padsv_store, or a package scalar's op), or undef
+    sub _arg_place_target ($o) {
+        my $t = _assign_target($o) // return undef;
+        return $t if $t->name =~ /\A(?:padsv|padsv_store)\z/ && $t->targ || _scalar_gv_op($t);
+        return undef;
+    }
+    # _target_place($cv, $op, $factory) -> the place of a `$` variable target
+    # (_arg_place_target's): a `my` one kept in memory, or a package scalar
+    sub _target_place ($cv, $t, $factory) {
+        if ( my $g = _scalar_gv_op($t) ) {
+            my $gv = _op_gv($cv, $g);
+            return $factory->make('EntryDef', package => $gv->STASH->NAME, sigil => '$', symbol => $gv->NAME, place => 1);
+        }
+        my ($sg, $sy) = _padparts($cv, $t->targ);
+        return $factory->make('PadAccess', targ => $t->targ, sigil => $sg, symbol => $sy,
+            ( $SHARED_SLOTS && $SHARED_SLOTS->{ $t->targ } ? ( shared => 1 ) : () ), place => 1);
+    }
+    # _scalar_gv_op($op) -> the gv op of a package scalar target (gvsv, or
+    # rv2sv over a gv), or undef
+    sub _scalar_gv_op ($o) {
+        return $o if $o->name eq 'gvsv';
+        return undef unless $o->name eq 'rv2sv' && ( $o->flags & 4 );
+        my $k = _strip_null( $o->first );
+        return $k->name eq 'gv' ? $k : undef;
     }
     sub _strip_null ($o) {
         $o = $o->first while $o && $$o && $o->name eq 'null' && ( $o->flags & 4 ) && ${ $o->first } && !${ $o->first->sibling };

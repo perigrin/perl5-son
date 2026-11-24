@@ -19,7 +19,7 @@ my @files;
 find( { no_chdir => 1, wanted => sub { push @files, $File::Find::name if /\.pm\z/ } }, "$chalk/lib" );
 @files = sort @files;
 
-my ( %sum, %pid, $done, $missing );
+my ( %sum, %pid ); my ( $done, $missing ) = ( 0, 0 );
 my $limit = $ENV{SON_WIRE_TIMEOUT} // 900;
 my $reap = sub {
     my $pid = wait;
@@ -43,7 +43,7 @@ for my $f (@files) {
     $pid{$pid} = $out;
 }
 $reap->() while keys %pid;
-say "files $done, no counts $missing" =~ s/no counts $/no counts 0/r;
+say "files $done, no counts $missing";
 for my $b (qw(call list iter)) {
     my ( $p, $v ) = ( $sum{"$b-place"} // 0, $sum{"$b-value"} // 0 );
     my $t = $p + $v;

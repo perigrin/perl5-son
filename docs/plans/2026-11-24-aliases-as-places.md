@@ -186,6 +186,15 @@ Probes: f/b47 s13 i01 i03 i05 i07 i09 i10 i11 i14 i19 i20 i21 i24. Today each is
 - **An assignment passed as an argument** (`inc($x += 1)`): after the inner store, `$_[0]` is `$x`'s place (design 1).
 - **Refused by name:** a nested `?:` as a target, an arm that is not a variable or an element of a named aggregate (an element through a reference, a slice, a call), and a `?:` target of a list assignment. A Phi of places would be a wire change, and that needs perigrin again.
 
+**As built.**
+- **An assignment as the target of an op=.** `_assign_target` follows the inner op (`sassign`, `padsv_store`, a stacked op=) to the variable it stores. The op= handler takes that variable as its own target: a `my` scalar, a package scalar, or an element. For an element, the inner op= records the `Subscript` place it stored (`%ASSIGN_LVALUE`, local to each CV's walk) and the outer op reuses it.
+- **A `?:` of two `my` scalars the walk binds as values.** The store in each arm, followed by the merge, is a select. After SSA construction an If with a store in each arm merges to exactly this: `$a = $c ? NEW : $a; $b = $c ? $b : NEW` (`_store_through_ternary`). It covers `=`, `++`, `--`, and `+= -= *= .=`.
+- **Still refused by name**, because the store in each arm there would need a real If (the unchosen variable must not be stored, or a tie sees it, or an element is made):
+  - an arm that is a package scalar, an element, a variable kept in memory or captured, or another `?:`;
+  - an op= other than `+ - * .` on a `?:`;
+  - a string op= (`.=`, multiconcat) or an argument whose target is an assignment through multiconcat.
+- **An assignment passed as an argument** passes its target's place (`_arg_place_target`, `_target_place`). A `my` target is demoted, so it lives in memory.
+
 ---
 
 ## Probes and gates
