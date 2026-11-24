@@ -49,6 +49,7 @@ my %src = (
     t4 => 'my $x = 1; my $r = \$x; $x = 2; my $y = $x; $$r = 3; print "$y $x\n";',
     t5 => 'our $g=1; sub f { die "x\n" } eval { local $g = 2; f() }; print "$g\n";',
     t6 => 'my $d = @ARGV; my $q = 1/$d; print "before\n"; print "$q\n";',
+    t7 => 'our $g=1; sub f { local $g = 2; 1/$_[0] } eval { f(0) }; print "$g\n";',
 );
 sub rejected ( $what, $w, $rule ) {
     my @v = SoN::Verify::verify($w)->{violations}->@*;
@@ -136,6 +137,52 @@ for my $t ( sort keys %src ) {
     $j->{fields}{name} = 'getppid';
     delete $j->{mem_in};
     rejected( 'M11 a builtin with no EffectTable row, floating', $w, qr/\A(?:effect-floating|read-unversioned)/ );
+}
+
+# DESIGN B1 (docs/plans/2026-11-24-copy-and-local-unwind.md): outside an
+# eval, something that may die under a live `local` leaves by an Exc, the
+# restores, and an Unwind marked rethrow. Each broken the four ways V10 must
+# see (t7's division in main::f).
+sub fnodes ($w) { $w->{methods}{'main::f'}{nodes} }
+sub rethrow_edge ($w) {
+    my ($d) = grep { $_->{op} eq 'Divide' } fnodes($w)->@*;
+    my ($x) = grep { $_->{op} eq 'Exc' && $_->{inputs}[0] == $d->{id} } fnodes($w)->@*;
+    my @c;
+    for ( my $at = $x->{id}; my ($s) = grep { ( $_->{control_in} // -1 ) == $at } fnodes($w)->@*; $at = $s->{id} ) { push @c, $s }
+    return ( $d, $x, @c );
+}
+{   my $w = wire( $src{t7} );
+    my ( $d, $x, @c ) = rethrow_edge($w);
+    my %gone = map { ( $_->{id} => 1 ) } $x, @c;
+    $w->{methods}{'main::f'}{nodes} = [ grep { !$gone{ $_->{id} } } fnodes($w)->@* ];
+    rejected( 'M12 a division under a live local, outside an eval, with no way out', $w, qr/\Aexc\z/ );
+}
+{   my $w = wire( $src{t7} );
+    my ( $d, $x, @c ) = rethrow_edge($w);
+    my ($r) = grep { $_->{op} eq 'EntryWrite' } @c;
+    $c[-1]{control_in} = $x->{id};
+    $c[-1]{mem_in} = $r->{mem_in};
+    $w->{methods}{'main::f'}{nodes} = [ grep { $_ != $r } fnodes($w)->@* ];
+    rejected( 'M13 a rethrow edge with its `local` restore removed', $w, qr/\Aexc\z/ );
+}
+{   my $w = wire( $src{t7} );
+    my ( $d, $x, @c ) = rethrow_edge($w);
+    delete $c[-1]{fields}{rethrow};
+    rejected( 'M14 a rethrow edge ending in a plain die', $w, qr/\Aexc\z/ );
+}
+{   my $w = wire( $src{t7} );
+    my ( $d, $x, @c ) = rethrow_edge($w);
+    $w->{methods}{'main::f'}{nodes} = [ grep { $_ != $c[-1] } fnodes($w)->@* ];
+    rejected( 'M15 an Exc outside an eval whose edge leads nowhere', $w, qr/\A(?:exc|write-unreachable)\z/ );
+}
+
+{   my $w = wire( $src{t7} );
+    my ( $d, $x, @c ) = rethrow_edge($w);
+    $c[-1]{inputs} = [ $d->{id} ];
+    my @v = SoN::Verify::verify($w)->{violations}->@*;
+    ok( ( grep { $_->{rule} eq 'exc' && $_->{detail} =~ /a rethrow not of its own edge/ } @v ),
+        'M16 a rethrow of what is not its edge\'s Exc: rejected' )
+        or diag join '; ', map { "$_->{op}#$_->{node} $_->{rule} $_->{detail}" } @v;
 }
 
 done_testing;

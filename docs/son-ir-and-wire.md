@@ -256,6 +256,23 @@ There are no basic blocks. Control is carried by CFG nodes and by a
   try and a string eval (known or run-time) are traps of the same shape. A
   die where no eval of its graph is open puts the `local`s live there back
   first: their restores stand on the chain immediately before the Unwind.
+- **The rethrow edge** (design B1, 2026-11-24,
+  `docs/plans/2026-11-24-copy-and-local-unwind.md`). Where no eval of its
+  graph is open, each node that may die -- a sub call, a may-fault
+  Divide/Modulo, a read or store pinned because it may die -- while a
+  `local` of the graph is live has a way out too: an `Exc` (`inputs: [T]`),
+  on it the restores of the live `local`s innermost first, threaded from
+  the memory after T, then an **Unwind with `fields.rethrow: true`** whose
+  one input is the Exc and whose `mem_in` is the last restore. It is a
+  root, as a Return is (V3, L4), and has no `eval_id`: the die goes on up,
+  as perl's savestack unwinds. A point with no live `local` has no edge
+  (the consumer's default unwind is right), and neither has a die of the
+  graph's own (its locals are put back before it, above). Shape:
+
+  ```
+  EntryWrite(local $g = 2) -> Divide(file, line) -> ... -> EntryWrite(restore $g) -> Return
+  Divide -> Exc -> EntryWrite(restore $g, mem_in = after the Divide) -> Unwind(rethrow, inputs: [Exc])
+  ```
 - **String eval of code known when B::SoN runs** (2026-11-16, perigrin's
   design): a block eval whose body is one direct Call, `string_eval: true`,
   of the body B::SoN compiled from the string. The string is known when it
@@ -656,10 +673,12 @@ CLASS, as observed:
 - **RegexSubst** `{pattern, replacement, flags, pattern_is_input?,
   replacement_body?}`
 - **Divide/Modulo** `{eval_id?, file, line}`, only when a line is set
-- **Unwind** `{eval_id?, file?, line?}`
+- **Unwind** `{eval_id?, file?, line?, rethrow?}`; `rethrow: true` ends a
+  rethrow edge (its one input the Exc)
 - **Region** `{eval_entry, eval_want?, eval_may_die?, eval_id?}`, eval joins
   only; `{catch: true, eval_id}` on an eval's catch
-- **Exc** no fields; `inputs: [the node that may die]`
+- **Exc** no fields; `inputs: [the node that may die]`; in an eval it
+  leads to the catch Region, outside one to its rethrow Unwind
 - **Chomp/ChompValue** `{kind}`
 - **Transliterate** `{from, to, flags}`
 - **ListAppend** `{collector}`
@@ -857,7 +876,9 @@ These come from `lib/Chalk/IR/Serialize/JSON.pm` (`_deserialize_graph`,
    sub Call does (but an :lvalue call, the place an Assign stores through),
    and an EntryWrite, CellWrite, Delete, ElemRestore or MakeCell is a
    version; L6 a Phi's inputs pair with its Region's or Loop's ways in; L7
-   every way into a catch Region leads back to an Exc; L8 a Loop has one or
+   every way into a catch Region leads back to an Exc, an Exc outside an
+   eval ends in its own rethrow Unwind, and what may die outside an eval
+   under a live `local` has an Exc whose edge puts it back; L8 a Loop has one or
    two inputs, and the only forward references are a loop Phi's back input
    and a Loop's; L9 inputs hold values only (no MemStart or memory Phi). That
    every read names a version is `SoN::Verify`'s V6 (in both suites).

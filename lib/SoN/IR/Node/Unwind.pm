@@ -29,6 +29,16 @@ class SoN::IR::Node::Unwind :isa(SoN::IR::Node) {
         return;
     }
 
+    # A RETHROW (design B1): the end of the way out of something that died
+    # under a live `local` with no eval of its graph open -- its input the
+    # Exc, its memory the last restore on that edge. The die goes on up.
+    field $rethrow :reader = 0;
+
+    method set_rethrow($v) {
+        $rethrow = $v ? 1 : 0;
+        return;
+    }
+
     # The exception arguments (an arrayref). Control flows through the
     # control_in decoration (set via set_control_in), not through inputs.
     method value() { return $self->inputs->[0] }

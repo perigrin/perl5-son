@@ -200,7 +200,9 @@ sub _drop_catch_edges ($g) {
     my %by = map { $_->{id} => $_ } @$nodes;
     my @catch = grep { $_->{op} eq 'Region' && ( $_->{fields} // {} )->{catch} } @$nodes;
     my @entry = grep { $_->{op} eq 'Region' && defined( ( $_->{fields} // {} )->{eval_entry} ) } @$nodes;
-    return 0 unless @catch || @entry;
+    # (a rethrow edge, design B1: its Exc, the restores on it, its Unwind)
+    my @rethrow = grep { $_->{op} eq 'Unwind' && ( $_->{fields} // {} )->{rethrow} } @$nodes;
+    return 0 unless @catch || @entry || @rethrow;
     my %succ;    # control successors
     push $succ{ $_->{control_in} }->@*, $_ for grep { defined $_->{control_in} } @$nodes;
     my %region_in;    # a node => the Regions it is a way into
@@ -223,6 +225,9 @@ sub _drop_catch_edges ($g) {
         $drop{ $_->{id} } = 1 for @after;
         my $end = @after ? $after[-1] : $c;
         $join{ $_->{id} } = [ $_, $end, \@exc ] for ( $region_in{ $end->{id} } // [] )->@*;
+    }
+    for my $u (@rethrow) {
+        for ( my $x = $u; $x; $x = $x->{op} eq 'Exc' ? undef : $by{ $x->{control_in} // '' } ) { $drop{ $x->{id} } = 1 }
     }
     $join{ $_->{id} } //= [ $_, undef, [] ] for @entry;
     for my $jr ( map { $join{$_} } sort { $a <=> $b } keys %join ) {

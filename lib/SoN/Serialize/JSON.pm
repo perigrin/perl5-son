@@ -352,6 +352,7 @@ sub _extract_fields ($node, $id_remap) {
         my %f = (
             ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ),
             ( defined $node->line ? ( file => $node->file, line => $node->line ) : () ),
+            ( $node->rethrow ? ( rethrow => JSON::PP::true ) : () ),
         );
         return %f ? \%f : undef;
     }

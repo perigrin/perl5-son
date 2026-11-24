@@ -900,7 +900,8 @@ class SoN::FromOptree 0.01 {
         $sim->set_control($node);
         # (one that dies by a value it is made of, made with it: its way out)
         # (a sub call's is made at its memory barrier: the memory after it)
-        _exc_edge($sim, $node) if @EXC_FRAMES && !( $node->operation eq 'Call' && ( $node->dispatch_kind // '' ) ne 'builtin' )
+        _exc_edge($sim, $node) if @EXC_FRAMES && ( !$EXC_FRAMES[-1]{rethrow} || _rethrow_saves( $EXC_FRAMES[-1] ) )
+            && !( $node->operation eq 'Call' && ( $node->dispatch_kind // '' ) ne 'builtin' )
             && _dies_by_its_values($node);
         return $node;
     }
@@ -2815,6 +2816,10 @@ class SoN::FromOptree 0.01 {
                     is_program => (defined $program_root ? 1 : 0) };
         # A `return` restores the `local`s of every walk it leaves.
         local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
+        # THE SUB'S OWN WAY OUT (design B1): below any eval frame, so a node
+        # that may die with no eval of this graph open, under a live `local`
+        # of this graph, leaves by a rethrow edge (_exc_edge).
+        local @EXC_FRAMES = ( { rethrow => 1, factory => $factory, base => $#SAVES_STACK } );
 
         # A FILE LEXICAL SHARED WITH A NAMED SUB is a location in both graphs:
         # the program's slot, and the sub's own index for it.
@@ -6255,6 +6260,7 @@ class SoN::FromOptree 0.01 {
     # is in it). Recorded in the eval's frame; _catch_way merges them.
     sub _exc_edge ($sim, $node) {
         my $f = $EXC_FRAMES[-1] or return;
+        return _rethrow_edge($sim, $node, $f) if $f->{rethrow};
         return if !defined $EVAL_ID || $f->{eval_id} != $EVAL_ID || !defined $sim->memory;
         return if $f->{edged}{ refaddr $node }++;   # (one way out each)
         my $factory = $f->{factory};
@@ -6272,6 +6278,36 @@ class SoN::FromOptree 0.01 {
         push $f->{edges}->@*, { exc => $exc, sim => $edge };
         return;
     }
+
+    # _rethrow_edge($sim, $node, $frame): with no eval of this graph open, the
+    # way out of $node, which may die, where a `local` of this graph is live
+    # (design B1, docs/plans/2026-11-24-copy-and-local-unwind.md): an Exc,
+    # the restores of those locals innermost first from the memory after
+    # $node, then an Unwind marked rethrow -- the die goes on up, as perl's
+    # savestack unwinds. With nothing live, no edge: the consumer's default
+    # unwind is right. A die of the sub's own puts them back before it
+    # (_pin_die), so it has none.
+    sub _rethrow_edge ($sim, $node, $f) {
+        return if $node->operation eq 'Unwind' || !defined $sim->memory;
+        my @saves = _rethrow_saves($f) or return;
+        return if $f->{edged}{ refaddr $node }++;   # (one way out each)
+        my $factory = $f->{factory};
+        my $edge = $sim->snapshot;
+        my $exc  = $factory->make_cfg('Exc', inputs => [$node]);
+        $edge->set_control($exc);
+        $edge->set_memory( $node->mem_out ? $node : $node->mem_in // $sim->memory );
+        {
+            local $EXC_EDGE = 1;
+            _restore_locals($edge, { local_saves => \@saves }, $factory, 0, 1);
+        }
+        my $unwind = $factory->make_cfg('Unwind', inputs => [ [$exc] ]);
+        $unwind->set_rethrow(1);
+        $unwind->set_control_in( $edge->control );
+        $unwind->set_mem_in( $edge->memory );
+        return;
+    }
+    # _rethrow_saves($frame) -> the saves of this graph live now, or ().
+    sub _rethrow_saves ($f) { return map { $_->@* } @SAVES_STACK[ $f->{base} .. $#SAVES_STACK ] }
 
     # _pin_die($sim, $factory, $unwind): a die, on the chain. In an eval here
     # its way out is an edge (_exc_edge). Where none is, the `local`s live

@@ -499,6 +499,64 @@ sub _graph_v2 ( $name, $g, $res ) {
             $_->{op} eq 'EntryWrite' && $s && $s->{op} eq 'EntryDef' && defined $s->{mem_in}
                 && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($s)
         } @nodes;
+        # (V10, design B1) A WAY OUT WITH NO EVAL: outside every eval of the
+        # graph, a sub call or what B::SoN pinned because it may fault, made
+        # where a `local` is live (its store reached back along control before
+        # its restore), has an Exc whose edge puts that local back and ends in
+        # an Unwind marked rethrow; every such Exc ends so, and every rethrow
+        # is of its own edge's Exc.
+        {
+            my %pred;    # control predecessors
+            for my $y (@nodes) {
+                my @p = defined $y->{control_in} ? ( $y->{control_in} ) : ();
+                push @p, grep { defined && !ref } $y->{inputs}->@* if $y->{op} =~ /^(?:Region|Loop)$/;
+                push @p, $y->{inputs}[0] if $y->{op} =~ /^(?:If|Proj)$/ && defined $y->{inputs}[0];
+                $pred{ $y->{id} } = \@p;
+            }
+            my %edge_node = map { %{ $path->( $_->{id}, -1 ) } } values %exc_of;
+            my @pairs;    # [ local store, its save, its restore ] off every edge
+            for my $r ( grep { !$edge_node{ $_->{id} } } @restores ) {
+                my $save = $by{ $r->{inputs}[1] };
+                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $save->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($save) } @nodes;
+                push @pairs, [ $local, $save, $r ] if $local;
+            }
+            my $in_eval = sub ($t) { my $e = _fields($t)->{eval_id}; defined $e && $join{$e} };
+            my $may_die = sub ($t) {
+                return 0 unless defined $t->{control_in} && !$in_eval->($t) && !$edge_node{ $t->{id} };
+                return 1 if $t->{op} eq 'Call' && ( _fields($t)->{dispatch_kind} // '' ) ne 'builtin';
+                return $t->{op} =~ /^(?:Divide|Modulo|PostfixDeref|Ref)$/ && defined _fields($t)->{line} ? 1 : 0;
+            };
+            for my $t ( grep { $may_die->($_) } @nodes ) {
+                my @live;
+                for my $pr (@pairs) {
+                    my ( $local, $save, $r ) = @$pr;
+                    my ( @q, %s ) = ( $pred{ $t->{id} }->@* );
+                    while ( defined( my $id = shift @q ) ) {
+                        next if $s{$id}++ || $id == $r->{id};
+                        if ( $id == $local->{id} ) { push @live, $save; last }
+                        push @q, ( $pred{$id} // [] )->@*;
+                    }
+                }
+                next unless @live;
+                my $x = $exc_of{ $t->{id} };
+                my $p = $x ? $path->( $x->{id}, -1 ) : {};
+                $bad->( $t, 'exc', 'it may die under a live local, outside an eval, and has no way out' ), next unless $x;
+                for my $save (@live) {
+                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->($save) )
+                        unless grep { $p->{ $_->{id} } && ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
+                }
+            }
+            for my $x ( grep { !$in_eval->( $by{ $_->{inputs}[0] // '' } // {} ) } values %exc_of ) {
+                my $p = $path->( $x->{id}, -1 );
+                $bad->( $x, 'exc', 'an Exc outside an eval whose way out ends in no rethrow' )
+                    unless grep { $p->{ $_->{id} } && $_->{op} eq 'Unwind' && _fields($_)->{rethrow} && ( $_->{inputs}[0] // -1 ) == $x->{id} } @nodes;
+            }
+            for my $u ( grep { $_->{op} eq 'Unwind' && _fields($_)->{rethrow} } @nodes ) {
+                my $x = $by{ $u->{inputs}[0] // '' };
+                $bad->( $u, 'exc', 'a rethrow not of its own edge\'s Exc' )
+                    unless $x && $x->{op} eq 'Exc' && $path->( $x->{id}, -1 )->{ $u->{id} };
+            }
+        }
         for my $e ( sort keys %join ) {
             my $j = $join{$e};
             my $entry = _fields($j)->{eval_entry} // next;
