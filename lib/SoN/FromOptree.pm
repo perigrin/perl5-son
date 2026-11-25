@@ -11401,6 +11401,17 @@ class SoN::FromOptree 0.01 {
                     stamp => SoN::IR::Stamp->new(type => 'Int')) if @args == 2;
                 die "GAP: an lvalue substr without a length is not yet lowered\n"
                     unless @args == 3;
+                # (AN ELEMENT READ AT NO VERSION -- `substr($_[0], 0, 1) = "z"`,
+                # the lvalue aelem -- is read where the call stands, as a `my`
+                # string is: the call's string at its version, not a read with
+                # none; z/unverified/pa79, audit 2)
+                {
+                    my $s0 = $args[0];
+                    $s0 = $s0->v1_inputs->[0] while $s0 isa SoN::IR::Node::Coerce;
+                    $args[0] = $factory->make('Subscript', kind => $s0->kind, inputs => [ $s0->v1_inputs->@[ 0, 1 ] ],
+                        mem => $sim->memory, ( $s0->stamp ? ( stamp => $s0->stamp ) : () ))
+                        if $s0 isa SoN::IR::Node::Subscript && !$s0->mem_operand && defined $sim->memory;
+                }
                 my $write = $factory->make('Call',
                     inputs        => [@args, $value],
                     dispatch_kind => 'builtin',
