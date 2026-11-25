@@ -34,6 +34,12 @@
   (pa79) and the verifier (un75); they are in `z/` now. In chalk's
   `t/data/audit-probes` as `z` plus their name (`cp01.pl` is `zcp01`), gated
   with WRONG 0 since `audit2`.
+  `probes/y/`: the 1373 probes of the 2026-11-25 third final audit
+  (../2026-11-25-memory-model-final-audit-3.md, section 4); `_run1.log` is their
+  sweep at producer 76f33aa, chalk eca706af (146 WRONG, and `ya57`, which is
+  not counted). `ylib/` holds the modules the `yd` probes load. The 39 in
+  `unverified/` break a verifier rule (30) or the pre-scan agreement test (9). Not in chalk's
+  `t/data/audit-probes` yet.
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),
