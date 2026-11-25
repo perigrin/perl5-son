@@ -6050,6 +6050,9 @@ class SoN::FromOptree 0.01 {
             my @ops = _entersub_args_and_invocant($op);
             for my $i ( 0 .. $n - 1 ) {
                 my $t = @ops == $n ? _arg_place_target( $ops[$i] ) : undef;
+                # (A POSTINCREMENT'S VALUE IS A COPY: `f($g, $g++)` hands f the
+                # old $g, read before the store, not $g -- audit 2, K6)
+                next if @ops == $n && _strip_null( $ops[$i] )->name =~ /\A(?:i_)?post(?:inc|dec)\z/;
                 $args->[$i] = ( $t ? _target_place( $cv, $t, $factory ) : undef )
                     // _alias_place( $args->[$i], $factory ) // $args->[$i];
             }
@@ -25515,6 +25518,20 @@ class SoN::FromOptree 0.01 {
         };
         for ( my $k = $op->first; $k && $$k; $k = $k->sibling ) {
             next if ( $k->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;   # a statement, not an operand
+            # AN ASSIGNMENT'S RESULT IS ITS ELEMENT, as a scalar's is its
+            # variable: `($a[0] = 5) + ($a[0] = 7)` is 14 in perl, and the
+            # graph added the two values (12) -- audit 2, K5. The scalar form
+            # is refused below; the element one here.
+            {
+                my $s = _strip_null($k);
+                my $t = $s->name eq 'sassign' && ( $s->flags & B::OPf_KIDS ) && !( $s->private & B::OPpASSIGN_BACKWARDS() ) ? $s->last
+                    : ( $s->isa('B::BINOP') && ( $s->flags & B::OPf_STACKED ) && $s->name !~ /\A(?:sassign|sort)\z/ )
+                      || $s->name =~ /\A(?:i_)?pre(?:inc|dec)\z/ ? $s->first : undef;
+                my $tkey = $t && $$t ? $elem_key->($t) : undef;
+                die "GAP: an assignment's element is read by alias and a later operand"
+                  . " stores into its container -- not yet lowered\n"
+                    if defined $tkey && grep { $elem_stored->( $_, $tkey ) } _later_siblings($k);
+            }
             next if $k->flags & B::OPf_MOD;                           # a store's own target
             my $was = $k->name eq 'null' && $k->targ ? ( B::ppname( $k->targ ) =~ s/\App_//r ) : $k->name;
             next unless $was =~ /\A(?:aelem|helem|aelemfast_lex|aelemfast|multideref)\z/;
