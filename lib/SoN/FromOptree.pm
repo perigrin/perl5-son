@@ -15307,6 +15307,7 @@ class SoN::FromOptree 0.01 {
             return $class->( $o->first, $depth + 1 ) if $n eq 'null' && ( $o->flags & B::OPf_KIDS() ) && !$o->first->sibling;
             return 'S' if $n eq 'const';
             if ( defined( my $t = $key->($o) ) ) {
+                return 'S' if $t =~ /\A\$main::\d+\z/;    # (a capture: a Str)
                 return $iter_class if defined $iter && $t eq $iter;
                 return $cls{$t} if exists $cls{$t};
                 return _is_narrowed( ( $pre_scope->{$t} // return 'U' )->stamp ) ? 'S' : 'U';
@@ -15325,7 +15326,8 @@ class SoN::FromOptree 0.01 {
             return 'S' if $STR{$n} || $n eq 'aassign';    # (a list assign: its literal, above)
             # (a reference made here; a count)
             return 'S' if $n =~ /\A(?:refgen|srefgen|anonlist|anonhash|length)\z/
-                || $n eq 'keys' && ( $o->flags & 3 ) == 2;
+                || $n =~ /\A(?:keys|values|padav|padhv|rv2av|rv2hv|grepwhile|mapwhile)\z/ && ( $o->flags & 3 ) == 2;    # (a count)
+            return $class->( ( $kids->($o) )[0], $depth + 1 ) if $n eq 'scalar';
             # A SHIFT OR POP of a literal the pass does not rebind is its
             # element type (the walk's _array_element_stamp)
             if ( $n =~ /\A(?:shift|pop)\z/ ) {
@@ -15611,13 +15613,18 @@ class SoN::FromOptree 0.01 {
         # statement of the pass; in an arm the main walker stores it in place:
         # chalk's EmitHelpers::_repair_stale_merge, `if (...) { $line =~ s/// }`)
         if ( $op->name =~ /\A(?:subst|trans)\z/ ) {
-            for ( my $p = eval { $op->parent }; $p && $$p; $p = eval { $p->parent } ) {
+            # (a conditional's first operand is its test, walked where it
+            # stands: `my $nl = $line =~ s/\n\z// ? "\n" : ''`)
+            for ( my ( $c, $p ) = ( $op, eval { $op->parent } ); $p && $$p; ( $c, $p ) = ( $p, eval { $p->parent } ) ) {
                 my $n = $p->name;
-                return 0 if $n =~ /\A(?:cond_expr|or|dor|xor|andassign|orassign|dorassign)\z/;
-                next unless $n eq 'and';
+                next unless $n =~ /\A(?:cond_expr|and|or|dor|xor|andassign|orassign|dorassign)\z/;
                 my $f = $p->first;
-                $f = $f->first while $$f && $f->name eq 'null' && ( $f->flags & B::OPf_KIDS() );
-                return $f->name eq 'iter' ? 1 : 0;
+                if ( $n eq 'and' ) {
+                    my $g = $f;
+                    $g = $g->first while $$g && $g->name eq 'null' && ( $g->flags & B::OPf_KIDS() );
+                    return 1 if $g->name eq 'iter';    # (the pass itself)
+                }
+                return 0 unless $$f == $$c;
             }
             return 1;
         }
@@ -15664,8 +15671,9 @@ class SoN::FromOptree 0.01 {
         }
         else {
             # (s/// and tr/// with no `=~` work on `$_`; /r returns a copy)
+            # (`$x =~ s///` names a lexical by its targ, unstacked: not `$_`)
             return 1 if $key eq '$main::_' && $n =~ /\A(?:subst|trans)\z/
-                && !( $op->flags & B::OPf_STACKED() )
+                && !( $op->flags & B::OPf_STACKED() ) && !$op->targ
                 && !( $n eq 'subst' && ( $op->pmflags & PMf_NONDESTRUCT ) );
             # (`$x` is a gvsv where perl's peephole ran, an rv2sv of a gv
             # where it did not: B::SoN's own compile of the program)
