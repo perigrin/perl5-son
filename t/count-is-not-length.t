@@ -40,7 +40,8 @@ subtest 'a string length is a Length' => sub {
     my $g = graph_of('sub { my $s = "abc"; length($s) }');
     my @len = ops_of($g, 'Length');
     is(scalar @len, 1, 'one Length node') or return;
-    is($len[0]->stamp->type, 'Int', 'it yields an Int');
+    # (length(undef) is undef, perl 5.12 on: Maybe[Int] -- audit 3, N12)
+    is($len[0]->stamp->type, 'Maybe[Int]', 'it yields an Int, or undef for undef');
     is(scalar(ops_of($g, 'Count')), 0, 'and no Count node is built');
 };
 
