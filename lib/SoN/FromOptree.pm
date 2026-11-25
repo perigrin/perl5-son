@@ -25716,11 +25716,36 @@ class SoN::FromOptree 0.01 {
         return undef;
     }
 
+    # _stored_since($mem, $since) -> some version on the chain back from $mem
+    # to $since may store: anything but a read made where it stands (a pinned
+    # read is a version that stores nothing). A merge or the chain's start is
+    # taken as a store.
+    sub _stored_since ($mem, $since) {
+        for ( my ( $m, $n ) = ( $mem, 0 ); blessed($m) && $n < 10000; $m = $m->can('mem_in') ? $m->mem_in : undef, $n++ ) {
+            return 0 if blessed($since) && refaddr($m) == refaddr($since);
+            return 1 unless $m->operation =~ /\A(?:Subscript|Exists|PostfixDeref|Count|RefType|EntryDef|PadAccess|FieldAccess|CellRead|Slice)\z/;
+        }
+        return 1;
+    }
     # _pad_scalar_now($cv, $targ, $sim, $factory, $ctx) -> the value of pad
     # scalar $targ as it is now: its binding, or a read of its cell, slot or
     # field at the current memory.
     sub _pad_scalar_now ( $cv, $targ, $sim, $factory, $ctx ) {
         my $mem = $sim->memory;
+        # (A FOREACH ITERATOR THAT IS ITS ELEMENT, or aliased by reference:
+        # the element read now, as the padsv handler reads it)
+        if ( my $el = $ITER_ELEMENT{$targ} ) {
+            return defined $mem ? $factory->make('Subscript', kind => 'array', inputs => [ $el->@[ 0, 1 ] ], mem => $mem,
+                stamp => SoN::IR::Stamp->new(type => 'Scalar')) : undef;
+        }
+        if ( my $al = $ITER_ALIAS_REF{$targ} ) {
+            return undef unless defined $mem;
+            my $through = $factory->make_unique('PostfixDeref', sigil => '$', inputs => [ $al->{ref} ], mem => $mem,
+                stamp => SoN::IR::Stamp->new(type => 'Scalar'));
+            my $by_index = $factory->make_unique('Subscript', kind => 'array', inputs => [ $al->{array}, $al->{index} ], mem => $mem,
+                stamp => SoN::IR::Stamp->new(type => 'Scalar'));
+            return $al->{exists} ? _make_ternary( $factory, $al->{exists}, $through, $by_index ) : $through;
+        }
         if ( my $cell = $ctx->{cell_params}{$targ} // $ctx->{cells}{$targ} ) {
             return defined $mem ? $factory->make('CellRead', inputs => [$cell], mem => $mem, stamp => SoN::IR::Stamp->new(type => 'Unknown')) : undef;
         }
@@ -25730,7 +25755,6 @@ class SoN::FromOptree 0.01 {
             return $factory->make('PadAccess', targ => $targ, sigil => $sg, symbol => $sy,
                 ( $ctx->{shared_lexicals}{$targ} ? ( shared => 1 ) : () ), mem => $mem);
         }
-        return undef if $ITER_ALIAS_REF{$targ} || $ITER_ELEMENT{$targ};
         my $slot = _make_pad_or_field( $cv, $targ, $factory );
         return defined $mem ? $factory->make('FieldAccess', field_index => $slot->field_index, field_stash => $slot->field_stash, mem => $mem)
             : undef if $slot->isa('SoN::IR::Node::FieldAccess');
@@ -25848,11 +25872,12 @@ class SoN::FromOptree 0.01 {
             next unless $d->{depth} < $sim->stack_depth && refaddr( $sim->node_at( $d->{depth} ) ) == refaddr( $d->{node} );
             my $old = $d->{node};
             my $new;
+            $mem = $sim->memory;   # (a read made again just now may have been pinned: a version)
             if ( $d->{how} eq 'target' ) {
                 if ( defined $d->{targ} ) { $new = _pad_scalar_now( $cv, $d->{targ}, $sim, $factory, $ctx ) }
                 elsif ( defined $mem ) { $new = _at_memory( $factory, $d->{lv}, $mem ) }
             }
-            elsif ( defined $mem && refaddr( $old->mem_in ) != refaddr($mem) ) {
+            elsif ( defined( $mem = $sim->memory ) && refaddr( $old->mem_in ) != refaddr($mem) && _stored_since( $mem, $old->mem_in ) ) {
                 # (A `local` of it between: perl's operand is the scalar it
                 # pushed, the name's is a new one -- `print $g, local $g = 5`,
                 # audit 3 N8. The wire's read is by name: refused.)
