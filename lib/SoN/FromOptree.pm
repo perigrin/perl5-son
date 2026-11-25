@@ -2202,24 +2202,29 @@ class SoN::FromOptree 0.01 {
     # _scalar_written($key) -> whether some sub may write the package scalar
     # named by scope key $key ('$main::n'): one the scan saw written, any if
     # a store through a name was seen, or one of a package not read whole.
+    # %PKG_TAKEN_UNWRITTEN: the keys answered "unwritten" -- a graph may have
+    # read them as values, so a writer of one met later is refused.
+    my %PKG_TAKEN_UNWRITTEN;
     sub _scalar_written ($key) {
         my $w = _package_scalars_written();
         return 1 if $w->{$key} || $w->{'*'};
-        my ($pkg) = $key =~ /\A\W(.*)::[^:]+\z/s or return 0;
-        return $PKG_UNREAD{$pkg} ? 1 : 0;
+        my ($pkg) = $key =~ /\A\W(.*)::[^:]+\z/s;
+        return 1 if defined $pkg && $PKG_UNREAD{$pkg};
+        $PKG_TAKEN_UNWRITTEN{$key} = 1;
+        return 0;
     }
 
     # _scan_run_set_cv($cv) -- read a body the walk is about to translate,
     # unless the scan has. A subtree body (a sort block, a replacement, a
     # field default) is read with the CV whose pad it runs in. After the
-    # first answer, a scalar it writes that the answer took for unwritten is
-    # refused: graphs already walked read it as a value.
+    # first answer, a scalar it writes that a graph was told is unwritten
+    # (_scalar_written) is refused: that graph read it as a value.
     sub _scan_run_set_cv ($cv) {
         return unless ref($cv) && $$cv && !$PKG_SCALAR_CV{$$cv};
         my %had = map { ( $_ => 1 ) } keys %PKG_SCALAR_WRITTEN;
         _scan_cv_package_writes($cv);
         return unless $PKG_SCALAR_SCANNED;
-        my @late = sort grep { !$had{$_} && !$had{'*'} && !( /\A\W(.*)::[^:]+\z/s && $PKG_UNREAD{$1} ) }
+        my @late = sort grep { !$had{$_} && !$had{'*'} && ( $_ eq '*' ? %PKG_TAKEN_UNWRITTEN : $PKG_TAKEN_UNWRITTEN{$_} ) }
             keys %PKG_SCALAR_WRITTEN;
         die "GAP: a body the first scan did not read writes a package scalar it took for unwritten"
           . " (@late), not yet lowered -- the graphs walked before it read it as a value\n"
