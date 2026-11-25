@@ -775,3 +775,19 @@ Clause gaps: st3 is refused in perl's words (the harness: perl does not compile 
 Shortcuts named in the code: a call no walk sees into is not counted by K3's and K7's refusals (as the call-argument rule does not); a sub a BEGIN block calls reads a followed module's variable as the wire has it then, unset; an import that is not followed code stores no followed module's variable.
 
 Design question left open (K2): a place is the variable's storage, so under `local` it names the new scalar where perl's alias keeps the saved one. Either `local` on the wire makes a new place -- the save holds the old place, the name is rebound, and a place taken before keeps the old one (HHVM's box) -- or the refusal stands.
+
+What the gates found first (gates1, and the runs before it): every new rule reached past its class before it was narrowed -- the sweep (K2: seven SAME, every code-value call "may localize"; K7: six, a push or a new key; K3: one), the producer's deparse and wire tests (19 files: K1's parameter shapes and lost parameter typing, K4's ?: item, K3 in chalk's `_stamp_method_call_reprs`), the census (420 for 426: K9 refused `use POSIX` whole; K1's copy; K3's `keys`), the ratchet (the record rule and V12's list half wider than the producer's; chalk's lib, a sub's own `my` array under method calls), and chalk's suite (two tests: the interval oracle's renumbered nodes and the start state's constants, renamed and added by hand; `$_` refused by B::SoN first). z/qc04 went SAME -> REFUSED: right by luck (the same loop storing `$a[0]` prints 12 for 72).
+
+Probes: all 3179 gated (2353 + 826 z): SAME 2435, REFUSED 724, LOUD 20, WRONG 0. z: SAME 574, REFUSED 249, LOUD 5; the audit's 57: SAME 35, REFUSED 22. Older rows: lw25, lw62 REFUSED -> SAME; st3 named; aum43 aum51 aum54 aun17b lw41 lw76 rep17 refused by a new producer rule first (the same refusal, by name).
+
+`tools/gates.sh` at producer 6b5f82d, chalk eca706af:
+
+```
+producer-suite  PASS  829 files, 0 failing [29m06s]
+chalk-suite     PASS  941 files, 0 failing [69m57s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m58s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [7m09s]
+probes          PASS  LOUD=20 REFUSED=724 SAME=2435; WRONG 0, SAME lost 0, changed 0 [8m39s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [52m50s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m15s]
+```
