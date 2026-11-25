@@ -6813,6 +6813,16 @@ class SoN::Deparse 0.01 {
                 }
             }
 
+            # A `local` OF A NAMED SCALAR (design B, section 4) binds the name
+            # to a new scalar holding the value: a glob assignment of a
+            # reference to a fresh one, so the scalar it was bound to -- which
+            # an alias or a saved reference holds -- keeps its value.
+            if ( $n->{fields} && $n->{fields}{local} && $slot && ( $slot->{op} // '' ) eq 'EntryDef' ) {
+                my $name = $self->_slot_name($slot);
+                $name =~ s/\A[\$\@\%\&\*]//;
+                return sprintf( "*%s = \\do { my \$l = %s };\n", $name, $self->_expr( $n->{inputs}[1] ) );
+            }
+
             # A BINDING IS RENDERED AS A GLOB ASSIGNMENT, because that is the
             # only Perl spelling that ALIASES a name rather than storing into
             # it. Emitted as a store it is a wrong answer, not an imprecise

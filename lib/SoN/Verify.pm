@@ -736,8 +736,11 @@ sub _graph_v2 ( $name, $g, $res ) {
         my $sym = sub ($x) { my $f = _fields( $x // {} ); join ':', map { $_ // '' } $f->@{qw(package sigil symbol)} };
         # A RESTORE: an EntryWrite storing back the value its target held -- an
         # EntryDef of the same name read at an earlier version (the save).
+        # (or, design B section 4, binding the name back to the scalar it had:
+        # a Ref of that read, the save of a `local` of a named scalar)
+        my $in = sub ($x) { $x && $x->{op} eq 'Ref' ? $by{ $x->{inputs}[0] // '' } : $x };
         my @restores = grep {
-            my $s = $by{ $_->{inputs}[1] // '' };
+            my $s = $in->( $by{ $_->{inputs}[1] // '' } );
             $_->{op} eq 'EntryWrite' && $s && $s->{op} eq 'EntryDef' && defined $s->{mem_in}
                 && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($s)
         } @nodes;
@@ -759,7 +762,7 @@ sub _graph_v2 ( $name, $g, $res ) {
             my @pairs;    # [ local store, its save, its restore ] off every edge
             for my $r ( grep { !$edge_node{ $_->{id} } } @restores ) {
                 my $save = $by{ $r->{inputs}[1] };
-                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $save->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($save) } @nodes;
+                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $in->($save)->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->( $in->($save) ) } @nodes;
                 push @pairs, [ $local, $save, $r ] if $local;
             }
             my $in_eval = sub ($t) { my $e = _fields($t)->{eval_id}; defined $e && $join{$e} };
@@ -793,7 +796,7 @@ sub _graph_v2 ( $name, $g, $res ) {
                 my $p = $x ? $path->( $x->{id}, -1 ) : {};
                 $bad->( $t, 'exc', 'it may die under a live local, outside an eval, and has no way out' ), next unless $x;
                 for my $save (@live) {
-                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->($save) )
+                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->( $in->($save) ) )
                         unless grep { $p->{ $_->{id} } && ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
                 }
             }
@@ -816,7 +819,7 @@ sub _graph_v2 ( $name, $g, $res ) {
             my $body = $path->( $entry, $j->{id} );
             for my $r ( grep { $body->{ $_->{id} } && !$on_exc{ $_->{id} } } @restores ) {
                 my $save = $by{ $r->{inputs}[1] };
-                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $save->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($save) } @nodes;
+                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $in->($save)->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->( $in->($save) ) } @nodes;
                 next unless $local;
                 # (a restore of it met first, going back, put it back: an inner
                 # block's local, closed before the thrower -- audit 2, un75)
@@ -827,7 +830,7 @@ sub _graph_v2 ( $name, $g, $res ) {
                     for ( 1 .. 100000 ) { last if !defined $m || $put_back{$m}; if ( $m == $local->{id} ) { $after = 1; last } $m = ( $by{$m} // {} )->{mem_in} }
                     next unless $after;
                     my $p = $path->( $x->{id}, -1 );
-                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->($save) )
+                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->( $in->($save) ) )
                         unless grep { $p->{ $_->{id} } && ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
                 }
             }
