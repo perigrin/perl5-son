@@ -220,6 +220,26 @@ my %STORES_OPERANDS = (
 );
 sub stores_operands ($name) { return $STORES_OPERANDS{ $name // '' } }
 
+# bound_target($op) -> the op a binding builtin (s///, tr///) STORES INTO when
+# `=~` names its target, or undef: none named (it stores `$_`, or a lexical
+# by its targ), or it stores nothing (s///r, tr///r, a counting tr///).
+# THE TWO SPELL IT APART: s/// takes its target as its first kid; tr/// has
+# no kids, and `$x =~ tr/a/z/` is null(STACKED)[target, trans], the target
+# its elder sibling (audit 3, risk 2: every scan that took a stacked store's
+# target from its first kid saw no store by tr///).
+sub bound_target ($op) {
+    require B;
+    my $n = $op->name;
+    return undef unless $n eq 'subst' || $n eq 'trans';
+    return undef unless $op->flags & B::OPf_STACKED();
+    return undef if $n eq 'subst' && ( ( eval { $op->pmflags } // 0 ) & B::PMf_NONDESTRUCT() );
+    return undef if $n eq 'trans' && ( $op->private & B::OPpTRANS_IDENTICAL() );
+    return $op->first if $n eq 'subst';
+    my $up = eval { $op->parent } or return undef;
+    return undef unless $$up && ( $up->flags & B::OPf_KIDS() ) && ${ $up->first } != $$op;
+    return $up->first;
+}
+
 # names() -> every builtin with a row, sorted (for the tests).
 sub names () { return sort keys %ROW }
 

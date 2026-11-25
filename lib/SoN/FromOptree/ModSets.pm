@@ -275,7 +275,7 @@ sub _stores ( $cv, $o ) {
             ? ( ( eval { $o->pmflags } // 0 ) & 0x4000000 )            # s///r
             : ( $o->private & ( B::OPpTRANS_IDENTICAL() ) );            # tr counting
         unless ($nondestructive) {
-            if    ( $o->flags & B::OPf_STACKED ) { push @e, _target_effects( $cv, $kids[0] ) }
+            if ( $o->flags & B::OPf_STACKED ) { push @e, _target_effects( $cv, B::SoN::EffectTable::bound_target($o) ) }
             elsif ( $o->targ && ( eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt( $o->targ )->PV } // '' ) =~ /\A\$./ ) {
                 push @e, _lex_effects( $cv, $o->targ, 0 );
             }

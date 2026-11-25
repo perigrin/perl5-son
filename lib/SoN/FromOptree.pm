@@ -25393,6 +25393,13 @@ class SoN::FromOptree 0.01 {
         return unless $op->flags & B::OPf_KIDS;
         return if $op->isa('B::LOGOP');
         return if $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
+        # (`$x =~ tr///` is null[$x, trans]: $x is the store's target, no operand)
+        {
+            my $last = $op->first;
+            $last = $last->sibling while ${ $last->sibling };
+            my $t = B::SoN::EffectTable::bound_target($last);
+            return if $t && $$t == ${ $op->first };
+        }
         my $var = sub ($o) {                                # 'p<targ>' | 'g<gv>'
             return undef unless $o && $$o;
             # `$n` is rv2sv(gv), or the gvsv rpeep makes of it.
@@ -25570,6 +25577,8 @@ class SoN::FromOptree 0.01 {
             return 0 unless $o && $$o;
             my $n = $o->name;
             return 1 if $n eq 'aelemfastlex_store' && $names->( $o, $key );
+            # (an s/// or tr/// bound by `=~`: B::SoN::EffectTable::bound_target)
+            return 1 if $n =~ /\A(?:subst|trans)\z/ && $names->( B::SoN::EffectTable::bound_target($o), $key );
             return 0 unless $o->flags & B::OPf_KIDS;
             my @kids;
             for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { push @kids, $k }
@@ -25577,7 +25586,7 @@ class SoN::FromOptree 0.01 {
                   $n eq 'sassign'                                        ? ( $kids[-1] )
                 : $n eq 'aassign'                                        ? ( _subtree_ops( $kids[-1] ) )
                 : $n =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/            ? ( $kids[0] )
-                : $n =~ /\A(?:subst|trans|transr|chomp|chop|schomp|schop)\z/ ? ( $kids[0] )
+                : $n =~ /\A(?:chomp|chop|schomp|schop)\z/                 ? ( $kids[0] )
                 : ( $o->isa('B::BINOP') && ( $o->flags & B::OPf_STACKED ) ) ? ( $kids[0] )   # op=
                 : $n eq 'multiconcat' && ( $o->flags & B::OPf_STACKED )   ? ( $kids[-1] )
                 :                                                          ();
