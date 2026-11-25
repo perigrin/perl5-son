@@ -762,10 +762,13 @@ sub _graph_v2 ( $name, $g, $res ) {
                 my $save = $by{ $r->{inputs}[1] };
                 my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $save->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($save) } @nodes;
                 next unless $local;
+                # (a restore of it met first, going back, put it back: an inner
+                # block's local, closed before the thrower -- audit 2, un75)
+                my %put_back = map { ( $_->{id} => 1 ) } grep { ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
                 for my $x (@exc) {
                     # (the thrower comes after the local: back along memory from it)
                     my ( $m, $after ) = ( $by{ $x->{inputs}[0] }{mem_in}, 0 );
-                    for ( 1 .. 100000 ) { last unless defined $m; if ( $m == $local->{id} ) { $after = 1; last } $m = ( $by{$m} // {} )->{mem_in} }
+                    for ( 1 .. 100000 ) { last if !defined $m || $put_back{$m}; if ( $m == $local->{id} ) { $after = 1; last } $m = ( $by{$m} // {} )->{mem_in} }
                     next unless $after;
                     my $p = $path->( $x->{id}, -1 );
                     $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->($save) )
