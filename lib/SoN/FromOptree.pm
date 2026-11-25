@@ -25684,7 +25684,7 @@ class SoN::FromOptree 0.01 {
         my $top   = $sim->node_at($depth);
         return unless blessed($top);
         my $n = $op->name;
-        my %d = ( depth => $depth, node => $top );
+        my %d = ( depth => $depth, node => $top, mem => $sim->memory );
         if ($target) {
             return unless $target->{targ} || blessed( $target->{lv} ) && $target->{lv}->isa('SoN::IR::Node::Access')
                 || blessed( $target->{lv} ) && $target->{lv}->isa('SoN::IR::Node::PostfixDeref');
@@ -25749,6 +25749,7 @@ class SoN::FromOptree 0.01 {
         }
         if ( my $al = $ITER_ALIAS_REF{$targ} ) {
             return undef unless defined $mem;
+            local $SoN::IR::NodeFactory::ON_VALUE = undef;   # (made where its consumer is: not pinned)
             my $through = $factory->make_unique('PostfixDeref', sigil => '$', inputs => [ $al->{ref} ], mem => $mem,
                 stamp => SoN::IR::Stamp->new(type => 'Scalar'));
             my $by_index = $factory->make_unique('Subscript', kind => 'array', inputs => [ $al->{array}, $al->{index} ], mem => $mem,
@@ -25902,8 +25903,13 @@ class SoN::FromOptree 0.01 {
             my $new;
             $mem = $sim->memory;   # (a read made again just now may have been pinned: a version)
             if ( $d->{how} eq 'target' ) {
-                if ( defined $d->{targ} ) { $new = _pad_scalar_now( $cv, $d->{targ}, $sim, $factory, $ctx ) }
-                elsif ( defined $mem ) { $new = _at_memory( $factory, $d->{lv}, $mem ) }
+                # (a variable in memory is read again only where something
+                # since may have stored: a binding, where it was rebound)
+                my $in_mem = defined $d->{targ} && ( $ITER_ELEMENT{ $d->{targ} } || $ITER_ALIAS_REF{ $d->{targ} }
+                    || $ctx->{addr_taken}{ $d->{targ} } || $ctx->{cells}{ $d->{targ} } || $ctx->{cell_params}{ $d->{targ} } );
+                if ( $in_mem && blessed( $d->{mem} ) && defined $mem && !_stored_since( $mem, $d->{mem} ) ) { }
+                elsif ( defined $d->{targ} ) { $new = _pad_scalar_now( $cv, $d->{targ}, $sim, $factory, $ctx ) }
+                elsif ( defined $mem && ( !blessed( $d->{mem} ) || _stored_since( $mem, $d->{mem} ) ) ) { $new = _at_memory( $factory, $d->{lv}, $mem ) }
             }
             elsif ( defined( $mem = $sim->memory ) && refaddr( $old->mem_in ) != refaddr($mem) && _stored_since( $mem, $old->mem_in ) ) {
                 # (A `local` of it between: perl's operand is the scalar it
@@ -25919,7 +25925,12 @@ class SoN::FromOptree 0.01 {
                     }
                 }
                 $new = _at_memory( $factory, $old, $mem );
-                if ( $new && $d->{how} eq 'element' ) {
+                # (an element of a list made here -- a call's, a literal list --
+                # exists for the index the walk reads it at: no guard)
+                my $c0 = $old->v1_inputs->[0];
+                my $temp = blessed($c0) && ( $c0->operation eq 'Call'
+                    || $c0->operation eq 'ArrayLiteral' && !defined( eval { $c0->symbol } ) && ( $c0->stamp ? $c0->stamp->type : '' ) eq 'List' );
+                if ( $new && $d->{how} eq 'element' && !$temp ) {
                     # (perl pushed the element only if it existed: else undef)
                     # (made at the old version, not where this op stands: never pinned here)
                     my $ex = do { local $SoN::IR::NodeFactory::ON_VALUE = undef;
