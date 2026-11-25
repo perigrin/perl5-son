@@ -5989,6 +5989,13 @@ class SoN::FromOptree 0.01 {
         local $ARGS_ARE_PLACES = SoN::FromOptree::ModSets::stores_invocant($cv, $op)
             || SoN::FromOptree::ModSets::arg_stored_by_call($cv, $op)
             || SoN::FromOptree::ModSets::call_stores_through_args($cv, $op) ? 1 : 0;
+        # A PLACE NAMES THE VARIABLE'S STORAGE, NOT THE SCALAR IN IT: under a
+        # `local` of that variable the place reaches the new scalar, where
+        # perl's alias keeps the saved one (audit 2, K2: `local $x = 5;
+        # $_[0] = 7` printed 71 for 57). Refused until a place is the scalar.
+        die "GAP: a variable handed to a sub as its \$_[N] where that sub localizes it is not yet lowered -- "
+          . "perl's alias keeps the saved scalar, and the wire's place is the name's storage\n"
+            if SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, $ARGS_ARE_PLACES);
         $ALIAS_STATS{ 'call-' . ( $ARGS_ARE_PLACES ? 'place' : 'value' ) }++
             if grep { _strip_null($_)->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|aelemfast(?:_lex)?)\z/ } _entersub_args_and_invocant($op);
         _handle_entersub_call($cv, $op, $sim, $factory, $ctx);
@@ -8548,6 +8555,9 @@ class SoN::FromOptree 0.01 {
                     # (nor a `my` hash or array flattened into it: that is a location,
                     # and pushed here it was read after a later store to it)
                     && !grep { $_->isa('SoN::IR::Node::TernaryExpr')
+                        # (nor @_: its elements are the caller's variables, read
+                        # where the copy was made -- audit 2, K1)
+                        || $_->isa('SoN::IR::Node::ArgsSource')
                         || ( ( $_->isa('SoN::IR::Node::HashLiteral') || $_->isa('SoN::IR::Node::ArrayLiteral') ) && defined $_->symbol )
                         # (nor another aggregate read whole at a version -- a
                         # shared `my @a` a sub reaches: pushed here, `"@c"`
@@ -12522,6 +12532,10 @@ class SoN::FromOptree 0.01 {
                         # (and a `my` array whose literal the list shortcut
                         # could not flatten -- a ternary among its elements --
                         # bound the same way: `my @d = @b; $d[0] = 9` changed @b)
+                        # ...OR @_, WHOSE ELEMENTS ARE THE CALLER'S VARIABLES:
+                        # bound as @_ itself, `my @l = @_; $a[0] = 9; "@l"`
+                        # read the store (audit 2, K1). A copy, made here.
+                        $names_storage ||= $only->isa('SoN::IR::Node::ArgsSource');
                         $names_storage ||= ( $only->isa('SoN::IR::Node::HashLiteral') || $only->isa('SoN::IR::Node::ArrayLiteral') )
                             && defined $only->symbol
                             && _copies_pad_hash($op);
@@ -12642,6 +12656,9 @@ class SoN::FromOptree 0.01 {
                     $copies_container ||= grep {
                         ( $_->isa('SoN::IR::Node::HashLiteral') || $_->isa('SoN::IR::Node::ArrayLiteral') ) && defined $_->symbol
                     } $rhs->@*;
+                    # (and @_, whose elements are the caller's variables: a
+                    # copy read where it stands -- audit 2, K1)
+                    $copies_container ||= grep { $_->isa('SoN::IR::Node::ArgsSource') } $rhs->@*;
                     # A PACKAGE OR SHARED AGGREGATE ASSIGNED IN A LOOP BODY is
                     # made there too: its store below writes this literal, and
                     # floating, the literal was spelled above the loop with the
@@ -12739,7 +12756,12 @@ class SoN::FromOptree 0.01 {
             # read at the memory version the assignment stands at.
             my @args_elems;
             if (@rhs == 1
-                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') ? !$introduces : _is_array_variable($rhs[0]) )
+                # (@_ TOO, `my ($p, $q) = @_` as well as `($p, $q) = @_`: each
+                # target is its argument read where the copy stands, at a
+                # version. A record over @_ itself had none, and chalk took
+                # the argument at $p's first read, after `$_[0] = 9` -- audit 2,
+                # K1.)
+                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') || _is_array_variable($rhs[0]) )
                 && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
                 my $args = $rhs[0];
                 @args_elems = map {
@@ -12753,7 +12775,7 @@ class SoN::FromOptree 0.01 {
             # (the record of a copy from an array variable names the elements
             # it copied, each at its version -- not the array at none. In
             # scalar context the assignment counts the array, so it keeps it.)
-            my $by_element = @args_elems && !$rhs[0]->isa('SoN::IR::Node::ArgsSource')
+            my $by_element = @args_elems
                 && ($op->flags & 3) != 2;   # OPf_WANT_SCALAR
 
             # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
@@ -12890,18 +12912,13 @@ class SoN::FromOptree 0.01 {
             # position, which _entry_store stores below) it is a record of
             # the rebinding, pinned further down where a slot is read by name.
             #
-            # A PARAMETER BIND IS THE OTHER RECORD: `my ($self, %opts) = @_`
-            # declares its targets and fills them from @_ as the sub is
-            # entered. Both consumers bind it where the sub starts (chalk as
-            # ArgsFrom, the deparser as the sub's first statement), and the
-            # wire has no flag yet to tell it from a store (wire v2), so it
-            # stays unplaced, as SoN::Verify allows (`param-bind`).
-            my $param_bind = $introduces && @rhs == 1
-                && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
-                && !grep { !$_->isa('SoN::IR::Node::PadAccess') } $lhs->@*;
+            # A PARAMETER BIND WITH AN AGGREGATE (`my ($self, %opts) = @_`) IS
+            # A STORE TOO: it reads @_, whose elements are the caller's
+            # variables, where it stands. A record of it, made where the sub
+            # starts or where a target is first read, took `$_[1] = 9` made
+            # after it (audit 2, K1).
             my $stores = grep { !/\A(?:ssa|skip)\z/
-                               && !( $positional && $_ eq 'package' )
-                               && !( $param_bind && $_ eq 'aggregate' ) } @storage;
+                               && !( $positional && $_ eq 'package' ) } @storage;
             # A RECORD, OR A STORE: decided here, once, and said on the node
             # (wire v2's `record`; the serializer no longer derives it from
             # "on neither chain", which made a store the walk forgot a record

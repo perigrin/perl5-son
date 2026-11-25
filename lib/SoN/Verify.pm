@@ -432,9 +432,16 @@ sub _graph_v2 ( $name, $g, $res ) {
     # condition) is not used.
     my %live;
     {
+        # (A RECORD IS USED WHERE ITS TARGET IS: `my ($p) = @_` fills $p, and
+        # a read of $p reads what the record read -- audit 2, K1.)
+        my %record_of;
+        for my $r ( grep { $record->($_) } @nodes ) {
+            push $record_of{$_}->@*, $r->{id} for grep { defined && !ref } ( $r->{inputs} // [] )->@[ 0 .. ( _fields($r)->{targets} // 1 ) - 1 ];
+        }
         my @q = map { $_->{id} } grep { defined $_->{control_in} || $_->{op} =~ /^(?:Start|Return|Unwind|Region|If|Loop|Proj)$/ } @nodes;
         while ( defined( my $id = shift @q ) ) {
             next if $live{$id}++;
+            push @q, ( $record_of{$id} // [] )->@*;
             my $x = $by{$id} or next;
             push @q, grep { defined && !ref } ( $x->{inputs} // [] )->@*;
             push @q, map { ref $_ ? @$_ : () } ( $x->{inputs} // [] )->@*;
@@ -523,6 +530,12 @@ sub _graph_v2 ( $name, $g, $res ) {
         next if $op eq 'Slice' && defined $f->{index_count};
         if    ( $op =~ /^(?:Subscript|Slice|Count|PostfixDeref|CellRead|EntryDef|PadAccess|FieldAccess)$/ ) { $class = $place_class->($n) }
         elsif ( $op eq 'RefType' ) { $class = 'object-class' }
+        # (@_ WHOLE, COPIED BY A RECORD: the record has no version, so its
+        # targets take @_ whenever they are first read -- audit 2, K1. Other
+        # whole reads of @_ are a consumer's that names its own version.)
+        elsif ( $op eq 'ArgsSource' ) {
+            $class = 'args' if grep { $live{ $_->[0]{id} } && $record->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;
+        }
         elsif ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' ) { $class = B::SoN::EffectTable::reads_state( $f->{name} ) }
         # (A PACKAGE SCALAR IN AN ALIAS LIST is no place: the list is made
         # where it stands, and the variable is read there -- final audit 4.7,

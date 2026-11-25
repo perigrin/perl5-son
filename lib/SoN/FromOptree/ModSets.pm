@@ -458,6 +458,39 @@ sub arg_stored_by_call ( $cv, $call ) {
     return 0;
 }
 
+# arg_localized_by_call($cv, $call, $places) -> true when the call is passed a
+# variable or an element that a sub it reaches -- or one that sub calls --
+# localizes, and the argument is an alias there: passed as a place ($places),
+# or an $_[N] a reached sub takes a reference to (audit 2, K2). `local` gives
+# the NAME a new scalar; the caller's $_[N] still holds the old one, which
+# the place, a pointer to the name's storage, does not. A call this walk
+# cannot see into may do either.
+sub arg_localized_by_call ( $cv, $call, $places ) {
+    my %locs = map { $_->{loc} => 1 } grep { $_->{loc} =~ /\A[NL]:/ } map { _target_effects( $cv, $_ ) } _call_args($call);
+    return 0 unless %locs;
+    my @todo = _site( $cv, $call );
+    my ( %seen, $localized, $aliased );
+    $aliased = $places;
+    while ( my $site = shift @todo ) {
+        return 1 if $site->{unknown};
+        for my $sub ( ( $site->{cvs} // [] )->@* ) {
+            next if $seen{$$sub}++;
+            my $root = _root($sub) or next;
+            for my $o ( _fo('_subtree_ops')->($root) ) {
+                if ( $o->name =~ /\A(?:gvsv|rv2sv|rv2av|rv2hv|helem|aelem)\z/ && ( $o->private & 128 ) ) {   # OPpLVAL_INTRO
+                    local $KEEP_OWN = 1;
+                    $localized ||= grep { $locs{ $_->{loc} } } _target_effects( $sub, $o );
+                }
+                # (`\$_[0]`: a reference to the caller's variable itself)
+                $aliased ||= grep { $_->name =~ /\Aaelem/ && ( ( place( $sub, $_ ) // { levels => [ {} ] } )->{levels}[0]{loc} // '' ) eq 'P' }
+                    _fo('_subtree_ops')->($o) if $o->name =~ /\A(?:s?refgen)\z/;
+                push @todo, _site( $sub, $o ) if _is_call($o);
+            }
+        }
+    }
+    return $localized && $aliased ? 1 : 0;
+}
+
 # _read_after_store($sub, $hits, $reachable) -> true when, in $sub's ops in
 # order, a store $hits names (its own, not a `local`; or a call's; or, where
 # the arguments are $reachable, a call it cannot see into) comes before a read
