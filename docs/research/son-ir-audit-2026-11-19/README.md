@@ -29,8 +29,11 @@
   `probes/z/`: the 828 probes of the 2026-11-25 second final audit
   (../2026-11-25-memory-model-final-audit-2.md, section 4); `_run1.log` is their
   sweep at producer 888d71b, chalk f1d9aa74 (57 WRONG). `zlib/` holds the two
-  modules the package probes load; `unverified/` the two whose wires break a
-  verifier rule (pa79, un75). Not in chalk's `t/data/audit-probes` yet.
+  modules the package probes load. The two whose wires broke a verifier rule
+  (pa79, un75) sat in `unverified/` until branch `audit2` fixed the producer
+  (pa79) and the verifier (un75); they are in `z/` now. In chalk's
+  `t/data/audit-probes` as `z` plus their name (`cp01.pl` is `zcp01`), gated
+  with WRONG 0 since `audit2`.
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),

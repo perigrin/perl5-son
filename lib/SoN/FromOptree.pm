@@ -14905,27 +14905,27 @@ class SoN::FromOptree 0.01 {
     # element read by index is the one perl's alias holds; after it, a callee
     # may have moved the list. Walked in execution order, both arms of a
     # branch, until the loop's own iter op comes round again.
-    sub _topic_read_after_a_call ($cv, $enteriter) {
+    sub _topic_read_after_a_call ($cv, $enteriter, $key = '$main::_') {
         # (A MAP OR GREP goes round from its body to its mapwhile/grepwhile)
         if ( $enteriter->name =~ /\A(map|grep)start\z/ ) {
             my $w = $enteriter->next;
             return 1 unless $$w && $w->name eq "$1while";
-            return _topic_read_after_a_call_in( $cv, $w->other, $w );
+            return _topic_read_after_a_call_in( $cv, $w->other, $w, $key );
         }
         my $it = $enteriter->next;
         $it = $it->next while $$it && $it->name ne 'iter';
         return 1 unless $$it && ${ $it->next } && $it->next->name eq 'and';
-        return _topic_read_after_a_call_in( $cv, $it->next->other, $it );
+        return _topic_read_after_a_call_in( $cv, $it->next->other, $it, $key );
     }
     # _topic_read_after_a_call_in($cv, $start, $stop) -> the walk above, of
     # the body from $start round to $stop
-    sub _topic_read_after_a_call_in ($cv, $start, $it) {
+    sub _topic_read_after_a_call_in ($cv, $start, $it, $key = '$main::_') {
         my @todo = ([ $start, 0 ]);
         my %seen;
         while (my $w = shift @todo) {
             my ($op, $called) = @$w;
             while (ref $op && $$op && $$op != $$it && !$seen{"$$op/$called"}++) {
-                return 1 if $called && _names_iterator($cv, $op, '$main::_');
+                return 1 if $called && _names_iterator($cv, $op, $key);
                 $called ||= $op->name eq 'entersub';
                 push @todo, [ $op->other, $called ]
                     if $op->can('other') && ref $op->other && ${ $op->other };
@@ -17454,6 +17454,7 @@ class SoN::FromOptree 0.01 {
               . " element, the pass reads a copy\n"
                 if !defined $targ && $named
                 && do { my @i = _foreach_list_items($enteriter); @i != 1 || _strip_null($i[0])->name !~ /\A(?:padav|rv2av)\z/ }
+                && _topic_read_after_a_call($cv, $enteriter, $x_targ)
                 && _body_calls_store_array($cv, $enteriter);
             # NOT WHEN THE BODY TAKES `\$x`: that is a reference to the
             # alias, which the copy's own rules below decide.
@@ -25563,9 +25564,26 @@ class SoN::FromOptree 0.01 {
                 if ( $s->name =~ /\A(?:pad|rv2)[ah]v\z/ && ( $k->flags & 3 ) == 3   # OPf_WANT_LIST
                         && !( $k->flags & ( B::OPf_MOD | B::OPf_REF ) ) && ( my @later = _later_siblings($k) ) ) {
                     my $pl = SoN::FromOptree::ModSets::aggregate_place( $cv, $s );
+                    # (A RESHAPE -- a push, a shift, a new key -- moves no
+                    # element the list holds: only a store into one does. A
+                    # key the hash's literal does not hold is a new one.)
+                    my %keys;
+                    if ( $s->name =~ /hv\z/ ) {
+                        my $lit = $s->name eq 'padhv' ? $sim->lookup( $s->targ )
+                            : do { my ($e) = SoN::FromOptree::ModSets::_target_effects( $cv, $s ); $e && $e->{loc} =~ /\AN:%(.*)\z/s ? $sim->lookup( '%' . $1 ) : undef };
+                        if ( $lit isa SoN::IR::Node::HashLiteral && !$MUTATED_LITERALS{ refaddr $lit } ) {
+                            my @in = $lit->v1_inputs->@*;
+                            %keys = map { $in[ 2 * $_ ] isa SoN::IR::Node::Constant ? ( $in[ 2 * $_ ]->value => 1 ) : ( '*' => 1 ) } 0 .. $#in / 2;
+                        }
+                    }
+                    my $touches = sub ($e) {
+                        return 0 if $e->{reshape};
+                        return 0 if %keys && !$keys{'*'} && $e->{key} ne '*' && !$keys{ $e->{key} };
+                        return 1;
+                    };
                     die "GAP: an aggregate flattened into a list is read by alias and a later item"
                       . " may store into its elements -- not yet lowered\n"
-                        if !$pl || grep { SoN::FromOptree::ModSets::conflict( $pl, [ SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) ] ) } @later;
+                        if !$pl || grep { SoN::FromOptree::ModSets::conflict( $pl, [ grep { $touches->($_) } SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) ] ) } @later;
                 }
             }
             next if $k->flags & B::OPf_MOD;                           # a store's own target

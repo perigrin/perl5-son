@@ -23,9 +23,14 @@ like compile($_), $gap, "refused: $_" for
     'my @a=(1,2,3); print "@{[ @a, $a[0]++ ]}\n";',
     'my @a=(1,2,3); my @b=(@a, map { $_++ } @a); print "@b\n";',
     'my @a=(1,2,3); sub g { $a[0]=9 } my @b=(@a, g()); print "@b\n";',
-    'my %h=(a=>1); my @b=(%h, $h{a}=9); print "@b\n";';
+    'my %h=(a=>1); my @b=(%h, $h{a}=9); print "@b\n";',
+    'our %h=(a=>1); sub f { $h{a}=2; 0 } my @c=(%h, f()); print "@c\n";';
+# (a reshape -- a push, a new key -- moves no element the list holds)
 unlike compile($_), qr/GAP/, "lowered: $_" for
     'my @a=(1,2,3); my @b=(@a, map { $_*2 } @a); print "@b\n";',
     'my @a=(1,2,3); my @b=(@a, $a[0]); print "@b\n";',
-    'my @a=(1,2,3); my @c=(4); my @b=(@a, $c[0]=9); print "@b\n";';
+    'my @a=(1,2,3); my @c=(4); my @b=(@a, $c[0]=9); print "@b\n";',
+    'our @a=(1); sub w { push @a, 2; 0 } my @c = (@a, w(), @a); print "@c\n";',
+    'my @a=(1,2); my @l=(@a, push(@a,3), @a); print "@l\n";',
+    'our %h=(a=>1); sub f { $h{b}=2; 0 } my @c=(%h, f()); print scalar(@c),"\n";';
 done_testing;
