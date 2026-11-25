@@ -1,0 +1,880 @@
+message	file:line	kind	corpus_case	probe
+an element of a `	producer:lib/SoN/Deparse.pm:513	deparser	DYNAMIC	
+the anonymous sub `	producer:lib/SoN/Deparse.pm:658	deparser	DYNAMIC	
+a sort comparator `	producer:lib/SoN/Deparse.pm:739	deparser	DYNAMIC	
+a sort comparator with no call-site package cannot be	producer:lib/SoN/Deparse.pm:743	deparser	NONE	
+the default of field `	producer:lib/SoN/Deparse.pm:966	deparser	NONE	
+a slurpy Parameter with no name is not yet renderedn	producer:lib/SoN/Deparse.pm:1327	deparser	NONE	
+a value graph with no Return is not yet renderedn	producer:lib/SoN/Deparse.pm:1340	deparser	NONE	
+`	producer:lib/SoN/Deparse.pm:2251	deparser	DYNAMIC	
+an element read in a loop is spelled after a store	producer:lib/SoN/Deparse.pm:2968	deparser	NONE	
+a package read bound after a merge whose join the walk does	producer:lib/SoN/Deparse.pm:3625	deparser	NONE	
+a control node with	producer:lib/SoN/Deparse.pm:3674	deparser	DYNAMIC	
+a return from inside a loop whose exit carries	producer:lib/SoN/Deparse.pm:3807	deparser	NONE	
+a return from inside a loop whose exit runs	producer:lib/SoN/Deparse.pm:3821	deparser	NONE	
+a return from inside a loop whose exit Phi	producer:lib/SoN/Deparse.pm:3825	deparser	NONE	
+a return from inside a loop whose Return	producer:lib/SoN/Deparse.pm:3837	deparser	NONE	
+a function exit merges an aggregate with a	producer:lib/SoN/Deparse.pm:3857	deparser	NONE	
+a Loop with	producer:lib/SoN/Deparse.pm:4094	deparser	DYNAMIC	
+a Loop whose Projs are not indexed 0 and 1 is not yet	producer:lib/SoN/Deparse.pm:4098	deparser	NONE	
+a Loop with no condition node is not yet renderedn	producer:lib/SoN/Deparse.pm:4106	deparser	NONE	
+a Loop whose only pinned node is a branch is not yet	producer:lib/SoN/Deparse.pm:4120	deparser	NONE	
+a Loop with	producer:lib/SoN/Deparse.pm:4151	deparser	DYNAMIC	
+a loop Phi with	producer:lib/SoN/Deparse.pm:4211	deparser	DYNAMIC	
+a loop condition reads a value its body binds, ahead	producer:lib/SoN/Deparse.pm:4467	deparser	NONE	
+a block eval whose Region does not name its entry	producer:lib/SoN/Deparse.pm:5332	deparser	NONE	
+a block eval whose value goes back in its caller's context	producer:lib/SoN/Deparse.pm:5380	deparser	NONE	
+a list assign that destructures a block eval's value is not	producer:lib/SoN/Deparse.pm:5429	deparser	NONE	
+a Loop with no Proj arms and no exit If is not yet	producer:lib/SoN/Deparse.pm:5479	deparser	NONE	
+an endless loop whose exit If lacks both arms is not yet	producer:lib/SoN/Deparse.pm:5485	deparser	NONE	
+an endless loop whose test goes round on its true arm (`next if`, a bare block's `redo`) is not yet renderedn	producer:lib/SoN/Deparse.pm:5493	deparser	NONE	
+a `last LABEL` out of an endless loop that leaves by the	producer:lib/SoN/Deparse.pm:5542	deparser	NONE	
+a break whose exit edge the walk cannot find is not yet	producer:lib/SoN/Deparse.pm:5738	deparser	NONE	
+an If arm that is not a Proj is not yet renderedn	producer:lib/SoN/Deparse.pm:5788	deparser	NONE	
+an If with	producer:lib/SoN/Deparse.pm:5790	deparser	DYNAMIC	
+an If whose Projs are not indexed 0 and 1 is not yet	producer:lib/SoN/Deparse.pm:5794	deparser	NONE	
+a join Phi with	producer:lib/SoN/Deparse.pm:6262	deparser	DYNAMIC	
+a function exit merges a returned list with a scalar;	producer:lib/SoN/Deparse.pm:6380	deparser	NONE	
+an anonymous	producer:lib/SoN/Deparse.pm:6583	deparser	DYNAMIC	
+an EntryDef reached as a statement with no binding is	producer:lib/SoN/Deparse.pm:6606	deparser	NONE	
+a PadAccess reached as a statement with no binding is	producer:lib/SoN/Deparse.pm:6669	deparser	NONE	
+a CellRead reached as a statement with no binding is	producer:lib/SoN/Deparse.pm:6678	deparser	NONE	
+a Delete with	producer:lib/SoN/Deparse.pm:6740	deparser	DYNAMIC	
+a CellWrite with	producer:lib/SoN/Deparse.pm:6749	deparser	DYNAMIC	
+an element store into an anonymous container has no	producer:lib/SoN/Deparse.pm:7062	deparser	memory-model.md: foreach over package scalars aliases them (deparser)	
+a list assign's value reads a named scalar, which	producer:lib/SoN/Deparse.pm:7095	deparser	NONE	
+a list assign's value is read again as its	producer:lib/SoN/Deparse.pm:7130	deparser	NONE	
+an Assign (id	producer:lib/SoN/Deparse.pm:7137	deparser	DYNAMIC	
+an Assign (id	producer:lib/SoN/Deparse.pm:7156	deparser	DYNAMIC	
+a value read from a local aggregate, returned past its restoren	producer:lib/SoN/Deparse.pm:7310	deparser	NONE	
+no rule for control node `	producer:lib/SoN/Deparse.pm:7395	deparser	NONE	
+expected an EntryDef, got `	producer:lib/SoN/Deparse.pm:7650	deparser	NONE	
+an EntryDef with no var_name is not yet renderedn	producer:lib/SoN/Deparse.pm:7656	deparser	NONE	
+a pattern that contains every available delimiter is not	producer:lib/SoN/Deparse.pm:7733	deparser	NONE	
+dangling input	producer:lib/SoN/Deparse.pm:7768	deparser	DYNAMIC	
+a RegexMatch with no pattern is not yet renderedn	producer:lib/SoN/Deparse.pm:7801	deparser	NONE	
+a RegexMatch with	producer:lib/SoN/Deparse.pm:7803	deparser	DYNAMIC	
+a Chomp with	producer:lib/SoN/Deparse.pm:7816	deparser	DYNAMIC	
+a ChompValue with	producer:lib/SoN/Deparse.pm:7825	deparser	DYNAMIC	
+a TransliterateCount with	producer:lib/SoN/Deparse.pm:7850	deparser	NONE	
+a TransliterateCount over `	producer:lib/SoN/Deparse.pm:7853	deparser	NONE	
+a RegexSubstCount with	producer:lib/SoN/Deparse.pm:7890	deparser	NONE	
+a RegexSubstCount over `	producer:lib/SoN/Deparse.pm:7893	deparser	NONE	
+a counted s/// whose subject is a `	producer:lib/SoN/Deparse.pm:7942	deparser	NONE	
+a Subscript with	producer:lib/SoN/Deparse.pm:7965	deparser	DYNAMIC	
+a Count with no aggregate is not yet renderedn	producer:lib/SoN/Deparse.pm:7974	deparser	NONE	
+a Length with	producer:lib/SoN/Deparse.pm:8082	deparser	DYNAMIC	
+a PostfixDeref with	producer:lib/SoN/Deparse.pm:8132	deparser	DYNAMIC	
+a PadAccess with no symbol is not yet renderedn	producer:lib/SoN/Deparse.pm:8166	deparser	NONE	
+a	producer:lib/SoN/Deparse.pm:8183	deparser	DYNAMIC	
+a TernaryExpr with	producer:lib/SoN/Deparse.pm:8199	deparser	DYNAMIC	
+a Coerce with	producer:lib/SoN/Deparse.pm:8216	deparser	DYNAMIC	
+a CellParam whose cell cannot be resolved is not yet	producer:lib/SoN/Deparse.pm:8248	deparser	NONE	
+a CellRead with no cell is not yet renderedn	producer:lib/SoN/Deparse.pm:8255	deparser	NONE	
+an AnonSub with no name is not yet renderedn	producer:lib/SoN/Deparse.pm:8265	deparser	NONE	
+a reference to the sub body `	producer:lib/SoN/Deparse.pm:8270	deparser	NONE	
+a Delete with	producer:lib/SoN/Deparse.pm:8289	deparser	DYNAMIC	
+an Exists with	producer:lib/SoN/Deparse.pm:8301	deparser	DYNAMIC	
+an Assign value with no target slots is not yet	producer:lib/SoN/Deparse.pm:8331	deparser	NONE	
+a ListAppend with no accumulator is not yet renderedn	producer:lib/SoN/Deparse.pm:8353	deparser	NONE	
+a ListAppend that does not say which collector built it	producer:lib/SoN/Deparse.pm:8356	deparser	NONE	
+a grep ListAppend with	producer:lib/SoN/Deparse.pm:8363	deparser	NONE	
+a SubDefined with no name is not yet renderedn	producer:lib/SoN/Deparse.pm:8379	deparser	NONE	
+an EnvRead with no key is not yet renderedn	producer:lib/SoN/Deparse.pm:8387	deparser	NONE	
+a Ref with	producer:lib/SoN/Deparse.pm:8399	deparser	DYNAMIC	
+a RefType with	producer:lib/SoN/Deparse.pm:8451	deparser	DYNAMIC	
+a RegexCapture with no group number is not yet	producer:lib/SoN/Deparse.pm:8464	deparser	NONE	
+a BacktickExpr with	producer:lib/SoN/Deparse.pm:8471	deparser	DYNAMIC	
+a list Slice claiming	producer:lib/SoN/Deparse.pm:8498	deparser	NONE	
+a Slice with no container is not yet renderedn	producer:lib/SoN/Deparse.pm:8511	deparser	NONE	
+a Slice over an anonymous `	producer:lib/SoN/Deparse.pm:8547	deparser	NONE	
+a Match with	producer:lib/SoN/Deparse.pm:8581	deparser	DYNAMIC	
+a Defined with	producer:lib/SoN/Deparse.pm:8608	deparser	DYNAMIC	
+a Not with	producer:lib/SoN/Deparse.pm:8613	deparser	DYNAMIC	
+an IsaOp with	producer:lib/SoN/Deparse.pm:8638	deparser	DYNAMIC	
+a defaulted Parameter with	producer:lib/SoN/Deparse.pm:8678	deparser	NONE	
+a Range with	producer:lib/SoN/Deparse.pm:8688	deparser	DYNAMIC	
+a Negate with	producer:lib/SoN/Deparse.pm:8694	deparser	DYNAMIC	
+a FieldAccess to a field the class record does not name	producer:lib/SoN/Deparse.pm:8707	deparser	NONE	
+an Increment with	producer:lib/SoN/Deparse.pm:8722	deparser	DYNAMIC	
+a Complement with	producer:lib/SoN/Deparse.pm:8727	deparser	DYNAMIC	
+a Phi whose region is a `	producer:lib/SoN/Deparse.pm:8746	deparser	NONE	
+no rule for value node `	producer:lib/SoN/Deparse.pm:8757	deparser	NONE	
+a RegexSubst says its pattern is an input but has nonen	producer:lib/SoN/Deparse.pm:9033	deparser	NONE	
+a RegexSubst with no pattern is not yet renderedn	producer:lib/SoN/Deparse.pm:9039	deparser	NONE	
+a RegexSubst with no replacement is not yet renderedn	producer:lib/SoN/Deparse.pm:9044	deparser	NONE	
+a s///ge replacement body `	producer:lib/SoN/Deparse.pm:9052	deparser	NONE	
+a Call with no name is not yet renderedn	producer:lib/SoN/Deparse.pm:9090	deparser	NONE	
+a call to `	producer:lib/SoN/Deparse.pm:9183	deparser	DYNAMIC	
+a `caller` bound to a list cannot be rendered --	producer:lib/SoN/Deparse.pm:9268	deparser	NONE	
+the builtin op `	producer:lib/SoN/Deparse.pm:9304	deparser	DYNAMIC	
+`	producer:lib/SoN/Deparse.pm:9349	deparser	DYNAMIC	
+a method Call with no invocant and no class_name is	producer:lib/SoN/Deparse.pm:9424	deparser	NONE	
+an indirect Call with no callee is not yet renderedn	producer:lib/SoN/Deparse.pm:9440	deparser	NONE	
+a dynamic method Call needs an invocant and a namen	producer:lib/SoN/Deparse.pm:9482	deparser	NONE	
+a Call with dispatch_kind `	producer:lib/SoN/Deparse.pm:9494	deparser	NONE	
+a Print says it has a filehandle but has no inputsn	producer:lib/SoN/Deparse.pm:9531	deparser	NONE	
+a glob Constant whose name is `	producer:lib/SoN/Deparse.pm:9703	deparser	NONE	
+a code Constant whose name is `	producer:lib/SoN/Deparse.pm:9720	deparser	NONE	
+no rule for a `	producer:lib/SoN/Deparse.pm:9732	deparser	DYNAMIC	
+a list assignment from a ternary of unknown shape counted in scalar context is not yet loweredn	producer:lib/SoN/FromOptree.pm:292	producer	NONE	
+a `state` variable with no initialiser, where it can be reached more than once, is	producer:lib/SoN/FromOptree.pm:828	producer	pvm/memory-model.md: re-audit D: a state variable with no initializer	
+code under `use warnings FATAL` is not yet lowered -- a	producer:lib/SoN/FromOptree.pm:840	producer	NONE	fl14
+a tie of an aggregate through a reference is not yet lowered -- its reads could not be ordered as the calls they aren	producer:lib/SoN/FromOptree.pm:863	producer	NONE	
+a reference to a tied aggregate is not yet lowered -- reads through it could not be ordered as the calls they aren	producer:lib/SoN/FromOptree.pm:869	producer	NONE	
+a node already on the control chain is pinned again ( after , now after )n	producer:lib/SoN/FromOptree.pm:909	producer	NONE	
+a `state` initialiser that can run more than once is	producer:lib/SoN/FromOptree.pm:1495	producer	NONE	fak19
+no top-level program (main_root is empty)n	producer:lib/SoN/FromOptree.pm:1532	producer	NONE	
+a sort comparator body with no start opn	producer:lib/SoN/FromOptree.pm:1551	producer	NONE	
+	producer:lib/SoN/FromOptree.pm:1615	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:1640	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:1750	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:1754	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:1767	producer	DYNAMIC	
+a body the first scan did not read localizes a variable taken for never localized	producer:lib/SoN/FromOptree.pm:2252	producer	NONE	
+a body the first scan did not read writes a package scalar it took for unwritten	producer:lib/SoN/FromOptree.pm:2257	producer	NONE	
+a computed goto with more than one label behind it	producer:lib/SoN/FromOptree.pm:3107	producer	NONE	
+a `	producer:lib/SoN/FromOptree.pm:3132	producer	DYNAMIC	
+a computed goto whose operand is not a string	producer:lib/SoN/FromOptree.pm:3138	producer	NONE	
+a computed goto whose label behind it carries a	producer:lib/SoN/FromOptree.pm:3147	producer	NONE	
+a computed goto whose loop body branches is	producer:lib/SoN/FromOptree.pm:3154	producer	NONE	
+`goto	producer:lib/SoN/FromOptree.pm:3204	producer	DYNAMIC	
+a `//` whose fallback both moves control and leaves	producer:lib/SoN/FromOptree.pm:3275	producer	NONE	
+a guarded exit whose arm moved control without building its Ifn	producer:lib/SoN/FromOptree.pm:3302	producer	NONE	
+a guarded exit whose arm moved control without building its Ifn	producer:lib/SoN/FromOptree.pm:3592	producer	NONE	
+void-context '	producer:lib/SoN/FromOptree.pm:3647	producer	DYNAMIC	
+a short-circuit whose right side is a list of several values	producer:lib/SoN/FromOptree.pm:3727	producer	NONE	
+a signature default with an effectn	producer:lib/SoN/FromOptree.pm:3863	producer	NONE	
+a value that may die (a division by what may be zero, a reference before	producer:lib/SoN/FromOptree.pm:4145	producer	NONE	fl8
+`goto` transfers control and is not compiled; the jump,	producer:lib/SoN/FromOptree.pm:5551	producer	NONE	ca27
+a `defer` or `finally` block is not yet lowered -- it runs on	producer:lib/SoN/FromOptree.pm:5558	producer	pvm/memory-model.md: re-audit C: a finally block runs	reb30
+a constant folded to the shared SV at specialsv index	producer:lib/SoN/FromOptree.pm:5590	producer	NONE	
+a bare block with a `continue` block and a	producer:lib/SoN/FromOptree.pm:5849	producer	NONE	
+a bare block with a next/last/redo inside a loop body is not	producer:lib/SoN/FromOptree.pm:5872	producer	NONE	
+	producer:lib/SoN/FromOptree.pm:6026	producer	DYNAMIC	
+a variable handed to a sub as its $_[N] where that sub localizes it is not yet lowered --	producer:lib/SoN/FromOptree.pm:6042	producer	pvm/memory-model.md: K2: local of a variable $_[0] aliases	zpa02
+a dynamic method call with no invocant is not yet	producer:lib/SoN/FromOptree.pm:6077	producer	NONE	
+a tie of a lexical the sub also stores, or refers to, is not loweredn	producer:lib/SoN/FromOptree.pm:6665	producer	NONE	
+an aelemfast of a package array (compiled with the peephole optimizer on, before B::SoN) is not translatedn	producer:lib/SoN/FromOptree.pm:6681	producer	NONE	
+`use integer` arithmetic (	producer:lib/SoN/FromOptree.pm:6723	producer	NONE	
+a bitwise op under `use integer` (	producer:lib/SoN/FromOptree.pm:6725	producer	NONE	
+tr/// on a lexical the closure captured, inside that closure,	producer:lib/SoN/FromOptree.pm:6881	producer	NONE	
+tr/// on a copy into anything but a lexical	producer:lib/SoN/FromOptree.pm:6920	producer	NONE	
+tr/// on a stacked	producer:lib/SoN/FromOptree.pm:6941	producer	DYNAMIC	
+a key/value slice (	producer:lib/SoN/FromOptree.pm:7135	producer	DYNAMIC	
+a dynamic method call whose name is not on the stack is	producer:lib/SoN/FromOptree.pm:7199	producer	NONE	
+a reference to an array's last index (`\$#a`) is not yet loweredn	producer:lib/SoN/FromOptree.pm:7291	producer	NONE	
+a store to an array's last index (`$#a = ...`) is not yet loweredn	producer:lib/SoN/FromOptree.pm:7296	producer	NONE	
+package array/hash with an unresolvable GV not yet loweredn	producer:lib/SoN/FromOptree.pm:7518	producer	NONE	
+a reference to each element of a slice is not yet loweredn	producer:lib/SoN/FromOptree.pm:7702	producer	NONE	
+`__CLASS__` outside a class block is not yet loweredn	producer:lib/SoN/FromOptree.pm:8017	producer	NONE	
+constant hash literal (a folded const HV) not yet loweredn	producer:lib/SoN/FromOptree.pm:8069	producer	NONE	
+a `my` aggregate bound to another's location ( is 's literal)n	producer:lib/SoN/FromOptree.pm:8530	producer	NONE	
+a list-context read of an array mutated in place	producer:lib/SoN/FromOptree.pm:8709	producer	NONE	
+a ?: used as the target of an op= is not yet lowered -- its store would be lostn	producer:lib/SoN/FromOptree.pm:8899	producer	NONE	
+an x= whose target is a list is not yet lowered -- its store would be lostn	producer:lib/SoN/FromOptree.pm:8901	producer	NONE	
+package scalar read with an unresolvable GV not yet loweredn	producer:lib/SoN/FromOptree.pm:8988	producer	NONE	
+capture $	producer:lib/SoN/FromOptree.pm:9033	producer	DYNAMIC	
+scalar dereference with no reference operand not yet	producer:lib/SoN/FromOptree.pm:9308	producer	NONE	
+a /g match in the caller's context is not yet lowered --	producer:lib/SoN/FromOptree.pm:9494	producer	NONE	
+a match with a regex code block off the main walk is not yet lowered	producer:lib/SoN/FromOptree.pm:9504	producer	NONE	
+qr// whose interpolated pattern left no parts on the	producer:lib/SoN/FromOptree.pm:9638	producer	NONE	
+a lexical sub closing over	producer:lib/SoN/FromOptree.pm:9740	producer	NONE	
+a lexical sub closing over	producer:lib/SoN/FromOptree.pm:9747	producer	NONE	
+a lexical sub closing over	producer:lib/SoN/FromOptree.pm:9753	producer	NONE	
+an anonymous sub closing over	producer:lib/SoN/FromOptree.pm:9764	producer	NONE	aum24
+an anonymous sub closing over	producer:lib/SoN/FromOptree.pm:9791	producer	NONE	aum24
+an anonymous sub whose body could not be reached	producer:lib/SoN/FromOptree.pm:9802	producer	NONE	
+`split` with a runtime-interpolated pattern is not yet	producer:lib/SoN/FromOptree.pm:10001	producer	NONE	
+a split into a package array is not yet loweredn	producer:lib/SoN/FromOptree.pm:10072	producer	NONE	
+a split into a mutated array with no name is not yet loweredn	producer:lib/SoN/FromOptree.pm:10077	producer	NONE	
+a grep whose block writes $_, read as a list, is not yet lowered -- what	producer:lib/SoN/FromOptree.pm:10096	producer	pvm/memory-model.md: re-audit F: grep returns aliases its block wrote	ree11
+	producer:lib/SoN/FromOptree.pm:10101	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:10121	producer	DYNAMIC	
+undef(EXPR) on a package scalar whose name	producer:lib/SoN/FromOptree.pm:10205	producer	NONE	
+undef(EXPR) on an unnamed aggregate not	producer:lib/SoN/FromOptree.pm:10220	producer	NONE	
+undef(EXPR) on a package aggregate whose name	producer:lib/SoN/FromOptree.pm:10264	producer	NONE	
+undef(EXPR) on a glob whose name could not be	producer:lib/SoN/FromOptree.pm:10345	producer	NONE	
+undef(EXPR) on this operand not yet lowered	producer:lib/SoN/FromOptree.pm:10388	producer	NONE	fap07
+a bare `write` uses the SELECTED filehandle, which	producer:lib/SoN/FromOptree.pm:10576	producer	NONE	
+`write` whose filehandle could not be resolved is not	producer:lib/SoN/FromOptree.pm:10583	producer	NONE	
+`write` whose format is not installed on the handle is	producer:lib/SoN/FromOptree.pm:10599	producer	NONE	
+`write` on a handle with a top-of-page format is not	producer:lib/SoN/FromOptree.pm:10611	producer	NONE	
+a `delete` slice with no mark is not yet loweredn	producer:lib/SoN/FromOptree.pm:10674	producer	NONE	
+a `delete` slice with fewer than two operands is not	producer:lib/SoN/FromOptree.pm:10677	producer	NONE	
+`delete` with no container on the stack is not yet	producer:lib/SoN/FromOptree.pm:10702	producer	NONE	
+`exists &sub` whose operand is not a statically	producer:lib/SoN/FromOptree.pm:10753	producer	NONE	
+`exists &sub` whose glob could not be resolved is	producer:lib/SoN/FromOptree.pm:10758	producer	NONE	
+local on an array or hash element (restored at scope	producer:lib/SoN/FromOptree.pm:10805	producer	NONE	aun95
+local on an element with no memory chain is not yet	producer:lib/SoN/FromOptree.pm:10815	producer	NONE	
+a ?: used as the target of an increment is not yet lowered -- its store would be lost	producer:lib/SoN/FromOptree.pm:11192	producer	NONE	
+an increment of	producer:lib/SoN/FromOptree.pm:11195	producer	DYNAMIC	
+an lvalue substr without a length is not yet loweredn	producer:lib/SoN/FromOptree.pm:11402	producer	NONE	
+an lvalue vec (a store into bits of a string) not	producer:lib/SoN/FromOptree.pm:11537	producer	NONE	
+a ?: used as the target of an assignment is not yet lowered -- its store would be lost	producer:lib/SoN/FromOptree.pm:11559	producer	NONE	ald07
+an assignment whose target is	producer:lib/SoN/FromOptree.pm:11562	producer	NONE	
+a foreach over a scalar variable its body may write is not yet lowered -- the	producer:lib/SoN/FromOptree.pm:11575	producer	pvm/memory-model.md: re-audit E: a foreach over a scalar variable aliases it	ale09
+a foreach over a mark-consuming builtin (its list	producer:lib/SoN/FromOptree.pm:11612	producer	NONE	
+a foreach with several iterator variables not yet	producer:lib/SoN/FromOptree.pm:11623	producer	NONE	
+foreach with an unnameable iterator not yet	producer:lib/SoN/FromOptree.pm:11693	producer	NONE	
+a foreach over a merged binding of unstamped arrays	producer:lib/SoN/FromOptree.pm:11849	producer	NONE	
+foreach with unrecognized bounds shape not yet loweredn	producer:lib/SoN/FromOptree.pm:11869	producer	NONE	
+an assignment used as the target of an op= is not yet lowered -- its store would be lostn	producer:lib/SoN/FromOptree.pm:12002	producer	NONE	
+a ?: used as the target of an op= is not yet lowered -- its store would be lostn	producer:lib/SoN/FromOptree.pm:12004	producer	NONE	
+a string op= whose target is	producer:lib/SoN/FromOptree.pm:12006	producer	NONE	ald03
+multiconcat storing into a stacked destination that is	producer:lib/SoN/FromOptree.pm:12176	producer	NONE	
+a ?: used as the target of an op= is not yet lowered -- its store would be lost	producer:lib/SoN/FromOptree.pm:13869	producer	NONE	fai02
+an assignment used as the target of an op= is not yet lowered -- its store would be lostn	producer:lib/SoN/FromOptree.pm:13872	producer	NONE	
+an op= whose target is	producer:lib/SoN/FromOptree.pm:13874	producer	NONE	
+the builtin `	producer:lib/SoN/FromOptree.pm:13939	producer	DYNAMIC	
+a	producer:lib/SoN/FromOptree.pm:14172	producer	DYNAMIC	
+an in-place reverse (`@a = reverse @a`) in a loop	producer:lib/SoN/FromOptree.pm:14226	producer	NONE	
+an in-place	producer:lib/SoN/FromOptree.pm:14240	producer	DYNAMIC	
+a foreach over a package variable whose body calls a sub	producer:lib/SoN/FromOptree.pm:14672	producer	NONE	fal43
+a foreach over a package variable whose body writes it and	producer:lib/SoN/FromOptree.pm:14678	producer	NONE	fae24
+local on an array or hash element in an eval or try	producer:lib/SoN/FromOptree.pm:14760	producer	NONE	aum5
+local on an array or hash element outside a block is not	producer:lib/SoN/FromOptree.pm:14766	producer	NONE	
+local on an array or hash element in a block a loop	producer:lib/SoN/FromOptree.pm:14769	producer	NONE	
+a loop body rebinds a variable its header's scan missed (	producer:lib/SoN/FromOptree.pm:15690	producer	NONE	
+a loop body writes an aggregate after a read that flattened it (	producer:lib/SoN/FromOptree.pm:15701	producer	NONE	
+a loop body writes its iterator (	producer:lib/SoN/FromOptree.pm:15917	producer	NONE	zps12
+a demoted foreach iterator (	producer:lib/SoN/FromOptree.pm:15919	producer	NONE	
+loop-carried type widening not yet lowered	producer:lib/SoN/FromOptree.pm:16171	producer	NONE	
+loop-carried type widening not yet lowered	producer:lib/SoN/FromOptree.pm:16236	producer	NONE	
+loop-carried value loses its stamp (unstamped	producer:lib/SoN/FromOptree.pm:16247	producer	NONE	zps32
+side-effecting loop condition with a memory store not yet loweredn	producer:lib/SoN/FromOptree.pm:16341	producer	NONE	
+loop without a lowerable conditionn	producer:lib/SoN/FromOptree.pm:16429	producer	NONE	
+a foreach over a range of strings (perl's magic increment) is not yet loweredn	producer:lib/SoN/FromOptree.pm:16563	producer	NONE	
+foreach without an iter opn	producer:lib/SoN/FromOptree.pm:16573	producer	NONE	
+foreach without an and conditionn	producer:lib/SoN/FromOptree.pm:16575	producer	NONE	
+foreach range bound at IV_MAX not yet loweredn	producer:lib/SoN/FromOptree.pm:16629	producer	NONE	
+an assignment as an item of a foreach, map or grep list whose body may write	producer:lib/SoN/FromOptree.pm:17011	producer	NONE	zqd48
+a slice perl's alias may make elements of is not yet lowered	producer:lib/SoN/FromOptree.pm:17022	producer	NONE	faj18
+foreach without an iter opn	producer:lib/SoN/FromOptree.pm:17377	producer	NONE	
+foreach without an and conditionn	producer:lib/SoN/FromOptree.pm:17379	producer	NONE	
+a foreach over an unproven list (a bare-declared array,	producer:lib/SoN/FromOptree.pm:17462	producer	NONE	lw79
+a foreach over a list of several items, or one a call returns, whose aggregate	producer:lib/SoN/FromOptree.pm:17489	producer	NONE	zqc23
+a foreach, map or grep's $_ (or a package iterator) read after a call that may store	producer:lib/SoN/FromOptree.pm:17543	producer	NONE	aum51
+a foreach whose body writes its alias and may reshape	producer:lib/SoN/FromOptree.pm:17568	producer	NONE	fal04
+a foreach whose body writes its alias and may store into	producer:lib/SoN/FromOptree.pm:17578	producer	NONE	lw91
+a foreach whose body reshapes the array it iterates not yet	producer:lib/SoN/FromOptree.pm:17588	producer	NONE	
+a reference to a foreach iterator is not yet lowered --	producer:lib/SoN/FromOptree.pm:17828	producer	NONE	fal44
+a reference to a foreach iterator in a pass that may be	producer:lib/SoN/FromOptree.pm:17836	producer	NONE	lw85
+a call's value that may alias a foreach iterator is not	producer:lib/SoN/FromOptree.pm:17846	producer	NONE	
+a reference to a package foreach iterator is not yet lowered	producer:lib/SoN/FromOptree.pm:17861	producer	NONE	zrf02
+a written foreach iterator over a list a call returns is not yet lowered -- perl's	producer:lib/SoN/FromOptree.pm:17886	producer	NONE	fan10
+a write to a foreach iterator over @_ is not yet lowered	producer:lib/SoN/FromOptree.pm:18011	producer	NONE	ar18
+grep block did not produce a single predicate valuen	producer:lib/SoN/FromOptree.pm:18096	producer	NONE	
+	producer:lib/SoN/FromOptree.pm:18239	producer	DYNAMIC	
+a foreach whose body reassigns the array it iterates not yet	producer:lib/SoN/FromOptree.pm:18261	producer	NONE	
+function exit inside a loop body not yet loweredn	producer:lib/SoN/FromOptree.pm:18596	producer	NONE	
+an unconditional `next LABEL` naming an outer loop	producer:lib/SoN/FromOptree.pm:18611	producer	NONE	lw81
+loop control (	producer:lib/SoN/FromOptree.pm:18656	producer	DYNAMIC	
+an if/else in a loop body whose arms all leave,	producer:lib/SoN/FromOptree.pm:18678	producer	NONE	
+a `local` inside a block or loop nested in a loop	producer:lib/SoN/FromOptree.pm:18748	producer	NONE	
+	producer:lib/SoN/FromOptree.pm:18766	producer	DYNAMIC	
+loop control (redo) after the body has done	producer:lib/SoN/FromOptree.pm:18787	producer	NONE	lp8
+non-comparison `last if` guard inside a loop	producer:lib/SoN/FromOptree.pm:18861	producer	NONE	
+a labeled loop control whose rest of the body	producer:lib/SoN/FromOptree.pm:18957	producer	NONE	
+a `last if` whose rest of the body leaves,	producer:lib/SoN/FromOptree.pm:18979	producer	NONE	
+the rest of a loop body after a `next if` stops	producer:lib/SoN/FromOptree.pm:19007	producer	NONE	
+a short-circuit in a loop body whose arm is not a	producer:lib/SoN/FromOptree.pm:19127	producer	NONE	
+a guarded arm in a loop body that leaves by neither	producer:lib/SoN/FromOptree.pm:19199	producer	NONE	
+untranslatable op inside a guarded arm	producer:lib/SoN/FromOptree.pm:19293	producer	NONE	rel13
+nested and/or inside a loop body not yet loweredn	producer:lib/SoN/FromOptree.pm:19392	producer	NONE	
+an until whose condition is not a negatable	producer:lib/SoN/FromOptree.pm:19453	producer	NONE	fae17
+`	producer:lib/SoN/FromOptree.pm:19642	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:19964	producer	DYNAMIC	
+a return of a list from a block eval in list or caller context is not yet loweredn	producer:lib/SoN/FromOptree.pm:20968	producer	NONE	
+a block eval body stopped at `	producer:lib/SoN/FromOptree.pm:20977	producer	NONE	
+a block eval whose body rebinds a variable from outside it is	producer:lib/SoN/FromOptree.pm:20993	producer	NONE	fae13
+a block eval in list or caller context whose body leaves	producer:lib/SoN/FromOptree.pm:21060	producer	NONE	fad27
+a try without its catch is not yet loweredn	producer:lib/SoN/FromOptree.pm:21138	producer	NONE	
+a catch that does not end at leavetrycatch is not yet loweredn	producer:lib/SoN/FromOptree.pm:21141	producer	NONE	
+a try body that returns or leaves a loop is not yet	producer:lib/SoN/FromOptree.pm:21148	producer	NONE	fad39
+a try body with no poptry is not yet loweredn	producer:lib/SoN/FromOptree.pm:21155	producer	NONE	
+a try/catch with no memory chain is not yet loweredn	producer:lib/SoN/FromOptree.pm:21156	producer	NONE	
+a try body stopped at `	producer:lib/SoN/FromOptree.pm:21178	producer	NONE	
+a try body that rebinds a variable from outside it,	producer:lib/SoN/FromOptree.pm:21243	producer	NONE	
+`	producer:lib/SoN/FromOptree.pm:21293	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21301	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21310	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21351	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21369	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21381	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21390	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21409	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21419	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21537	producer	DYNAMIC	
+`	producer:lib/SoN/FromOptree.pm:21559	producer	DYNAMIC	
+function exit inside an if/else arm not yet loweredn	producer:lib/SoN/FromOptree.pm:21864	producer	NONE	
+a ternary with a multi-element list arm not yet	producer:lib/SoN/FromOptree.pm:21900	producer	NONE	
+untranslatable op inside an if/else arm	producer:lib/SoN/FromOptree.pm:21905	producer	NONE	
+a value-context ternary whose arm leaves the loop is not	producer:lib/SoN/FromOptree.pm:22023	producer	NONE	
+value-context ternary with a branch-guarded element	producer:lib/SoN/FromOptree.pm:22039	producer	NONE	
+a ternary whose arm stores an element is an lvalue (a	producer:lib/SoN/FromOptree.pm:22043	producer	NONE	fai04
+a consumed ternary arm localizes an element; its restore	producer:lib/SoN/FromOptree.pm:22050	producer	NONE	
+a consumed value-context ternary whose arms store a class	producer:lib/SoN/FromOptree.pm:22053	producer	NONE	
+an if/else whose arms both leave the loop is not yet	producer:lib/SoN/FromOptree.pm:22119	producer	NONE	
+a ternary whose other arm leaves yields a	producer:lib/SoN/FromOptree.pm:22134	producer	NONE	
+a ternary list arm passed by alias (a call argument, a	producer:lib/SoN/FromOptree.pm:22155	producer	NONE	
+a ternary with a multi-element list arm not yet loweredn	producer:lib/SoN/FromOptree.pm:22158	producer	NONE	
+a regex match in a multi-element ternary arm is not yet loweredn	producer:lib/SoN/FromOptree.pm:22160	producer	NONE	
+a class field read in a multi-element ternary arm is not yet loweredn	producer:lib/SoN/FromOptree.pm:22163	producer	NONE	
+an if/else in its caller's context whose arm stores	producer:lib/SoN/FromOptree.pm:22214	producer	NONE	
+a consumed ternary arm stores an element and	producer:lib/SoN/FromOptree.pm:22219	producer	NONE	
+a consumed ternary arm stores an element	producer:lib/SoN/FromOptree.pm:22252	producer	NONE	
+a consumed ternary arm stores an element but	producer:lib/SoN/FromOptree.pm:22262	producer	NONE	
+a ternary list arm passed by alias (a call argument, a	producer:lib/SoN/FromOptree.pm:22388	producer	NONE	
+a regex match in a multi-element ternary arm is not yet loweredn	producer:lib/SoN/FromOptree.pm:22399	producer	NONE	
+a class field read in a multi-element ternary arm is not yet loweredn	producer:lib/SoN/FromOptree.pm:22401	producer	NONE	
+a runtime range whose bounds are not two arms is not yet	producer:lib/SoN/FromOptree.pm:22488	producer	NONE	
+a runtime range whose high bound did not evaluate to a value	producer:lib/SoN/FromOptree.pm:22494	producer	NONE	
+a runtime range whose low bound did not evaluate to a value	producer:lib/SoN/FromOptree.pm:22500	producer	NONE	
+a flip-flop inside a sub is not yet lowered -- its state	producer:lib/SoN/FromOptree.pm:22543	producer	NONE	
+a flip-flop whose operands are not two arms is not yet	producer:lib/SoN/FromOptree.pm:22549	producer	NONE	
+a flip-flop operand did not evaluate to a valuen	producer:lib/SoN/FromOptree.pm:22559	producer	NONE	
+a flip-flop whose operands have effects is not yet lowered	producer:lib/SoN/FromOptree.pm:22561	producer	NONE	
+a flip-flop without its flip op is not yet loweredn	producer:lib/SoN/FromOptree.pm:22567	producer	NONE	
+a signature default with an effect, on a parameter a	producer:lib/SoN/FromOptree.pm:22707	producer	NONE	
+a signature default with an effect, in a sub with a	producer:lib/SoN/FromOptree.pm:22713	producer	NONE	
+a signature default with an effect, on a parameter a	producer:lib/SoN/FromOptree.pm:22729	producer	NONE	
+a signature default whose arm is not a single value is not	producer:lib/SoN/FromOptree.pm:22762	producer	NONE	
+a short-circuit whose arm is not a single value is not yet	producer:lib/SoN/FromOptree.pm:22826	producer	NONE	
+a `return` in an arm with no function exit to record it	producer:lib/SoN/FromOptree.pm:22979	producer	NONE	
+a short-circuit guard whose arm does not leave by one	producer:lib/SoN/FromOptree.pm:23109	producer	NONE	
+short-circuit with a non-value arm inside an if/else	producer:lib/SoN/FromOptree.pm:23111	producer	NONE	
+short-circuit whose arm is not a single value inside	producer:lib/SoN/FromOptree.pm:23116	producer	NONE	
+an if/else whose arms all leave the loop, nested in	producer:lib/SoN/FromOptree.pm:23259	producer	NONE	
+a postfix-while loop inside an if/else arm whose	producer:lib/SoN/FromOptree.pm:23386	producer	NONE	
+function exit inside a statement modifier in an	producer:lib/SoN/FromOptree.pm:23516	producer	NONE	
+statement-modifier loop or unhandled op inside an	producer:lib/SoN/FromOptree.pm:23528	producer	NONE	
+a loop control or return inside a guarded block in	producer:lib/SoN/FromOptree.pm:23601	producer	NONE	
+a loop control (`	producer:lib/SoN/FromOptree.pm:23716	producer	DYNAMIC	
+a sort marked STACKED with no comparator slot is not yet	producer:lib/SoN/FromOptree.pm:23883	producer	NONE	
+a sort comparator slot with no body is not yet loweredn	producer:lib/SoN/FromOptree.pm:23888	producer	NONE	
+a named sort comparator whose name could not be resolved	producer:lib/SoN/FromOptree.pm:23913	producer	NONE	
+a sort comparator block that localises a variable is not	producer:lib/SoN/FromOptree.pm:23940	producer	NONE	
+a sort comparator chosen at runtime (a subref, not a block or	producer:lib/SoN/FromOptree.pm:23955	producer	NONE	fak29
+s///ge with an interpolated pattern not recovered as an input (a qr// value) is not yet loweredn	producer:lib/SoN/FromOptree.pm:23998	producer	NONE	
+s///ge on a subject that is not a plain scalar variable is	producer:lib/SoN/FromOptree.pm:24001	producer	NONE	
+s///ge whose replacement is a lone array or hash is not	producer:lib/SoN/FromOptree.pm:24019	producer	NONE	
+s///ge whose replacement has an effect is not yet lowered --	producer:lib/SoN/FromOptree.pm:24029	producer	NONE	
+s/// into a substr of other than a `my` scalar, or without a length, is not yet loweredn	producer:lib/SoN/FromOptree.pm:24053	producer	NONE	
+s/// into a substr of other than a `my` scalar, or without a length, is not yet loweredn	producer:lib/SoN/FromOptree.pm:24058	producer	NONE	
+a chomp/chop whose subject is a `	producer:lib/SoN/FromOptree.pm:24458	producer	NONE	ar19
+a tr/// whose map is in the pad is not yet lowered	producer:lib/SoN/FromOptree.pm:24484	producer	NONE	
+a tr/// on a `	producer:lib/SoN/FromOptree.pm:24491	producer	DYNAMIC	
+s/// on a target that is not a named scalar (an	producer:lib/SoN/FromOptree.pm:24814	producer	NONE	ar20
+s/// on a package/global target whose GV could not be	producer:lib/SoN/FromOptree.pm:24846	producer	NONE	
+s/// on a lexical the closure captured, inside that closure,	producer:lib/SoN/FromOptree.pm:24855	producer	NONE	
+a lone capture replacement under /g is not yet loweredn	producer:lib/SoN/FromOptree.pm:24930	producer	NONE	
+s/// interpolated replacement subtree has no entry opn	producer:lib/SoN/FromOptree.pm:25238	producer	NONE	
+s/// interpolated replacement that exits (return/die) not	producer:lib/SoN/FromOptree.pm:25299	producer	NONE	
+s/// interpolated replacement that is not a single value	producer:lib/SoN/FromOptree.pm:25301	producer	NONE	
+an assignment's element is read by alias and a later operand	producer:lib/SoN/FromOptree.pm:25599	producer	pvm/memory-model.md: K5: two element op=s as operands of one +	zlv74
+an aggregate flattened into a list is read by alias and a later item	producer:lib/SoN/FromOptree.pm:25634	producer	pvm/memory-model.md: K7: an array in a list, then a later item stores its element	aum43
+an element operand is read by alias and a later operand	producer:lib/SoN/FromOptree.pm:25649	producer	NONE	ag42
+an element operand is read by alias and a later operand calls a sub that may	producer:lib/SoN/FromOptree.pm:25665	producer	NONE	ag42
+a scalar operand is read by alias and a later operand stores itn	producer:lib/SoN/FromOptree.pm:25685	producer	NONE	
+a scalar operand is read by alias and a later operand stores it	producer:lib/SoN/FromOptree.pm:25687	producer	pvm/memory-model.md: re-audit G: a my scalar read by alias, written later in the expression	aun175
+a scalar operand is read by alias and a later operand stores itn	producer:lib/SoN/FromOptree.pm:25704	producer	NONE	
+a scalar operand is read by alias and a later operand stores itn	producer:lib/SoN/FromOptree.pm:25711	producer	NONE	
+an element operand is read by alias and a later operand calls code whose stores	producer:lib/SoN/FromOptree.pm:25780	producer	NONE	
+an element operand is read by alias and a later operand calls a sub that may	producer:lib/SoN/FromOptree.pm:25783	producer	NONE	ag42
+	producer:lib/SoN/FromOptree.pm:26209	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26211	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26213	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26215	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26218	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26222	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26230	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26238	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26258	producer	DYNAMIC	
+a string eval whose code does not compile is refused -- perl sets $@ as it runs,	producer:lib/SoN/FromOptree.pm:26268	producer	NONE	
+	producer:lib/SoN/FromOptree.pm:26275	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26277	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26278	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26287	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26290	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26291	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26292	producer	DYNAMIC	
+	producer:lib/SoN/FromOptree.pm:26295	producer	DYNAMIC	
+a string eval of code made at run time, with a lexical in scope (	producer:lib/SoN/FromOptree.pm:26334	producer	pvm/eval-replacement.md: `eval STRING`: the re-entry with no delimiter	
+a pad slot whose name carries no recognisable sigil	producer:lib/SoN/FromOptree.pm:26532	producer	NONE	
+a followed module's package variable its file-level code set (	producer:lib/B/SoN.pm:435	producer	NONE	
+regex flags '	chalk:lib/Chalk/Regex/Parse.pm:47	chalk	DYNAMIC	
+regex flag /	chalk:lib/Chalk/Regex/Parse.pm:48	chalk	DYNAMIC	
+unbalanced ')' in regex pattern '	chalk:lib/Chalk/Regex/Parse.pm:51	chalk	NONE	
+	chalk:lib/Chalk/Regex/Parse.pm:56	chalk	DYNAMIC	
+unbalanced ')' in regex pattern '	chalk:lib/Chalk/Regex/Parse.pm:154	chalk	NONE	
+unbalanced '(' in regex pattern '	chalk:lib/Chalk/Regex/Parse.pm:160	chalk	NONE	
+a regex code block in a pattern that is not all literal -- how often it runs is perl's optimizer'sn	chalk:lib/Chalk/Regex/Graph.pm:73	chalk	NONE	
+a regex code block in a match that is not one in scalar contextn	chalk:lib/Chalk/Regex/Graph.pm:75	chalk	NONE	
+a regex code block whose body is not given to its matcher (a qr value, an interpolated pattern)n	chalk:lib/Chalk/Regex/Graph.pm:78	chalk	NONE	
+tr///	chalk:lib/Chalk/Regex/Graph.pm:98	chalk	DYNAMIC	
+tr escape \	chalk:lib/Chalk/Regex/Graph.pm:142	chalk	DYNAMIC	
+tr range ending in an escape is not loweredn	chalk:lib/Chalk/Regex/Graph.pm:146	chalk	NONE	
+a tr character past ASCII is not loweredn	chalk:lib/Chalk/Regex/Graph.pm:154	chalk	NONE	
+a quantifier of more than	chalk:lib/Chalk/Regex/Graph.pm:203	chalk	NONE	
+a capture inside a negative lookaround is not lowered as a graphn	chalk:lib/Chalk/Regex/Graph.pm:235	chalk	NONE	
+a regex node	chalk:lib/Chalk/Regex/Graph.pm:244	chalk	DYNAMIC	
+\G in a match not in scalar context with /gn	chalk:lib/Chalk/Regex/Graph.pm:432	chalk	NONE	
+s/// replacement escape \	chalk:lib/Chalk/Regex/Graph.pm:588	chalk	NONE	
+s/// replacement $	chalk:lib/Chalk/Regex/Graph.pm:594	chalk	DYNAMIC	
+s/// replacement $	chalk:lib/Chalk/Regex/Graph.pm:595	chalk	DYNAMIC	
+s/// replacement $	chalk:lib/Chalk/Regex/Graph.pm:596	chalk	DYNAMIC	
+a character class past ASCII is not lowered as a graphn	chalk:lib/Chalk/Regex/Graph.pm:780	chalk	NONE	
+the assertion	chalk:lib/Chalk/Regex/Graph.pm:823	chalk	DYNAMIC	
+regex escape \	chalk:lib/Chalk/Regex/Pattern.pm:53	chalk	DYNAMIC	
+regex flags '	chalk:lib/Chalk/Regex/Pattern.pm:78	chalk	DYNAMIC	
+regex class shorthand \	chalk:lib/Chalk/Regex/Pattern.pm:149	chalk	NONE	
+regex (?...) construct (lookaround/modifier/code) in	chalk:lib/Chalk/Regex/Pattern.pm:218	chalk	NONE	
+quantified group (...)	chalk:lib/Chalk/Regex/Pattern.pm:248	chalk	NONE	
+regex quantifier '	chalk:lib/Chalk/Regex/Pattern.pm:251	chalk	DYNAMIC	
+a quantified regex code block in pattern '	chalk:lib/Chalk/Regex/Pattern.pm:253	chalk	NONE	
+double quantifier on one atom in pattern '	chalk:lib/Chalk/Regex/Pattern.pm:255	chalk	NONE	
+regex metachar '	chalk:lib/Chalk/Regex/Pattern.pm:283	chalk	DYNAMIC	
+a regex code block with a quote-like op, a comment or a heredoc is not lowered	chalk:lib/Chalk/Regex/Pattern.pm:311	chalk	NONE	
+a regex code block not closed by })n	chalk:lib/Chalk/Regex/Pattern.pm:323	chalk	NONE	
+a regex code block that is not closedn	chalk:lib/Chalk/Regex/Pattern.pm:328	chalk	NONE	
+`defined &	chalk:lib/Chalk/IR/Analysis.pm:1423	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/IR/Analysis.pm:1951	chalk	DYNAMIC	
+class '	chalk:lib/Chalk/IR/Analysis.pm:3018	chalk	DYNAMIC	
+PadAccess '	chalk:lib/Chalk/IR/Serialize/JSON.pm:733	chalk	DYNAMIC	
+EntryDef '	chalk:lib/Chalk/IR/Serialize/JSON.pm:818	chalk	DYNAMIC	
+an eval's entry (node	chalk:lib/Chalk/IR/Serialize/JSON.pm:926	chalk	NONE	
+	chalk:lib/Chalk/IR/Serialize/JSON.pm:1165	chalk	DYNAMIC	
+a method call that may run	chalk:lib/Chalk/IR/Serialize/JSON.pm:1174	chalk	NONE	fap07
+wire version	chalk:lib/Chalk/IR/Serialize/JSON.pm:1327	chalk	DYNAMIC	
+wire v2 `profile`	chalk:lib/Chalk/IR/Serialize/JSON.pm:1328	chalk	DYNAMIC	
+a	chalk:lib/Chalk/IR/Serialize/JSON.pm:1416	chalk	DYNAMIC	
+	chalk:lib/Chalk/IR/Serialize/WireCheck.pm:44	chalk	DYNAMIC	
+wire invariant	chalk:lib/Chalk/IR/Serialize/WireInvariant.pm:101	chalk	DYNAMIC	
+	chalk:lib/Chalk/Impl.pm:145	chalk	DYNAMIC	
+	chalk:lib/Chalk/Impl.pm:149	chalk	DYNAMIC	
+	chalk:lib/Chalk/Impl.pm:161	chalk	DYNAMIC	
+	chalk:lib/Chalk/Impl.pm:208	chalk	DYNAMIC	
+the program defines	chalk:lib/Chalk/Impl.pm:210	chalk	DYNAMIC	
+the program defines	chalk:lib/Chalk/Impl.pm:235	chalk	DYNAMIC	
+the program defines	chalk:lib/Chalk/Impl.pm:245	chalk	DYNAMIC	
+B::SoN gave no class record for	chalk:lib/Chalk/Impl.pm:259	chalk	NONE	
+a label on a bare block (	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:602	chalk	NONE	
+a class-scope list declaration (`my (...)` in a class block) has no MOP recordn	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:933	chalk	NONE	
+	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:1578	chalk	DYNAMIC	
+a string literal spelled	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:1798	chalk	NONE	
+a double-quoted string interpolating	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:1842	chalk	NONE	
+the escape \	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2057	chalk	DYNAMIC	
+a double-quoted string ending in a lone backslashn	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2060	chalk	NONE	
+two identical short-circuit statements in one block share one IR noden	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2243	chalk	NONE	
+a parenthesized field list (field (...)) is not Perl and has no IRn	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2443	chalk	NONE	
+undef of an aggregate (	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2588	chalk	NONE	
+undef of something other than a scalar variable (	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2590	chalk	NONE	
+a slice of a circumfix dereference (@{...}[...], %{...}{...}) has no IR heren	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2880	chalk	NONE	
+a postfix key/value slice (->%	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:2925	chalk	NONE	
+a list assignment to something other than variables, elements and undef has no IRn	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:3054	chalk	NONE	
+a compound assignment to a list has no IRn	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:3081	chalk	NONE	
+a parenthesized assignment target that is not a variable has no IRn	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:3098	chalk	NONE	
+a compound assignment (	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:3219	chalk	NONE	
+a declaration list holding something other than a variable has no IRn	chalk:lib/Chalk/Bootstrap/Perl/Actions.pm:4168	chalk	NONE	
+a statement outside a class (or a lexical sub there) is	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:132	chalk	NONE	
+a class-scope lexical (`my` in a class block) is not emitted	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:198	chalk	NONE	
+a pragma (use/no) inside a sub body is not emitted by the old	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:289	chalk	NONE	
+an interpolated expression whose code has unbalanced braces:	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:1068	chalk	NONE	
+a bool Constant spelled '	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:1116	chalk	NONE	
+no precedence for binary operator '	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:1271	chalk	NONE	
+no precedence for binary operator '	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:1332	chalk	NONE	
+	chalk:lib/Chalk/Bootstrap/Perl/Target/Perl.pm:1579	chalk	DYNAMIC	
+a bool Constant spelled '	chalk:lib/Chalk/Bootstrap/Perl/Target/EmitHelpers.pm:1473	chalk	NONE	
+the C target has no lowering for an interpolated element ($a[0], $h{k})n	chalk:lib/Chalk/Bootstrap/Perl/Target/EmitHelpers.pm:1610	chalk	NONE	
+the C target has no lowering for interpolating	chalk:lib/Chalk/Bootstrap/Perl/Target/EmitHelpers.pm:1612	chalk	NONE	
+the C target has no lowering for a list declaration (my (...) = LIST)n	chalk:lib/Chalk/Bootstrap/Perl/Target/EmitHelpers.pm:2354	chalk	NONE	
+	chalk:lib/Chalk/Target/LLVM.pm:34	chalk	DYNAMIC	
+two evals entered at one node (a try whose body begins with a try or an eval)	chalk:lib/Chalk/Target/LLVM/Builder.pm:46	T2	NONE	red08
+no Return	chalk:lib/Chalk/Target/LLVM/Builder.pm:70	T2	DYNAMIC	
+no way back to Start from	chalk:lib/Chalk/Target/LLVM/Builder.pm:77	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder.pm:113	T2	DYNAMIC	
+a BEGIN block reading or writing a lexical of the main program	chalk:lib/Chalk/Target/LLVM/Builder.pm:117	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder.pm:122	T2	DYNAMIC	
+more than 64 END blocks	chalk:lib/Chalk/Target/LLVM/Builder.pm:125	T2	NONE	
+an early exit to a merge never reached	chalk:lib/Chalk/Target/LLVM/Builder.pm:132	T2	NONE	
+a match returned (its context is its caller's)	chalk:lib/Chalk/Target/LLVM/Builder.pm:213	T2	NONE	
+a field of no known class	chalk:lib/Chalk/Target/LLVM/Builder.pm:242	T2	NONE	
+a field of no known index	chalk:lib/Chalk/Target/LLVM/Builder.pm:250	T2	NONE	
+a call used both as a list and as a scalar	chalk:lib/Chalk/Target/LLVM/Builder.pm:268	T2	NONE	
+	chalk:lib/Chalk/Target/LLVM/Builder.pm:351	T2	DYNAMIC	
+an unsealed MOP	chalk:lib/Chalk/Target/LLVM/Lower.pm:47	T2	DYNAMIC	
+a list assignment to an array or hash	chalk:lib/Chalk/Target/LLVM/Lower.pm:76	T2	NONE	ar12
+a list assignment into scalars from an array or hash kept in memory	chalk:lib/Chalk/Target/LLVM/Lower.pm:78	T2	NONE	
+a scalar deref where a reference T2 does not make may reach it	chalk:lib/Chalk/Target/LLVM/Lower.pm:100	T2	memory-model.md: local: a reference taken before it follows the saved scalar (census)	ag16
+a read through a reference waiting across	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:47	T2	NONE	ag31
+a variable that is not a `my` scalar kept here (	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:180	T2	NONE	
+a variable made anew each pass first reached outside a loop's body	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:232	T2	NONE	
+a variable made anew each pass first reached in an arm or an inner loop	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:234	T2	NONE	
+a store to a	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:349	T2	DYNAMIC	
+a field outside a method	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:350	T2	NONE	
+an assignment to an lvalue sub whose value is not a scalar of the file or a package	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:399	T2	NONE	
+a local	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:416	T2	DYNAMIC	
+a local of an element where a die may unwind past it	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:417	T2	NONE	aun73
+a local of a hash element in a program that takes a reference to one (perl's local puts a new element there)	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:423	T2	NONE	
+a local of an element restored other than once	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:428	T2	NONE	
+a restore of an element not saved before its local	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:437	T2	NONE	
+a local	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:463	T2	DYNAMIC	
+the value of a list assignment to an array or hash	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:481	T2	NONE	
+a list assignment to an array or hash	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:507	T2	NONE	ar12
+a list assignment to a slice of kind	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:536	T2	NONE	
+a list assignment to a slice whose indices are a list made at run time	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:539	T2	NONE	fac05
+a list assignment to a slice of @_	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:540	T2	NONE	ar16
+a list assignment to a slice and then another target (B::SoN binds what follows a slice one place per slice)	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:544	T2	NONE	faw29
+a list assignment to an array or hash a reference is taken of, in a loop	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:578	T2	NONE	
+a read after a list assignment of no target (	chalk:lib/Chalk/Target/LLVM/Builder/Variables.pm:616	T2	NONE	zmi54
+a match against a pattern built at run time	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:32	T2	regex-matching.md: `pos` and `\G` on a signature parameter (census)	
+a match against a qr value with flags of its own (	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:33	T2	NONE	
+a postponed subexpression whose body does more than read	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:46	T2	NONE	
+a postponed subexpression whose match is read in list context	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:48	T2	NONE	
+a group of a postponed subexpression's match read (its groups are its own)	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:49	T2	NONE	
+a regex code block whose body B::SoN did not give	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:77	T2	NONE	
+a pos() of what is not a `my` scalar kept here	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:88	T2	NONE	faq25
+a regex match with code blocks	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:116	T2	NONE	
+a match in list context against a qr value made elsewhere	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:123	T2	NONE	
+a split of no subject	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:142	T2	NONE	
+a split by a pattern built at run time	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:155	T2	NONE	
+an s/// with code blocks	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:166	T2	NONE	
+an s/// with an empty pattern (the last pattern that matched)	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:167	T2	NONE	
+an s///e replacement whose body B::SoN did not give	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:171	T2	NONE	
+an s///e replacement holding an s///e (its matches would overwrite the captures it reads)	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:172	T2	NONE	
+an s///g whose replacement is made per match (B::SoN computes it once)	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:186	T2	NONE	zmi53
+an s/// whose replacement reads the captures of more than one match	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:216	T2	NONE	
+an s/// whose pattern is made at run time of what is not a few constants	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:247	T2	NONE	
+a substr statement of other than four arguments	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:299	T2	NONE	
+a four-argument substr of what is not a `my` scalar kept here	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:301	T2	NONE	zpa79
+an s/// or tr in place of what is not a `my` scalar kept here	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:324	T2	NONE	
+a capture of no regex match	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:368	T2	NONE	
+a capture read where its match may have failed (perl reads the last match that succeeded)	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:381	T2	NONE	fab16
+a capture of no group of its pattern	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:386	T2	NONE	
+a capture of a /g match or one with code blocks, made again in another block	chalk:lib/Chalk/Target/LLVM/Builder/Regex.pm:389	T2	NONE	
+a control node with	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:36	T2	DYNAMIC	
+a statement	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:46	T2	DYNAMIC	
+a print to a `my $fh` in a program with an eval	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:69	T2	NONE	
+a print to a handle opened nowhere, its value read	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:78	T2	NONE	
+a print to a filehandle other than STDOUT or STDERR	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:84	T2	NONE	
+$, written	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:105	T2	DYNAMIC	
+a print of nothing to a handle, its value read	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:116	T2	NONE	
+a count of @{} over an element known undef	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:139	T2	NONE	
+a reference to what is no array or hash element	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:178	T2	NONE	
+a rethrow outside a sub	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:189	T2	NONE	
+a die of a list	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:200	T2	DYNAMIC	
+a die of another eval than the one open here	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:207	T2	NONE	
+a $_ aliased where the program reads $_, outside a loop T2 restores it after	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:280	T2	NONE	
+a $_ aliased to an item of a list written out, where the program writes $_ (B::SoN may have folded the item)	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:297	T2	NONE	zpk44
+a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_)	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:299	T2	NONE	
+a $@ read B::SoN made one node with an earlier one	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:331	T2	NONE	
+a local	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:351	T2	DYNAMIC	
+a local aggregate restored with no save made	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:392	T2	NONE	ef28
+a glob bind of a package aggregate	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:394	T2	NONE	
+a local	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:403	T2	DYNAMIC	
+a statement	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:459	T2	DYNAMIC	
+a die of what may be a reference, where %SIG is in use	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:475	T2	NONE	
+a die of another eval than the one open here	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:479	T2	NONE	
+an eval whose body makes a value that may die	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:509	T2	NONE	alg01
+an eval in its caller's context	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:513	T2	NONE	fad08
+an eval closed at another depth	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:581	T2	NONE	ev17
+an exceptional edge that reaches no catch of its eval	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:604	T2	NONE	
+an eval whose catch does not reach its join	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:619	T2	NONE	
+an eval whose body returns	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:626	T2	NONE	aun82
+an eval of no way to its end whose value is read	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:636	T2	NONE	
+an if without two arms	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:679	T2	NONE	
+an if both of whose arms die	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:737	T2	NONE	
+an if whose arms do not meet	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:744	T2	NONE	go4
+an if Region whose ways in are not its arms	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:760	T2	NONE	
+an if both of whose arms die	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:763	T2	NONE	
+an early exit joined where an arm died	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:866	T2	NONE	
+a merge with a way in no arm reached	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:869	T2	NONE	
+a loop whose test is pinned on it (a wire without the `loop` profile)	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1007	T2	NONE	
+a loop without a body and an exit	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1015	T2	NONE	
+a loop phi with other than two ways in	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1025	T2	NONE	
+a loop condition whose effect does not end in the header	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1072	T2	NONE	
+a loop body that ends neither going round nor leaving	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1093	T2	NONE	auk15
+a $_ aliased where the program reads $_, in a program with an eval	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1134	T2	NONE	
+a loop phi with other than two ways in	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1203	T2	NONE	
+a loop with no exit that does not run on to the Return	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1240	T2	NONE	
+a loop body that ends neither going round nor leaving	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1247	T2	NONE	auk15
+a loop that never leaves	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1257	T2	NONE	
+a loop whose ways round do not meet at one latch	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1290	T2	NONE	
+a loop with more than one exit	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1315	T2	NONE	
+a jump out of a foreach aliasing $_ past its restore	chalk:lib/Chalk/Target/LLVM/Builder/Control.pm:1361	T2	NONE	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:101	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:171	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:206	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:223	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:249	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:263	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:283	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:290	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:303	chalk	DYNAMIC	
+direct call to '	chalk:lib/Chalk/Target/LLVM/Builder/Args.pm:341	chalk	DYNAMIC	
+a hash that is not a {...} or a `my %h`	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:197	T2	NONE	
+a {...} not made where it runs	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:199	T2	NONE	
+a hash first made in an arm or a loop body	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:202	T2	NONE	fak11
+a {...} of an odd list	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:213	T2	NONE	
+a list in a {...}	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:215	T2	DYNAMIC	
+a caller(N) read past its third value	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:272	T2	NONE	
+an each in scalar context	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:291	T2	NONE	
+an each of what is not a hash	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:292	T2	NONE	
+an each in a program with a keys or values (which reset it, B::SoN places them nowhere)	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:299	T2	NONE	aue5
+a sort comparator with no body	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:317	T2	NONE	
+a sort comparator reading @_	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:332	T2	NONE	
+a container whose metaobject,	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:410	T2	NONE	
+a constant structure holding a reference of another kind	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:453	T2	NONE	
+%SIG where perl may raise warnings of its own (	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:470	T2	adjacency-07_subroutines.md: The whole tier in one body (census)	
+a stash where the program may change it at run time (	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:480	T2	NONE	
+a stash whose metaobject,	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:482	T2	NONE	
+a call of the metaobject of	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:576	T2	NONE	
+a hash a closure shares	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:627	T2	NONE	fak33
+a hash element of a named hash	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:657	T2	NONE	faq12
+an array first made in an arm or a loop body	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:714	T2	NONE	auk10
+a reference to an element through an element not made a hash first	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:740	T2	NONE	
+a reference to each element taken as a scalar	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:755	T2	NONE	
+a reference to an element through an element not made an array first	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:757	T2	NONE	
+a reference to a glob read other than by ref (its address and slots are the stash's)	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:779	T2	NONE	
+a reference to what is not an array	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:781	T2	NONE	ef27
+a slice a sub or a reference would alias	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:794	T2	NONE	
+a slice of kind	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:806	T2	DYNAMIC	
+a range of strings a numeric read may have made numbers	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:823	T2	NONE	
+a list collector	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:843	T2	DYNAMIC	
+@_ outside a sub taking it as a list	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:869	T2	NONE	
+a hash element	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:889	T2	DYNAMIC	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:898	T2	DYNAMIC	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:914	T2	DYNAMIC	
+an unpack of other than a template and one string	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:937	T2	NONE	
+an unpack template other than a constant C, Cn or C*	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:940	T2	NONE	
+an unpack where a string goes past ASCII	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:944	T2	NONE	
+a glob of other than one pattern	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:953	T2	NONE	
+a glob pattern with whitespace (several patterns to perl)	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:956	T2	NONE	
+a glob pattern with a brace (perl keeps its alternatives in order)	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:957	T2	NONE	
+$" written	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:983	T2	DYNAMIC	
+a reference to a `my` made anew each pass that T2 keeps one of	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1023	T2	NONE	
+more than 256 references to literals	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1028	T2	NONE	
+an array a closure shares	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1089	T2	NONE	zcp62
+not an array	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1129	T2	DYNAMIC	
+a list from a call of no sub T2 made	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1140	T2	NONE	
+an array through an element read whole	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1189	T2	NONE	lp28
+an @ISA of no known package	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1201	T2	NONE	
+an array that is not a `my` array (	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1206	T2	NONE	
+a list unshifted	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1328	T2	DYNAMIC	
+a store through an element not made a hash or array first	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1362	T2	NONE	faa14
+a store into a slice's element (perl aliases the array's element)	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1366	T2	NONE	
+a store into @_ of no site, in a program with an eval	chalk:lib/Chalk/Target/LLVM/Builder/Containers.pm:1394	T2	NONE	alg02
+a call caller would read with no site from B::SoN	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:16	T2	NONE	
+a rethrow edge that ends in no rethrow	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:65	T2	NONE	
+an @ISA of no known package	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:78	T2	NONE	
+an @ISA written from what is not a list of names	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:79	T2	NONE	
+an @ISA of a list	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:80	T2	DYNAMIC	
+a `my (...) = @_` of what is not a scalar	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:92	T2	NONE	
+a `my (...) = @_` of what is not a variable	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:93	T2	NONE	
+a read after `my (...) = @_` of no target	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:95	T2	NONE	
+a slurpy	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:108	T2	DYNAMIC	
+a `my (...) = @_` of what is not a scalar	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:133	T2	NONE	
+a `my (...) = @_` target that is not an argument	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:136	T2	NONE	
+a read after `my (...) = @_` of no target	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:147	T2	NONE	
+a read after `my (...) = @_` of no target	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:148	T2	NONE	
+a closure called directly and as a code value	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:167	T2	NONE	
+a direct call of a closure made elsewhere	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:184	T2	NONE	
+a call of a closure's signature with another arity (perl dies)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:191	T2	NONE	
+a direct call with no sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:201	T2	NONE	aun81
+a closure reading its method's fields, called other than from that method	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:216	T2	NONE	
+an & call sharing @_ of a sub not taking it as a list	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:231	T2	NONE	
+a call of a sub with optional parameters passing a list (its count unknown)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:240	T2	NONE	
+a call of a signature with too many arguments (perl dies)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:241	T2	NONE	
+a call of a signature with too few arguments (perl dies)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:244	T2	NONE	
+an odd count into a signature's slurpy hash (perl dies)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:245	T2	NONE	
+a call of a sub with a signature of another arity (perl dies)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:254	T2	NONE	
+a local of a glob	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:298	T2	DYNAMIC	
+a glob given a sub where its package defines one by that name (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:301	T2	NONE	
+a glob given a closure (its cells are not the stash's to hold)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:305	T2	NONE	
+a glob given a reference to a sub not here (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:314	T2	NONE	
+a glob given a code value held in a variable	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:316	T2	NONE	
+a glob given a sub of no body here	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:317	T2	NONE	
+a glob given a sub T2 calls other than through its stash	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:319	T2	NONE	
+an & call of a sub a glob is given at run time	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:338	T2	NONE	
+a call of a glob's sub of no package	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:339	T2	NONE	
+a method call with no MOP	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:356	T2	NONE	
+a method named at run time in a program with an AUTOLOAD	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:366	T2	NONE	
+a method no package defines (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:373	T2	NONE	
+an AUTOLOAD	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:374	T2	DYNAMIC	
+a UNIVERSAL package of the program's own	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:376	T2	NONE	
+a sub of a signature T2 checks at its calls, called other than directly	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:390	T2	NONE	
+a closure reading its method's fields, in its stash	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:391	T2	NONE	
+a code value called where can() may hand back a sub not loaded	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:398	T2	NONE	
+a new whose arguments are not name => value	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:425	T2	NONE	
+an :isa of a class not here	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:439	T2	NONE	
+an :isa of a package not of the class feature	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:440	T2	NONE	
+an :isa cycle	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:441	T2	DYNAMIC	
+a new with a parameter its class has not (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:446	T2	NONE	
+a field default the producer does not model	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:454	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:472	T2	DYNAMIC	
+a new missing a required parameter (perl dies)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:476	T2	NONE	
+an ADJUST of no graph	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:482	T2	NONE	
+a field default that is not made of itself	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:511	T2	NONE	
+a field default that is not made of itself	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:521	T2	NONE	
+a new of a class not named here	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:543	T2	NONE	
+a method named at run time by a list	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:548	T2	NONE	
+a method named at run time in a program that uses parent or base (inheritance the loader drops)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:549	T2	NONE	
+a method call with no invocant	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:551	T2	NONE	
+a method call on a list	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:552	T2	NONE	
+a method name T2 cannot split	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:569	T2	NONE	
+a literal passed where a sub takes a reference into @_ and a store may go through one (perl's literal is read-only)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:713	T2	NONE	
+a package scalar of no one version passed as an argument	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:727	T2	NONE	
+an element of an array B::SoN reads at no version, aliased where it may be written	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:753	T2	NONE	faj06
+a field outside a method	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:770	T2	NONE	
+an argument perl aliases (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:777	T2	NONE	ar5
+an array B::SoN reads at no version, aliased where it may be written	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:825	T2	memory-model.md: A postfix foreach over a slice writes the elements (census)	faj06
+a slice of an array B::SoN reads at no version, aliased where it may be written	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:868	T2	memory-model.md: A postfix foreach over a slice writes the elements (census)	fal21
+a slice of kind	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:877	T2	DYNAMIC	
+a list perl may alias (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:887	T2	NONE	al30
+a call passing a list	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:899	T2	NONE	
+a list from a call of no sub T2 made	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:904	T2	NONE	
+a list a call returns passed to a sub taking scalars	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:906	T2	NONE	
+a call not in list context of a sub's list-context copy	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:938	T2	NONE	
+a closure of no sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:951	T2	DYNAMIC	
+a closure called directly and as a code value	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:952	T2	NONE	
+a closure capturing what is not a cell	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:957	T2	NONE	
+a code reference of no name	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:972	T2	NONE	
+a reference to a sub not here (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:976	T2	NONE	zpk12
+a reference to a closure's sub (	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:978	T2	NONE	
+an & call of a code value sharing @_ of a sub not taking it as a list	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:992	T2	NONE	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1013	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1016	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1054	T2	DYNAMIC	
+method	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1063	T2	DYNAMIC	
+method	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1065	T2	DYNAMIC	
+method	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1072	T2	DYNAMIC	
+method	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1073	T2	DYNAMIC	
+closure	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1087	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1088	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1153	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1154	T2	DYNAMIC	
+closure	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1176	T2	DYNAMIC	
+closure	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1177	T2	DYNAMIC	
+a call of a code value that may be closure	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1198	T2	NONE	
+closure	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1203	T2	DYNAMIC	
+closure	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1207	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1210	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1228	T2	DYNAMIC	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1237	T2	DYNAMIC	
+no way back to Start in	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1311	T2	NONE	
+a merge returned whose way is a list or a merge	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1373	T2	NONE	
+a rethrow edge T2 never takes (a	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1387	T2	NONE	
+an early exit to a merge never reached	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1390	T2	NONE	
+an eval left open at the end	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1391	T2	NONE	
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1420	T2	DYNAMIC	
+the value of a list assignment to scalars	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1421	T2	NONE	faa25
+a tail call of a sub not made yet (recursion)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1450	T2	NONE	fad37
+sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1455	T2	DYNAMIC	
+a merge returned with a call of no sub T2 made	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1479	T2	NONE	
+a merge returned with a call of the sub itself	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1481	T2	NONE	
+a filehandle that is not a `my $fh` (or DATA)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1495	T2	NONE	
+a `my $fh` shared with a sub	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1497	T2	NONE	
+DATA in a program with no __DATA__ or __END__ text	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1513	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1553	T2	DYNAMIC	
+an open of other than three arguments	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1557	T2	NONE	
+an open of a file (or of what is not a reference to a constant string)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1562	T2	NONE	aun83
+an open for writing of a file (or of what is not a `my` scalar)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1568	T2	NONE	rn8
+a variable a handle writes, read other than after a close	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1577	T2	NONE	ef22
+an open in a mode other than <, > or >>	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1584	T2	NONE	
+a handle opened again in a program that selects one	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1587	T2	NONE	
+a select of other than one argument	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1594	T2	NONE	
+a select of undef (a `my $fh` never opened)	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1596	T2	NONE	
+a four-argument select of handles or a wait	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1604	T2	NONE	io3
+a	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1609	T2	DYNAMIC	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Calls.pm:1613	T2	DYNAMIC	
+an eval in list context whose value is typed a scalar (a die gives the empty list)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:91	T2	NONE	fad66
+a phi stamped	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:121	T2	DYNAMIC	
+a phi stamped	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:124	T2	DYNAMIC	
+a write in place to a merge of versions of an array or hash (B::SoN orders no read after it)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:223	T2	NONE	
+a split in scalar context	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:310	T2	NONE	
+a glob read other than as a string, or a reference to it other than by ref (its slots are the stash's)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:419	T2	NONE	
+a value stamped	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:423	T2	DYNAMIC	
+a value an eval made, read past its end	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:494	T2	NONE	fad44
+a read through a reference an arm made, read again past a call or a store	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:496	T2	NONE	
+a print to a handle read as a value past where it ran	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:545	T2	NONE	
+a read of `my (...) = @_` in a sub that shifts @_	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:554	T2	NONE	
+an aggregate captured in a loop body or an arm	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:574	T2	NONE	
+a captured variable that is not one kept in memory	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:588	T2	NONE	fak04
+a variable captured in a loop body or an arm	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:596	T2	NONE	zps76
+a captured variable outside a closure	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:600	T2	NONE	
+wantarray in a sub (T2 has no void context)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:611	T2	NONE	ca2
+a push off the chain used other than by a return	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:617	T2	NONE	
+a bless of one argument	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:625	T2	NONE	
+a blessed of other than one argument	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:632	T2	NONE	
+a reftype of other than one argument	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:641	T2	NONE	
+a localtime of more than one argument	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:663	T2	NONE	
+a qx in list context	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:673	T2	NONE	
+a qx where the program reads $?	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:679	T2	NONE	
+a qx of no command	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:681	T2	DYNAMIC	
+a field outside a method	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:698	T2	NONE	
+a field read of no one version	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:699	T2	NONE	
+a package scalar read of no one version	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:718	T2	NONE	
+a case change where a string goes past ASCII	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:726	T2	NONE	
+a case change of other than one argument	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:728	T2	NONE	
+a length where a string goes past ASCII	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:737	T2	NONE	
+an integer constant past what an i64 holds	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:769	T2	NONE	
+a coercion to Undef	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:778	T2	DYNAMIC	
+a glob read as other than a string	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:783	T2	NONE	
+a Divide typed Int	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:790	T2	DYNAMIC	
+a % not typed Int	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:814	T2	DYNAMIC	
+an EnvRead with no key	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:889	T2	NONE	
+an && or || of a list	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:906	T2	NONE	
+a Repeat of a list in scalar context	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:950	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:959	T2	DYNAMIC	
+a chomp in a program that writes $/	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:960	T2	NONE	
+a chop where a string goes past ASCII	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:962	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:963	T2	DYNAMIC	
+an isa in a program that uses parent or base (inheritance the loader drops)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:974	T2	NONE	
+a regex match: T2 has no regex engine yet	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1002	T2	NONE	
+a require of a file named at run time	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1016	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1039	T2	DYNAMIC	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1043	T2	DYNAMIC	
+a four-argument substr read before it is made	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1057	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1058	T2	DYNAMIC	
+a substr of fewer than two arguments	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1061	T2	NONE	
+an index of fewer than two arguments	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1072	T2	NONE	
+$^ where the program selects another handle (its top-of-page format name is that handle's)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1094	T2	NONE	
+perl's special scalar	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1097	T2	NONE	
+a reference to a constant where the program dereferences a scalar (a write through it dies; its referent's type is not given)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1108	T2	NONE	
+a warn B::SoN places on no control chain (when it runs is not known)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1141	T2	NONE	
+a warn B::SoN gives no file and line (perl names them where its message does not end in a newline)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1143	T2	NONE	
+a warn of nothing (perl warns of $@, or that something is wrong)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1146	T2	NONE	
+a reverse of $_	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1170	T2	DYNAMIC	
+a reverse past ASCII	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1171	T2	NONE	
+a prototype of other than &name	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1186	T2	NONE	
+a prototype of a sub the program does not define	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1187	T2	NONE	
+a pack of a template made at run time	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1194	T2	NONE	
+a pack of a list	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1195	T2	DYNAMIC	
+a pack template other than C	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1201	T2	NONE	
+a pack of other than one value a byte	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1202	T2	NONE	
+a pack where a string goes past ASCII	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1203	T2	NONE	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1208	T2	DYNAMIC	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1209	T2	DYNAMIC	
+a	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1213	T2	DYNAMIC	
+a bitwise op on what may be strings, in a loop or an arm	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1253	T2	NONE	
+a bitwise op on what may be a string read elsewhere (perl reads it as a number after a numeric read)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1254	T2	NONE	
+a bitwise op on what may be a string another bitwise op reads, not both pinned where perl runs them	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1278	T2	NONE	
+a bitwise op on what may be a string an op in a loop, an arm or an eval read as a number	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1281	T2	NONE	
+a formline outside a format of STDOUT	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1436	T2	NONE	
+a format written in a program that selects a handle	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1437	T2	NONE	
+a formline of a picture made at run time	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1438	T2	NONE	
+a formline of a list	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1439	T2	NONE	
+a format field T2 does not have (	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1447	T2	NONE	
+a format with more fields than values	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1449	T2	NONE	
+a sprintf of no format	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1485	T2	NONE	
+a sprintf of a format made at run time	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1486	T2	NONE	
+a sprintf of a list	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1487	T2	DYNAMIC	
+a sprintf conversion T2 does not read (	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1496	T2	NONE	
+a sprintf %	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1499	T2	DYNAMIC	
+a sprintf %c of a precision	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1504	T2	NONE	
+a printf to a filehandle other than STDOUT or STDERR	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1529	T2	NONE	
+a printf to the handle a select chose	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1531	T2	NONE	
+a printf whose first operand is no format written out (a handle in a variable, or a format made at run time)	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1532	T2	NONE	
+a list taken as a scalar (	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1557	T2	NONE	
+a conversion	chalk:lib/Chalk/Target/LLVM/Builder/Values.pm:1561	T2	DYNAMIC	
