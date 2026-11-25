@@ -49,14 +49,19 @@ before starting, because the code will have moved on. The counts:
      other slow ratchets.
    - Hold the remainder by name, and drive that list to zero.
 4. **The deparser's 13 wrong answers** (`SoN::Deparse`, found by the new
-   corpus cases). Fix each, or refuse it by name:
+   corpus cases). Do NOT fix them in `SoN::Deparse`: `Chalk::Target::Perl`
+   replaces it (chalk `docs/plans/2026-11-14-the-perl-target-replaces-deparse.md`,
+   which follows the loader-only-loads plan). Until then, the deparser refuses
+   these by name, so it gives no silent wrong answer. They also become
+   acceptance cases the Perl target must print perl's answer on. The 13:
    - it writes `local` as save, store and restore, which breaks `$_[N]` and
      references to the saved scalar;
    - `$1` is not restored at a block's end;
    - DESTROY;
    - one loop where a read misses the stores from earlier passes.
    
-   Also add a gate for deparser DIFFERS. Today no gate counts them, which is
+   Also add a gate for DIFFERS, for the deparser now and for the Perl
+   target once it replaces the deparser. Today no gate counts them, which is
    why these were missed.
 5. **chalk's corpus.** The corpus gate (222) runs chalk's own
    `t/corpus/mdtest`, not the producer's. Decide whether the memory-model
