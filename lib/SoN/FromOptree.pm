@@ -6076,6 +6076,9 @@ class SoN::FromOptree 0.01 {
                 ( $ctx->{shared_lexicals}{$t} ? ( shared => 1 ) : () ), place => 1);
         }
         my $lv = $d->{lv};
+        # (A LIST ASSIGN -- `s/// for my @l = @_` in POSIX::import -- yields
+        # its targets, the array's elements: not one target's place)
+        return undef if $p->name eq 'aassign';
         return _alias_place( $lv, $factory, vivify => $lv isa SoN::IR::Node::Subscript ) // die
             "GAP: an assignment through a reference as a foreach, map or grep item is not yet lowered -- its target has no place on the wire\n";
     }
