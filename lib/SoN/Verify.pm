@@ -164,6 +164,52 @@ sub _alias_private ( $wire, $res ) {
             }
         }
     }
+    # THE ALIAS-LIST HALF (audit 2, K3): a foreach, map or grep's item read
+    # per pass -- `Subscript [list, i]` at the loop's memory Phi, not a place
+    # -- carried as a value must not be used after a store in that pass that
+    # may reach the list (its own, or a call's whose subs store it or cannot
+    # be told). Walked back along control from each use to the loop.
+    for my $g ( sort keys $m->%* ) {
+        my %cons;
+        for my $n ( values $by{$g}->%* ) {
+            push $cons{$_}->@*, $n for grep { defined && !ref } ( $n->{inputs} // [] )->@*;
+        }
+        for my $r ( sort { $a->{id} <=> $b->{id} } grep { $_->{op} eq 'Subscript' && !_fields($_)->{place} && defined $_->{mem_in} && !defined $_->{control_in} } values $by{$g}->%* ) {
+            # (a pinned read is made where it stands, not carried)
+            my $mphi = $by{$g}{ $r->{mem_in} } or next;
+            my $loop = $by{$g}{ _fields($mphi)->{region} // '' } or next;
+            next unless $mphi->{op} eq 'Phi' && _fields($mphi)->{memory} && $loop->{op} eq 'Loop';
+            my $iphi = $by{$g}{ $r->{inputs}[1] // '' } or next;
+            next unless $iphi->{op} eq 'Phi' && ( _fields($iphi)->{region} // -1 ) == $loop->{id};
+            my $key = $src->( $g, $r ) // next;
+            # (the uses that run: through pure values to a node on a chain)
+            my ( @anchor, %seen );
+            my @q = ( $cons{ $r->{id} } // [] )->@*;
+            while ( my $u = shift @q ) {
+                next if $seen{ $u->{id} }++;
+                if ( defined $u->{control_in} || $u->{op} =~ /\A(?:Return|If|Region|Phi|Unwind)\z/ ) { push @anchor, $u; next }
+                push @q, ( $cons{ $u->{id} } // [] )->@*;
+            }
+            ANCHOR: for my $u (@anchor) {
+                # (a value Phi is used where control enters its region: at a
+                # loop, by the pass's end, its back edge)
+                my $rg = $u->{op} eq 'Phi' ? $by{$g}{ _fields($u)->{region} // '' } : undef;
+                my ( @c, %cs ) = !$rg ? _control_preds($u)
+                    : $rg->{op} eq 'Loop' ? grep { defined } $rg->{inputs}[1]
+                    : _control_preds($rg);
+                while ( defined( my $v = shift @c ) ) {
+                    next if $cs{$v}++ || $v == $loop->{id};
+                    my $vn = $by{$g}{$v} or next;
+                    if ( $stores->( $g, $v, $key ) || $stores->( $g, $v, $key =~ s/\Aelem://r ) ) {
+                        push $res->{violations}->@*, { graph => $g, node => $r->{id}, op => 'Subscript', rule => 'alias-not-private',
+                            detail => "the per-pass item of $key is used by $u->{op}#$u->{id} after $vn->{op}#$v may store it" };
+                        last ANCHOR;
+                    }
+                    push @c, _control_preds($vn);
+                }
+            }
+        }
+    }
     return;
 }
 

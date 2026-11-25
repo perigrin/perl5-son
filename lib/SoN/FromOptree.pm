@@ -14851,6 +14851,36 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    # _foreach_list_items($enteriter) -> the ops of a foreach's list, one per item.
+    # (A range's bounds are its two.)
+    sub _foreach_list_items ($enteriter) {
+        my @k;
+        for ( my $k = $enteriter->first; $k && $$k; $k = $k->sibling ) { push @k, $k }
+        my ($l) = grep { $_->name eq 'list' || $_->name eq 'null' && ( $_->flags & B::OPf_KIDS() ) } @k;
+        return 0 unless $l;
+        my @i;
+        for ( my $k = $l->first; $k && $$k; $k = $k->sibling ) { push @i, $k if $k->name ne 'pushmark' }
+        return @i;
+    }
+
+    # _body_calls_store_array($cv, $enteriter, $targ) -> true when a call in
+    # the loop's body may store into the lexical array $targ (its MOD set).
+    # With no $targ, every array the foreach list names (`for (@a, @b)`).
+    sub _body_calls_store_array ($cv, $enteriter, $targ = undef) {
+        return 0 unless grep { $_->name eq 'entersub' } _subtree_ops($enteriter->parent);
+        local $SoN::FromOptree::ModSets::KEEP_OWN = 1;
+        my @places = defined $targ ? SoN::FromOptree::ModSets::array_place($cv, $targ)
+            : map {
+                my $kind = $_->name =~ /av\z/ ? 'array' : 'hash';
+                $_->name eq 'padav' ? SoN::FromOptree::ModSets::array_place($cv, $_->targ)
+                    : map { { levels => [ { loc => $_->{loc}, key => '*', kind => $kind, refd => 1 } ] } }
+                          SoN::FromOptree::ModSets::_target_effects($cv, $_, 'elems')
+              } grep { $_->name =~ /\A(?:pad|rv2)[ah]v\z/ } _subtree_ops($enteriter);
+        return 0 unless @places;
+        my $eff = [ SoN::FromOptree::ModSets::op_effects($cv, $enteriter->parent) ];
+        return ( grep { !$_ || SoN::FromOptree::ModSets::conflict( $_, $eff ) } @places ) ? 1 : 0;
+    }
+
     sub _unproven_list_reach ($enteriter, $list_targ, $writes_iter, $cv = undef, $topic_aliased = 0) {
         # A CALL CANNOT REACH A LIST PRIVATE TO THE SUB -- see
         # _list_is_private. Only a sub or method call is let through; a string
@@ -17308,14 +17338,28 @@ class SoN::FromOptree 0.01 {
                 : do { my @l = grep { $_->name !~ /\A(?:null|pushmark)\z/ && $$_ != $$enteriter }
                                 _subtree_ops($enteriter);
                        @l == 1 && $l[0]->name eq 'padav' ? $l[0]->targ : undef };
+            my $named = grep { $_->name eq 'padsv' && $_->targ == $x_targ }
+                _subtree_ops($enteriter->parent);
             my $why = _unproven_list_reach($enteriter, $targ, $writes_iter, $cv, $topic_ok);
+            # (A CALL WHOSE MOD SET MAY HOLD AN ELEMENT OF IT: a named sub
+            # closing over the array is no call `_list_is_private` sees. Read
+            # as the pass's copy, `sub z { $a[0] = 7 } for my $x (@a) { z();
+            # print $x }` printed 12 for perl's 72 -- audit 2, K3.)
+            $why //= 'a call' if _body_calls_store_array($cv, $enteriter, $targ);
+            # (OVER A LIST OF SEVERAL ITEMS, OR ONE A CALL RETURNS (`values
+            # %h`), the pass's element is a copy in a temporary list, and a
+            # reference to it is no alias of the variables')
+            die "GAP: a foreach over a list of several items, or one a call returns, whose aggregate"
+              . " a call in its body may store is not yet lowered -- perl's alias is the aggregate's"
+              . " element, the pass reads a copy\n"
+                if !defined $targ && $named
+                && do { my @i = _foreach_list_items($enteriter); @i != 1 || _strip_null($i[0])->name !~ /\A(?:padav|rv2av)\z/ }
+                && _body_calls_store_array($cv, $enteriter);
             # NOT WHEN THE BODY TAKES `\$x`: that is a reference to the
             # alias, which the copy's own rules below decide.
             my $refs = _iterator_references($cv, $enteriter->parent, $x_targ);
             # NOR WHEN THE BODY NEVER NAMES IT: there is nothing to read
             # through, and the reference rode in dead (see $elem below).
-            my $named = grep { $_->name eq 'padsv' && $_->targ == $x_targ }
-                _subtree_ops($enteriter->parent);
             $alias_ref = 1 if defined $why && $alias_ok->($why) && !$refs && $named;
             # NOR ONLY THEN: a call may hand back a reference to the iterator
             # it was passed (`sub k { \$_[0] }`), which the copy written back
@@ -17343,6 +17387,19 @@ class SoN::FromOptree 0.01 {
                 && $ADDR_TAKEN && $ADDR_TAKEN->{$x_targ}
                 && ($why // '') ne 'a reference or a closure'
                 && _iterator_call_values($cv, $enteriter->parent, $x_targ);
+        }
+
+        # THE TOPIC (a foreach over `$_`, a map, a grep) OR A PACKAGE
+        # ITERATOR, read after a call that may store its list: the body's
+        # reads are the element as the pass began, and no reference stands in
+        # for it as for a lexical iterator (`sub z { $a[1] = 7 } map { z(); $_
+        # } @a` gave 12 for perl's 17 -- audit 2, K3).
+        if (!$writes_iter && $x_targ !~ /\A\d+\z/) {
+            my $targ = $array->isa('SoN::IR::Node::PadAccess') ? $array->targ : undef;
+            die "GAP: a foreach, map or grep's \$_ (or a package iterator) read after a call that may store"
+              . " its list is not yet lowered -- the read is the element as the pass began\n"
+                if _body_calls_store_array($cv, $enteriter, $targ)
+                && ( $x_targ ne '$main::_' || _topic_read_after_a_call($cv, $enteriter) );
         }
 
         # THE WRITE-BACK GOES TO THE INDEX, AND PERL'S ALIAS TO THE ELEMENT.
@@ -17373,11 +17430,7 @@ class SoN::FromOptree 0.01 {
             # (`$x .= "y"; $a[0] = "q"; $s .= $x`: `1y` for perl's `q`).
             # (a call whose MOD set may hold an element of it: a named sub
             # closing over the array is no call `_list_is_private` sees)
-            $reach //= 'a call' if $body{calls} && defined $targ && do {
-                my $pl = SoN::FromOptree::ModSets::array_place($cv, $targ);
-                !$pl || SoN::FromOptree::ModSets::conflict( $pl,
-                    [ SoN::FromOptree::ModSets::op_effects($cv, $enteriter->parent) ] );
-            };
+            $reach //= 'a call' if $body{calls} && defined $targ && _body_calls_store_array($cv, $enteriter, $targ);
             die "GAP: a foreach whose body writes its alias and may store into"
               . " the array another way ($reach) not yet lowered\n"
                 if defined $reach && $reach =~ /\A(?:an element write|a store through a reference|a call)\z/;
