@@ -4947,6 +4947,20 @@ class SoN::FromOptree 0.01 {
     # arm stays itself), and the scalar reading is its Count. Both Phis share
     # the merge's region and predecessors, and the Return carries the scalar
     # one as inputs[1] -- the contract _build_single_exit already keeps.
+    # _reverse_return($factory, $value) -> ($list, $scalar): A `reverse` A SUB
+    # RETURNS reads its caller's context, as the sub's last value does: the
+    # list reversed to a list caller, the joined string reversed to a scalar
+    # one (audit 3, N12: `sub f { reverse "abc" } my $s = f()` was "abc").
+    # The walk stamps one in no context Unknown; the Return's two readings
+    # carry both. Any other value is one reading.
+    sub _reverse_return ($factory, $value) {
+        return ($value) unless blessed($value) && $value->operation eq 'Call'
+            && ( $value->name // '' ) eq 'reverse' && ( $value->dispatch_kind // '' ) eq 'builtin'
+            && ( !$value->stamp || $value->stamp->type eq 'Unknown' );
+        my @in = $value->inputs->@*;
+        return map { $factory->make('Call', inputs => [@in], dispatch_kind => 'builtin', name => 'reverse',
+            stamp => SoN::IR::Stamp->new(type => $_)) } qw(List Str);
+    }
     sub _merged_aggregate_return ($factory, $value) {
         return ($value) unless defined $value && blessed($value)
             && $value->operation eq 'Phi';
@@ -5098,6 +5112,7 @@ class SoN::FromOptree 0.01 {
                 $value = $args->@* ? $args->[-1] : undef;
                 ($value, $scalar_value) = _list_assign_return($factory, $sim, $value);
                 ($value, $scalar_value) = _merged_aggregate_return($factory, $value) unless defined $scalar_value;
+                ($value, $scalar_value) = _reverse_return($factory, $value) unless defined $scalar_value;
             }
         }
         elsif ($sim->stack_depth > 0) {
@@ -5122,7 +5137,7 @@ class SoN::FromOptree 0.01 {
             }
             else {
                 ($value, $scalar_value) = _list_assign_return($factory, $sim, $sim->pop_node);
-                ($value, $scalar_value) = _merged_aggregate_return($factory, $value) unless defined $scalar_value;
+                ($value, $scalar_value) = _merged_aggregate_return($factory, $value) unless defined $scalar_value;                ($value, $scalar_value) = _reverse_return($factory, $value) unless defined $scalar_value;
             }
         }
         # NOTHING ON THE STACK: the undef is the producer's, not the
