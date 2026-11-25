@@ -69,7 +69,7 @@ sub promote ($data) {
                 # (THE READ THE WALK MADE, where it is still on the wire -- the
                 # same node, as before the place: marked, not made again)
                 my $key = $sig->( $a->{op}, \%f, $a->{inputs}, $at );
-                if ( my $same = $reads{$g}{$key} ) {
+                if ( ( my $same = $reads{$g}{$key} ) && $reads{$g}{$key}{id} < $c->{id} ) {
                     $same->{fields}{promoted} = JSON::PP::true();
                     $c->{inputs}[$i] = $same->{id};
                     $dead{$g}{ $a->{id} } = 1;
