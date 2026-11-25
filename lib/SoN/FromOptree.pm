@@ -775,6 +775,7 @@ class SoN::FromOptree 0.01 {
     # at where perl pushed it, or undef ] (for SoN::Promote: the version a
     # promoted argument is read at, where nothing between stores it).
     our %ARG_READ_AT;
+    our $TOPIC_ARG_VALUE;   # (_handle_entersub: `$_` handed to a sub localizing it, a value)
     our $PENDING_READ_AT;   # (_handle_entersub_call's %read_at, for the Call it makes)
     # refaddr -> a read of $_[i] made for `my (...) = @_`, left untyped as the
     # parameter record the promotion pass may make of it (B::SoN skips its floor)
@@ -6204,6 +6205,18 @@ class SoN::FromOptree 0.01 {
         die "GAP: an element handed to a sub as its \$_[N] where that sub localizes it is not yet lowered -- "
           . "perl's alias keeps the saved element, and chalk's element alias is the aggregate and key\n"
             if SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, 1, 1);
+        # (NOR `$_`, whose `local` keeps the value save and restore: the
+        # caller's $_[N] would see the callee's value -- z/qb14)
+        # Where that sub neither stores through @_ nor stores `$_` by name
+        # before reading @_, the scalar perl pushed is unchanged when read:
+        # its value, read where pushed, is the argument (no place).
+        local $TOPIC_ARG_VALUE = 0;
+        if ( SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, 1, 0, 'N:$main::_') ) {
+            die "GAP: \$_ handed to a sub as its \$_[N] where that sub localizes \$_ and may store it is not yet lowered -- "
+              . "perl's alias keeps the saved scalar, and `local \$_` saves and restores the value\n"
+                if SoN::FromOptree::ModSets::call_stores_through_args($cv, $op) || SoN::FromOptree::ModSets::arg_stored_by_call($cv, $op);
+            $TOPIC_ARG_VALUE = 1;
+        }
         # (how often the place is promoted: SoN::Promote's %STATS)
         _handle_entersub_call($cv, $op, $sim, $factory, $ctx);
         return;
@@ -6232,6 +6245,8 @@ class SoN::FromOptree 0.01 {
                     my $t = $po->targ;
                     next unless $ADDR_TAKEN && $ADDR_TAKEN->{$t} || $CELLS && ( $CELLS->{cells}{$t} || $CELLS->{cell_params}{$t} );
                 }
+                next if $TOPIC_ARG_VALUE && blessed( $args->[$i] ) && $args->[$i] isa SoN::IR::Node::EntryDef
+                    && $args->[$i]->symbol eq '_' && ( $args->[$i]->sigil // '' ) eq '$' && ( $args->[$i]->package // 'main' ) eq 'main';
                 my $read_at = blessed( $args->[$i] ) && $args->[$i]->can('mem_in') ? $args->[$i]->mem_in : undef;
                 my $was = $args->[$i];
                 $args->[$i] = ( $t ? _target_place( $cv, $t, $factory ) : undef )
@@ -9368,7 +9383,10 @@ class SoN::FromOptree 0.01 {
                                 if $p->name =~ /\A(?:cond_expr|and|or|dor|xor)\z/ && ${ $p->first } != $$c;
                         }
                     }
-                    if ( $gv->NAME =~ /\A[A-Za-z_]\w*\z/ && defined $sim->memory ) {
+                    # (`$_` TOO keeps the value save and restore: the topic is
+                    # aliased by foreach, map and grep through its own binding,
+                    # which a new scalar under the name would not follow)
+                    if ( $gv->NAME =~ /\A[A-Za-z_]\w*\z/ && $gv->NAME ne '_' && defined $sim->memory ) {
                         my $prior = $factory->make('EntryDef', package => $gv->STASH->NAME, sigil => '$',
                             symbol => $gv->NAME, mem => $sim->memory);
                         push $ctx->{local_saves}->@*,
@@ -14772,7 +14790,11 @@ class SoN::FromOptree 0.01 {
             # binding is simply left as the local set it. Measured as rare and
             # not what rs.t does (`local @INC` has an @INC to restore).
             next unless defined $save->{node};
-            $sim->define($save->{key}, $save->{node}) unless $save->{ent};
+            # (A SCALAR'S `local` saves the scalar, a Ref of it: the name is
+            # read after the restore, below, not bound to the reference)
+            my $scalar_bind = $save->{glob_bind} && $save->{node} isa SoN::IR::Node::Ref && $save->{target}
+                && ( eval { $save->{target}->sigil } // '' ) eq '$';
+            $sim->define($save->{key}, $save->{node}) unless $save->{ent} || $scalar_bind;
 
             # ...AND A STORE, because the RESTORE IS A WRITE. The scope map
             # alone expressed it only while a package-scalar read was
@@ -14805,6 +14827,9 @@ class SoN::FromOptree 0.01 {
             _entry_store($factory, $sim, $save->{target}, $save->{node},
                          $save->{glob_bind} ? 1 : 0)
                 if $factory && $save->{target} && !$done;
+            $sim->define( $save->{key}, $factory->make('EntryDef', package => $save->{target}->package, sigil => '$',
+                symbol => $save->{target}->symbol, mem => $sim->memory) )
+                if $factory && $scalar_bind && defined $sim->memory;
             # AN AGGREGATE IS NAMED AGAIN BY A READ AFTER ITS RESTORE: the one
             # taken before the swap is of a version the swap made stale.
             $sim->define($save->{key}, $factory->make('EntryDef', $save->{ent}->%*,
@@ -25937,10 +25962,10 @@ class SoN::FromOptree 0.01 {
         return @k;
     }
 
-    sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx) {
+    sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx, $exit_list = 0) {
         return unless $op->flags & B::OPf_KIDS;
         return if $op->isa('B::LOGOP');
-        return if $op->name =~ /\A(?:leave|enter|lineseq|scope|entersub|pushmark|refgen|srefgen|null|list)/;
+        return if !$exit_list && $op->name =~ /\A(?:leave|enter|lineseq|scope|entersub|pushmark|refgen|srefgen|null|list)/;
         # (an op that stores into its operand takes it as its target, not a value)
         return if $op->name =~ /\A(?:subst|trans|transr|chomp|chop|schomp|schop|undef|pos|substr|vec|local)\z/;
         my $mem = $sim->memory;
@@ -25961,7 +25986,7 @@ class SoN::FromOptree 0.01 {
             next unless $d->{depth} < $sim->stack_depth && refaddr( $sim->node_at( $d->{depth} ) ) == refaddr( $d->{node} );
             my $old = $d->{node};
             my $new;
-            _elem_alias_refused( $cv, $k, $op ) if $d->{how} eq 'element';
+            next if $d->{how} eq 'element' && ( _elem_alias_refused( $cv, $k, $op ) // '' ) eq 'keep';
             $mem = $sim->memory;   # (a read made again just now may have been pinned: a version)
             if ( $d->{how} eq 'target' ) {
                 # (a variable in memory is read again only where something
@@ -25970,22 +25995,20 @@ class SoN::FromOptree 0.01 {
                     || $ctx->{addr_taken}{ $d->{targ} } || $ctx->{cells}{ $d->{targ} } || $ctx->{cell_params}{ $d->{targ} } );
                 if ( $in_mem && blessed( $d->{mem} ) && defined $mem && !_stored_since( $mem, $d->{mem} ) ) { }
                 elsif ( defined $d->{targ} ) { $new = _pad_scalar_now( $cv, $d->{targ}, $sim, $factory, $ctx ) }
-                elsif ( defined $mem && ( !blessed( $d->{mem} ) || _stored_since( $mem, $d->{mem} ) ) ) { $new = _at_memory( $factory, $d->{lv}, $mem ) }
+                elsif ( defined $mem && ( !blessed( $d->{mem} ) || _stored_since( $mem, $d->{mem} ) ) ) {
+                    $new = _at_memory( $factory, $d->{lv}, _before_local_of( $d->{lv}, $mem, $d->{mem} ) );
+                }
             }
             elsif ( defined( $mem = $sim->memory ) && refaddr( $old->mem_in ) != refaddr($mem) && _stored_since( $mem, $old->mem_in ) ) {
                 # (A `local` of it between: perl's operand is the scalar it
                 # pushed, the name's is a new one -- `print $g, local $g = 5`,
                 # audit 3 N8. The wire's read is by name: refused.)
-                if ( $old isa SoN::IR::Node::EntryDef ) {
-                    for ( my $m = $mem; blessed($m) && refaddr($m) != refaddr( $old->mem_in ); $m = $m->can('mem_in') ? $m->mem_in : undef ) {
-                        die "GAP: a scalar operand read by alias where a later operand localizes it is not yet lowered --"
-                          . " perl reads the scalar it pushed, the name is bound to a new one\n"
-                            if $m isa SoN::IR::Node::EntryWrite && $m->local && $m->v1_inputs->[0]->symbol eq $old->symbol
-                            && $m->v1_inputs->[0]->package eq $old->package;
-                        last if $m->operation eq 'Phi';
-                    }
-                }
-                $new = _at_memory( $factory, $old, $mem );
+                # (A `local` OF IT BETWEEN binds the name to a new scalar: the
+                # one perl pushed is the old, read as it stood when the name was
+                # rebound -- `local ($a, $b) = ($b, $a)`; the earliest such)
+                my $at = _before_local_of( $old, $mem, $old->mem_in );
+                next if refaddr($at) == refaddr( $old->mem_in );
+                $new = _at_memory( $factory, $old, $at );
                 # (an element of a list made here -- a call's, a range, a literal list --
                 # exists for the index the walk reads it at: no guard)
                 my $c0 = $old->v1_inputs->[0];
@@ -26009,6 +26032,21 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _before_local_of($entrydef, $mem, $since) -> $mem, or, where a `local`
+    # of the name stands on the chain back to $since, the version before the
+    # earliest one: the scalar perl pushed is the one the name was bound to then.
+    sub _before_local_of ( $n, $mem, $since ) {
+        return $mem unless blessed($n) && $n isa SoN::IR::Node::EntryDef;
+        my $at = $mem;
+        for ( my $m = $mem; blessed($m) && !( blessed($since) && refaddr($m) == refaddr($since) ); $m = $m->can('mem_in') ? $m->mem_in : undef ) {
+            $at = $m->mem_in
+                if $m isa SoN::IR::Node::EntryWrite && $m->local && $m->v1_inputs->[0]->symbol eq $n->symbol
+                && $m->v1_inputs->[0]->package eq $n->package;
+            last if $m->operation eq 'Phi';
+        }
+        return $at;
+    }
+
     # _reread_exit_operands(...) -- a sub's exit reads its list by alias too:
     # `return (f(1), $g, f(0), $g)` gives both $g as f(0) left it. The walkers
     # take `return` and `leavesub` before _step, so they are asked here: a
@@ -26018,7 +26056,11 @@ class SoN::FromOptree 0.01 {
             my $body = $op->first;
             return unless $body && $$body && $body->name eq q{lineseq} && ( $body->flags & B::OPf_KIDS );
             $op = $body->last;
-            return unless $op && $$op && $op->name eq q{null} && $op->targ == B::opnumber(q{return});
+            # (OR A LIST, the sub's value: `sub k { (f(1), $g, f(0), $g) }`)
+            my $list = $op && $$op && ( $op->name eq 'list' || $op->name eq 'null' && $op->targ == B::opnumber(q{list}) )
+                && ( $op->flags & B::OPf_KIDS );
+            return unless $list || $op && $$op && $op->name eq q{null} && $op->targ == B::opnumber(q{return});
+            return _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx, 1) if $list;
         }
         _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
     }
@@ -26045,16 +26087,29 @@ class SoN::FromOptree 0.01 {
         my $why = $ELEM_REFUSED{ $$cv . ':' . $$k } //= do {
             my @later = _later_siblings($k);
             pop @later if $op->name =~ /\A(?:sassign|multiconcat)\z/;
+            # (A REMOVAL BY A LATER OPERAND ITSELF -- `($h{a}, delete $h{a})`:
+            # perl's alias holds the removed scalar, which no read by key names)
+            my @lops = map { _subtree_ops($_) } @later;
+            my $removes = grep { $_->name =~ /\A(?:delete|shift|pop|splice)\z/ } @lops;
+            # (removed and nothing else stored or called: the scalar perl
+            # pushed still holds what was read where it was pushed -- read
+            # there, not again: 'keep')
+            $removes = 'keep' if $removes && !grep { $_->name =~ /\A(?:entersub|sassign|aassign|padsv_store|(?:i_)?(?:pre|post)(?:inc|dec)|subst|trans|chop|chomp|undef|push|unshift)\z/
+                || B::class($_) eq 'BINOP' && ( $_->flags & B::OPf_STACKED ) } @lops;
             my @eff = map { SoN::FromOptree::ModSets::op_effects($cv, $_) } @later;
             my $place = @eff ? SoN::FromOptree::ModSets::place($cv, $k) : undef;
             my $c = !@eff ? "" : $place ? SoN::FromOptree::ModSets::conflict($place, \@eff) // "" : "unknown";
-            $c eq 'unknown' ? "GAP: an element operand is read by alias and a later operand calls code whose stores"
+            $removes eq 'keep' ? 'keep'
+            : $removes ? "GAP: an element operand is read by alias and a later operand removes elements from a"
+                . " container (delete, shift, pop, splice) -- perl's alias holds the removed scalar; not yet lowered\n"
+            : $c eq 'unknown' ? "GAP: an element operand is read by alias and a later operand calls code whose stores"
                 . " cannot be known here (a dynamic method or code ref, a string eval, a sub outside the"
                 . " program) -- not yet lowered\n"
             : $c eq 'reshape' ? "GAP: an element operand is read by alias and a later operand calls a sub that may"
                 . " reshape its container or replace what holds it -- not yet lowered\n"
             : '';
         };
+        return 'keep' if $why eq 'keep';
         die $why if $why;
         return;
     }
