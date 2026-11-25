@@ -43,6 +43,17 @@ for my $src (
     ok $read, "the read after it names it: $src";
 }
 
+# (the undef store's target is the variable at its version, not the node
+# the restore stores into: a consumer reads a target two stores share as no
+# one version -- chalk refused `eval { local $@; ... }`, z/un19, gates5)
+{
+    my $g = graphs('our $g=1; sub t { local $g; defined $g ? "d" : "u" } print t(), $g, "\n";')->{'main::t'};
+    my %by = map { ( $_->{id} => $_ ) } $g->{nodes}->@*;
+    my %writes;
+    $writes{ $_->{inputs}[0] }++ for grep { $_->{op} eq 'EntryWrite' } $g->{nodes}->@*;
+    is [ grep { $writes{$_} > 1 } sort keys %writes ], [], 'no two stores share a target';
+}
+
 my ($w) = undef_stores( graphs('our $g=1; sub t { local $g = 5; $g } print t(), $g, "\n";')->{'main::t'} );
 is $w, 0, '`local $g = 5` stores no undef first';
 

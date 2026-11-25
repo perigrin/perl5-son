@@ -9151,8 +9151,15 @@ class SoN::FromOptree 0.01 {
                         my $undef = $factory->make('Constant', value => undef, const_type => 'undef',
                             stamp => SoN::IR::Stamp->new(type => 'Undef'));
                         $sim->define($key, $undef);
-                        _place($sim, $factory->make('EntryWrite', inputs => [$entry, $undef], mem => $sim->memory))
-                            if defined $sim->memory;
+                        # (its target the variable at this version, as the
+                        # eval's store of $@ names it: the save's EntryDef is
+                        # the restore's target too, and a consumer reads a
+                        # target two stores share as no one version -- chalk
+                        # refused `eval { local $@; ... }`, z/un19)
+                        if ( defined $sim->memory ) {
+                            my $target = $factory->make('EntryDef', package => $gv->STASH->NAME, sigil => '$', symbol => $gv->NAME, mem => $sim->memory);
+                            _place($sim, $factory->make('EntryWrite', inputs => [$target, $undef], mem => $sim->memory));
+                        }
                     }
                 }
 
