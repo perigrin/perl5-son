@@ -740,6 +740,40 @@ sub op_effects ( $cv, $op ) {
     return @e;
 }
 
+# subtree_effects($cv, $op) -> what $op's subtree may store, in $cv's terms:
+# its own ops' stores, a foreach, map or grep's writes through its iterator
+# into its list, and its calls' (audit 2, K7).
+sub subtree_effects ( $cv, $op ) {
+    local $KEEP_OWN = 1;
+    my ( @e, @loops, %stored );
+    for my $o ( _fo('_subtree_ops')->($op) ) {
+        my @s = _stores( $cv, $o );
+        $stored{ $_->{loc} } = 1 for @s;
+        if ( $o->name =~ /\A(?:padsv|padsv_store)\z/ && ( $o->flags & B::OPf_MOD ) ) {
+            my ($loc) = _lex( $cv, $o->targ );
+            $stored{$loc} = 1 if defined $loc;
+        }
+        push @e, @s;
+        push @loops, $o if $o->name =~ /\A(?:enteriter|mapstart|grepstart)\z/;
+    }
+    return ( @e, _alias_loops( $cv, \@loops, \%stored ), op_effects( $cv, $op ) );
+}
+
+# aggregate_place($cv, $op) -> where a whole aggregate (padav, padhv, or a
+# package one's rv2av/rv2hv) lives, as place() gives an element's: any element.
+sub aggregate_place ( $cv, $op ) {
+    $op = _strip($op);
+    my $kind = $op->name =~ /av\z/ ? 'array' : 'hash';
+    if ( $op->name =~ /\Apad[ah]v\z/ ) {
+        my $p = array_place( $cv, $op->targ ) or return undef;
+        $_->{kind} = $kind for $p->{levels}->@*;
+        return $p;
+    }
+    local $KEEP_OWN = 1;
+    my ($e) = _target_effects( $cv, $op, 'elems' ) or return undef;
+    return { levels => [ { loc => $e->{loc}, key => '*', kind => $kind, refd => 1 } ] };
+}
+
 # stores_var($cv, $op, $key) -> true when $op itself stores the variable
 # $key names: 'p<pad index>' or 'g<sigil><stash>::<name>' (as
 # SoN::FromOptree::_reread_alias_operand_stored_later spells it).

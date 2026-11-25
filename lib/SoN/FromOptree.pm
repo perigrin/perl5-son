@@ -25531,6 +25531,18 @@ class SoN::FromOptree 0.01 {
                 die "GAP: an assignment's element is read by alias and a later operand"
                   . " stores into its container -- not yet lowered\n"
                     if defined $tkey && grep { $elem_stored->( $_, $tkey ) } _later_siblings($k);
+                # AN AGGREGATE FLATTENED INTO A LIST is its elements, each read
+                # when the list is used: `my @b = (@a, $a[0] = 9)` is `9 2 3 9`
+                # in perl, and the list took the elements as they were -- audit
+                # 2, K7. A later item that may store one -- its own store, a
+                # map or foreach writing its alias, a call -- is refused.
+                if ( $s->name =~ /\A(?:pad|rv2)[ah]v\z/ && ( $k->flags & 3 ) == 3   # OPf_WANT_LIST
+                        && !( $k->flags & ( B::OPf_MOD | B::OPf_REF ) ) && ( my @later = _later_siblings($k) ) ) {
+                    my $pl = SoN::FromOptree::ModSets::aggregate_place( $cv, $s );
+                    die "GAP: an aggregate flattened into a list is read by alias and a later item"
+                      . " may store into its elements -- not yet lowered\n"
+                        if !$pl || grep { SoN::FromOptree::ModSets::conflict( $pl, [ SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) ] ) } @later;
+                }
             }
             next if $k->flags & B::OPf_MOD;                           # a store's own target
             my $was = $k->name eq 'null' && $k->targ ? ( B::ppname( $k->targ ) =~ s/\App_//r ) : $k->name;
