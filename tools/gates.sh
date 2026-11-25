@@ -41,8 +41,8 @@
 # and CHALK_WORKLIST_OUT to a file under DIR.
 set -u
 
-ROUNDTRIP_MIN=426
-DEPARSE_MIN=430
+ROUNDTRIP_MIN=467
+DEPARSE_MIN=463
 GATE_GREEN_MIN=222
 GATES="producer-suite chalk-suite census corpus-gate probes ratchet"
 # A FILE THAT MUST RUN ITS TESTS: chalk's wire verifier is `plan skip_all`

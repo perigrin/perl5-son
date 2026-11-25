@@ -18,6 +18,14 @@ modules in chalk's lib/ that B::SoN refused or emitted wrongly, and two on
 tiers; at the next copy from pvm, replace this file with pvm's versions of
 the cases.
 
+A SECOND: `pvm/memory-model.md` holds the memory model's aliasing and
+ordering cases (`local` against `$_[N]` and references, copies, foreach
+aliases, assignments and `?:` as lvalues), one per wrong-answer class of the
+2026-11 audits, which until then lived only in the audit probes. A case
+B::SoN or chalk refuses keeps perl's output; its refusal is in its
+```` ```ir ```` block (`refused:`) or is a census GAP, and it is no round trip.
+Keep this file at the next copy from pvm.
+
 ## The graph block
 
 Compact flow YAML any YAML parser reads, written by

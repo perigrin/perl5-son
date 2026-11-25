@@ -49,7 +49,10 @@ my %FLOOR = (
     # 427 of 431 since a string eval with a lexical in scope refuses (s///ee
     # and two eval STRINGs had round-tripped only because they wrote none),
     # measured twice 2026-10-24.
-    corpus => 427,
+    # 463 of 489 with memory-model.md's 58 (33 round-trip, 12 refused, 13
+    # DIFFERS: the deparser's `local` save/restore against `$_[N]`, `$1`,
+    # DESTROY, a loop read of an earlier pass's store), 2026-11-25.
+    corpus => 463,
     # 12 measured 2026-10-22 at the chalk-lib goal's close; 11 since base/lex.t
     # refuses at its string eval with $test in scope, measured twice 2026-10-24.
     perl_t => 11,

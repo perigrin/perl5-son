@@ -59,9 +59,9 @@
 # 2026-11-22 (wire v2, stage 9b): Braun's construction. `phi-trivial` (V8: a loop's Phi whose
 # inputs other than itself are all one node) is new, and 0: such a Phi is forwarded to its init
 # at sealing and not written (the 9a producer wrote 25 over the corpus and the probes).
-corpus	#cases	431
-corpus	#graphs	1082
-corpus	#wires	431
+corpus	#cases	489
+corpus	#graphs	1155
+corpus	#wires	489
 probes	#cases	542
 probes	#graphs	799
 probes	#wires	542
