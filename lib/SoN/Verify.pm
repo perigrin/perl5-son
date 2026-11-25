@@ -106,7 +106,7 @@ sub _alias_private ( $wire, $res ) {
         for my $n ( values $by{$g}->%* ) {
             # (a `local`'s save and its restore make and put back another
             # variable: $_[N] still names the one passed)
-            next if _fields($n)->{local} || _fields($n)->{restore} || $n->{op} eq 'ElemRestore' || $localish{$g}{ $n->{id} };
+            next if _fields($n)->{local} || _fields($n)->{restore} || _fields($n)->{binds} || $n->{op} eq 'ElemRestore' || $localish{$g}{ $n->{id} };
             my @t = $n->{op} eq 'Assign' && !_fields($n)->{record} ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
                   : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
             for my $t ( grep { defined && !ref } @t ) { my $k = $src->( $g, $by{$g}{$t} ); $own{$g}{$k} = 1 if defined $k }
@@ -131,7 +131,7 @@ sub _alias_private ( $wire, $res ) {
             my $t = $callees->( $g, $n ) or return 1;
             return scalar grep { my $w = $writes->($_); $w->{any} || $w->{$key} } $t->@*;
         }
-        return 0 if _fields($n)->{local} || _fields($n)->{restore} || $n->{op} eq 'ElemRestore' || $localish{$g}{$v};
+        return 0 if _fields($n)->{local} || _fields($n)->{restore} || _fields($n)->{binds} || $n->{op} eq 'ElemRestore' || $localish{$g}{$v};
         my @t = $n->{op} eq 'Assign' ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
               : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
         return scalar grep { defined && !ref && ( $src->( $g, $by{$g}{$_} ) // '' ) eq $key } @t;
@@ -141,7 +141,8 @@ sub _alias_private ( $wire, $res ) {
             my $t = $callees->( $g, $c ) or next;
             for my $i ( 0 .. $#{ $c->{inputs} } ) {
                 my $a = $by{$g}{ $c->{inputs}[$i] // '' } or next;
-                next if _fields($a)->{place} || !defined $a->{mem_in};
+                # (a promoted one is V13's: re-proved there by the pass's own proof)
+                next if _fields($a)->{place} || _fields($a)->{promoted} || !defined $a->{mem_in};
                 my $key = $src->( $g, $a ) // next;
                 for my $h ( $t->@* ) {
                     my %args = map { $_->{id} => 1 } grep { $_->{op} eq 'ArgsSource' } values $by{$h}->%*;

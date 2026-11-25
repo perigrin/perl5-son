@@ -7978,6 +7978,21 @@ class SoN::FromOptree 0.01 {
             # literal it was made with (`my $r = \$a[0]; $$r = 5; print "@a"`
             # printed `1 2` for `5 2`) -- `\@a`'s rule above. (A hash's reads
             # already observe memory.)
+            # `\$g` OF A NAME SOME `local` BINDS is the scalar bound now (design
+            # B, section 4): a reference to it taken before the `local` keeps
+            # the old one. The Ref is over a read of the name at this version
+            # -- the save's shape.
+            if ( $$kid && ( $kid->name eq 'gvsv' || $kid->name eq 'rv2sv' ) && $sim->stack_depth > 0 && defined $sim->memory ) {
+                my $gv = eval { _op_gv( $cv, $kid->name eq 'gvsv' ? $kid : $kid->first ) };
+                my $loc = $sim->node_at( $sim->stack_depth - 1 );
+                if ( $gv && $$gv && blessed($loc) && $loc isa SoN::IR::Node::EntryDef && !defined $loc->mem_in
+                    && _localized_anywhere( 'N:$' . $gv->STASH->NAME . '::' . $gv->NAME ) ) {
+                    $sim->pop_node;
+                    my $now = $factory->make('EntryDef', package => $loc->package, sigil => $loc->sigil, symbol => $loc->symbol, mem => $sim->memory);
+                    $sim->push_node( $factory->make('Ref', inputs => [$now], mem => $sim->memory) );
+                    return ($op->next, 'handled');
+                }
+            }
             if (_op_takes_an_element($op) && $sim->stack_depth > 0 && defined $sim->memory) {
                 my $agg = $kid->first;
                 $agg = $agg->first while $$agg && $agg->name eq 'null' && ( $agg->flags & 4 ) && ${ $agg->first };
@@ -9421,6 +9436,13 @@ class SoN::FromOptree 0.01 {
                 $is_lvalue = 0 if $is_lvalue
                     && $READS_ITS_OPERANDS{ _operand_consumer($op) };
                 if ($existing && !$is_lvalue && $forwardable) {
+                    # (THE TOPIC ALIASED TO AN ELEMENT is the element as it is
+                    # now: read again after a store since the pass bound it --
+                    # `do { z(); $_ }`, z storing the element)
+                    $existing = _at_memory( $factory, $existing, $sim->memory ) // $existing
+                        if $aliased && $existing isa SoN::IR::Node::Subscript && blessed( $existing->mem_in )
+                        && blessed( $sim->memory ) && refaddr( $sim->memory ) != refaddr( $existing->mem_in )
+                        && _stored_since( $sim->memory, $existing->mem_in );
                     $sim->push_node($existing);
                 }
                 else {
@@ -25973,7 +25995,9 @@ class SoN::FromOptree 0.01 {
                         $factory->make('Exists', kind => $old->kind, inputs => [ $old->v1_inputs->@[ 0, 1 ] ],
                         mem => $old->mem_in, stamp => SoN::IR::Stamp->new(type => 'Boolean')) };
                     { local $PIN_OP = $p; _pin_tied_read( $sim, $new ) }
-                    $new = _make_ternary( $factory, $ex, $new, $old );
+                    # (not there, perl pushed undef: no read of it carried past the store)
+                    $new = _make_ternary( $factory, $ex, $new, $factory->make('Constant', value => undef, const_type => 'undef',
+                        stamp => SoN::IR::Stamp->new(type => 'Undef')) );
                 }
             }
             next unless blessed($new) && refaddr($new) != refaddr($old);
@@ -26020,7 +26044,7 @@ class SoN::FromOptree 0.01 {
             pop @later if $op->name =~ /\A(?:sassign|multiconcat)\z/;
             my @eff = map { SoN::FromOptree::ModSets::op_effects($cv, $_) } @later;
             my $place = @eff ? SoN::FromOptree::ModSets::place($cv, $k) : undef;
-            my $c = !@eff ? '' : $place ? SoN::FromOptree::ModSets::conflict($place, \@eff) : 'unknown';
+            my $c = !@eff ? "" : $place ? SoN::FromOptree::ModSets::conflict($place, \@eff) // "" : "unknown";
             $c eq 'unknown' ? "GAP: an element operand is read by alias and a later operand calls code whose stores"
                 . " cannot be known here (a dynamic method or code ref, a string eval, a sub outside the"
                 . " program) -- not yet lowered\n"
