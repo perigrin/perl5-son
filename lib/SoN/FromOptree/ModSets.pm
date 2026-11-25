@@ -275,7 +275,14 @@ sub _stores ( $cv, $o ) {
             ? ( ( eval { $o->pmflags } // 0 ) & 0x4000000 )            # s///r
             : ( $o->private & ( B::OPpTRANS_IDENTICAL() ) );            # tr counting
         unless ($nondestructive) {
-            if    ( $o->flags & B::OPf_STACKED ) { push @e, _target_effects( $cv, $kids[0] ) }
+            # (`$a[0] =~ tr/a/z/`: a trans has no kid, its target the sibling
+            # before it under the binding's null -- audit 3, N7 yp181)
+            if ( ( $o->flags & B::OPf_STACKED ) && !@kids && ( my $p = eval { $o->parent } ) ) {
+                my $t = $$p ? $p->first : undef;
+                $t = $t->sibling while $t && $$t && ${ $t->sibling } && ${ $t->sibling } != $$o;
+                push @e, _target_effects( $cv, $t ) if $t && $$t && $$t != $$o;
+            }
+            elsif ( $o->flags & B::OPf_STACKED ) { push @e, _target_effects( $cv, $kids[0] ) }
             elsif ( $o->targ && ( eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt( $o->targ )->PV } // '' ) =~ /\A\$./ ) {
                 push @e, _lex_effects( $cv, $o->targ, 0 );
             }
