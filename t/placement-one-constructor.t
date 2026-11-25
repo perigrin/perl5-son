@@ -28,13 +28,12 @@ ok $defined{_pin} && $defined{_place}, '_pin and _place are defined';
 
 # AND THE ONE PLACE A NODE BECOMES A MEMORY VERSION (wire v2's mem_out): a
 # node made the sim's memory by hand would be a version the wire does not
-# call one (or _unplace, which takes back the last placement). What may be
-# set as the memory besides: another sim's memory, a
+# call one. What may be set as the memory besides: another sim's memory, a
 # Phi (a merge, or a loop header's), or MemStart.
 my ( $s2, @versions_by_hand );
 for my $i ( 0 .. $#lines ) {
     $s2 = $1 if $lines[$i] =~ /^\s*sub (\w+)/;
-    next if ( $s2 // "" ) =~ /\A(?:_pin|_place|_unplace|_call_memory_barrier)\z/;
+    next if ( $s2 // "" ) =~ /\A(?:_pin|_place|_call_memory_barrier)\z/;
     push @versions_by_hand, sprintf( '%s:%d (in %s)', $file, $i + 1, $s2 // 'file' )
         if $lines[$i] =~ /->set_mem_out\(/
         || $lines[$i] =~ /->set_memory\(\s*(?!\$\w+->memory\b|\$mem_phi\b|\$memory\[|\$factory->make(?:_unique)?\('Phi')/;

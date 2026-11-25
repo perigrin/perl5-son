@@ -423,11 +423,16 @@ sub _graph_v2 ( $name, $g, $res ) {
         $d < 8 && grep { $_->[0]{op} eq 'Phi' || $_->[0]{op} =~ /^(?:TernaryExpr|And|Or|DefinedOr)$/ && $_->[1] > 0
                          || $_->[0]{op} eq 'Coerce' && $in_arm->( $_->[0], $d + 1 ) } ( $cons{ $n->{id} } // [] )->@*;
     };
+    # A SUB CALL RUNS CODE, a store's target too: `slot() = 42` calls the
+    # :lvalue sub where the store stands (audit 3: corpus 398's floated, and
+    # this rule asked only of builtins).
+    my $sub_call = sub ( $op, $f ) { $op eq 'Call' && ( $f->{dispatch_kind} // '' ) ne 'builtin' };
     for my $n ( grep { !defined $_->{control_in} } @nodes ) {
-        next if $place->($n);
         my ( $op, $f ) = ( $n->{op}, _fields($n) );
+        next if $place->($n) && !$sub_call->( $op, $f );
         next if $op =~ /^(?:Divide|Modulo)$/ && $in_arm->($n);
         my $why = $op =~ /^(?:Print|Unwind|Return)$/ ? $op
+            : $sub_call->( $op, $f ) ? "a call of " . ( $f->{name} // 'a sub' )
             : $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin'
                 && ( B::SoN::EffectTable::on_chain( $f->{name} ) || B::SoN::EffectTable::is_version( $f->{name} )
                      || !B::SoN::EffectTable::known( $f->{name} ) ) ? "the builtin $f->{name}"

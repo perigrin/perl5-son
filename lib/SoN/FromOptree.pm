@@ -933,20 +933,8 @@ class SoN::FromOptree 0.01 {
         }
         return 0;
     }
-    # _unplace($sim, $node): the last node placed taken back off both chains
-    # (an :lvalue call made the location of the store that calls it): what it
-    # followed is the control and the memory again. It keeps the mem_in it reads.
-    sub _unplace ($sim, $node) {
-        return unless defined $node->control_in && $sim->control == $node;
-        $sim->set_control($node->control_in);
-        _seat($node, undef);
-        return unless $node->mem_out && defined $sim->memory && $sim->memory == $node;
-        $node->set_mem_out(0);
-        $sim->set_memory($node->mem_in);
-    }
-
     # _seat($node, $control): the one write of a node's control_in. _pin seats
-    # a node after the sim's control (and _unplace takes it back); two seats
+    # a node after the sim's control; two seats
     # are not placements and stay outside _pin (final audit 2026-11-24, clause
     # 2): a Return is seated on an exit's RECORDED control once the walk is
     # done, where no sim's control is the exit's; and a guarded exit's arm,
@@ -11369,12 +11357,12 @@ class SoN::FromOptree 0.01 {
             # AN :lvalue SUB CALLED AS A TARGET -- `slot() = 42` -- stores
             # through whatever the sub returns. The catch-all below dropped the
             # store and left the call (corpus 199). The Call is the location,
-            # as pos's is: taken off the chain it was pinned to, so the sub is
-            # called once, by the assignment -- and no memory version: the
-            # Assign is (a version off the chain is wire v2's V2, corpus 398).
+            # as pos's is, AND A CALL, run where it stands: it stays on the
+            # chain it was pinned to, and the Assign follows it (taken off it,
+            # it ran nowhere -- audit 3, corpus 398; the consumer makes it
+            # once).
             elsif ($target->isa('SoN::IR::Node::Call')
                     && ($target->dispatch_kind // '') eq 'direct') {
-                _unplace($sim, $target);
                 my $store = $factory->make_unique('Assign',
                     inputs => [$target, $value]);
                 _place($sim, $store);

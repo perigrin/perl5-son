@@ -59,6 +59,9 @@ my %src = (
     # (aliases as places: a call whose callee stores the argument by name and
     # then reads @_)
     t11 => 'our $x=1; sub f { $x=2; $_[0] } print f($x), "\n";',
+    # (an :lvalue sub called as a store's target: a call, run where it stands --
+    # corpus 398, a Call on no chain)
+    t12 => 'my $slot = 0; sub slot :lvalue { $slot } slot() = 42; print slot(), "\n";',
 );
 sub rejected ( $what, $w, $rule ) {
     my @v = SoN::Verify::verify($w)->{violations}->@*;
@@ -206,5 +209,12 @@ sub unplace ( $node, $version ) {
     my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
     unplace( $a, $c->{mem_in} );
     rejected( 'M17 an argument a callee stores by name before reading @_, passed as a value', $w, qr/\Aalias-not-private\z/ );
+}
+# A SUB CALL IS AN EFFECT where it stands, a store's target too (audit 3: corpus
+# 398's lvalue call floated, and effect-floating asked only of builtins).
+{   my $w = wire( $src{t12} );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::slot' && defined $x->{control_in} } );
+    off_chain( $w, $c, qw(control memory) );
+    rejected( 'M18 a sub call taken off the control chain', $w, qr/\Aeffect-floating\z/ );
 }
 done_testing;
