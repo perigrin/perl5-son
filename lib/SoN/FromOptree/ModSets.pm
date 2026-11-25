@@ -472,7 +472,10 @@ sub arg_localized_by_call ( $cv, $call, $places ) {
     my ( %seen, $localized, $aliased );
     $aliased = $places;
     while ( my $site = shift @todo ) {
-        return 1 if $site->{unknown};
+        # (a call this walk cannot see into: any code the program runs that
+        # localizes the variable, or a package not read whole, may be it)
+        return 1 if $site->{unknown} && grep { _fo('_localized_anywhere')->($_) } sort keys %locs;
+        next if $site->{unknown};
         for my $sub ( ( $site->{cvs} // [] )->@* ) {
             next if $seen{$$sub}++;
             my $root = _root($sub) or next;

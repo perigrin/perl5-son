@@ -1956,7 +1956,7 @@ class SoN::FromOptree 0.01 {
                         $taken{ $k->targ } = 1
                             if $k->name eq 'padsv' && $k->targ;
                         # (AN ASSIGNMENT ARGUMENT passes its variable too: design 3)
-                        if ( my $t = _arg_place_target($k) ) { $taken{ $t->targ } = 1 if $t->name =~ /\Apadsv/ }
+                        if ( my $t = _arg_place_target($k) ) { $taken{ $t->targ } = 1 if $t->name =~ /\Apadsv/ || _stores_its_targ($t) }
                         # SO IS A PAD SCALAR A TERNARY ARGUMENT'S ARM NAMES:
                         # `f($c ? ($x) : ())` passes $x itself.
                         my $t = $k;
@@ -2198,6 +2198,25 @@ class SoN::FromOptree 0.01 {
     # refused by name (_scan_run_set_cv): B::SoN no longer translates the
     # program again for it (the settle pass; clause 3, a sub is walked once).
     my %PKG_UNREAD;
+    # WHAT `local` IS APPLIED TO, anywhere the scan read: ModSets's loc names
+    # ('N:$main::x', 'N:%main::h' for an element of it), and 'L' for an
+    # element of a lexical aggregate. %PKG_TAKEN_UNLOCALIZED: the answers
+    # "never localized" given (_localized_anywhere), held as the writes are.
+    my ( %PKG_LOCALIZED, %PKG_TAKEN_UNLOCALIZED );
+
+    # _localized_anywhere($loc) -> whether code the scan read, or a package it
+    # did not read whole, may `local` the variable ModSets's $loc names (audit
+    # 2, K2: a call this walk cannot see into may be one such).
+    sub _localized_anywhere ($loc) {
+        _package_scalars_written();
+        return 1 if $PKG_LOCALIZED{$loc};
+        return 1 if $loc =~ /\AL:[\@%]/ && $PKG_LOCALIZED{L};
+        return 0 if $loc =~ /\AL:/;     # (no `local` of a lexical scalar)
+        my ($pkg) = $loc =~ /\AN:\W(.*)::[^:]+\z/s;
+        return 1 if !defined $pkg || $PKG_UNREAD{$pkg};
+        $PKG_TAKEN_UNLOCALIZED{$loc} = 1;
+        return 0;
+    }
 
     # _scalar_written($key) -> whether some sub may write the package scalar
     # named by scope key $key ('$main::n'): one the scan saw written, any if
@@ -2222,8 +2241,13 @@ class SoN::FromOptree 0.01 {
     sub _scan_run_set_cv ($cv) {
         return unless ref($cv) && $$cv && !$PKG_SCALAR_CV{$$cv};
         my %had = map { ( $_ => 1 ) } keys %PKG_SCALAR_WRITTEN;
+        my %had_local = %PKG_LOCALIZED;
         _scan_cv_package_writes($cv);
         return unless $PKG_SCALAR_SCANNED;
+        my @late_local = sort grep { !$had_local{$_} && $PKG_TAKEN_UNLOCALIZED{$_} } keys %PKG_LOCALIZED;
+        die "GAP: a body the first scan did not read localizes a variable taken for never localized"
+          . " (@late_local), not yet lowered -- a call handed it as \$_[N] was lowered\n"
+            if @late_local;
         my @late = sort grep { !$had{$_} && !$had{'*'} && ( $_ eq '*' ? %PKG_TAKEN_UNWRITTEN : $PKG_TAKEN_UNWRITTEN{$_} ) }
             keys %PKG_SCALAR_WRITTEN;
         die "GAP: a body the first scan did not read writes a package scalar it took for unwritten"
@@ -2255,6 +2279,20 @@ class SoN::FromOptree 0.01 {
         return unless ref($op) && $$op;
         my $name = $op->name;
         $mod ||= ($op->flags & 32) ? 1 : 0;   # OPf_MOD
+        # (A `local`: of what -- a package variable, or an element of one or
+        # of a lexical aggregate)
+        if ( $name =~ /\A(?:gvsv|rv2sv|rv2av|rv2hv|helem|aelem)\z/ && ( $op->private & 128 )   # OPpLVAL_INTRO
+                && ( $B::Op_private::bits{$name}{7} // '' ) eq 'OPpLVAL_INTRO' ) {
+            my $o = $op;
+            $o = $o->first while $o->name ne 'gv' && $o->name !~ /\Apad[ah]v\z/ && ( $o->flags & 4 ) && ${ $o->first };
+            my $sig = $name =~ /\A(?:gvsv|rv2sv)\z/ ? '$' : $name =~ /av\z/ ? '@' : $name =~ /hv\z/ ? '%'
+                : $op->first->name =~ /av\z/ || _strip_null( $op->first )->name =~ /av\z/ ? '@' : '%';
+            if ( $name eq 'gvsv' || $o->name eq 'gv' ) {
+                my $gv = eval { _op_gv( $cv, $name eq 'gvsv' ? $op : $o ) };
+                $PKG_LOCALIZED{ 'N:' . $sig . $gv->STASH->NAME . '::' . $gv->NAME } = 1 if $gv && $$gv;
+            }
+            else { $PKG_LOCALIZED{L} = 1 }
+        }
 
         if ($mod && ($name eq 'gvsv'
                      || ($name eq 'rv2sv' && $op->can('first')
@@ -8841,6 +8879,16 @@ class SoN::FromOptree 0.01 {
         # string "xxx" and `(1, 2) x 2` was 1, "22". The left operand is
         # every element above the mark; the result is a list.
         if ($name eq 'repeat' && ($op->private & 64)) {
+            # (STACKED, IT IS AN `x=`: `($c ? $a : $b) x= 3` stores the
+            # repetition into the arm, and this built the list and no store --
+            # audit 2, K4)
+            if ( $op->flags & 64 ) {
+                my ($t) = grep { $_->name ne 'pushmark' } map { _strip_null($_) } do {
+                    my $l = $op->first; my @k; for ( my $k = $l->first; $l->flags & 4 && $k && $$k; $k = $k->sibling ) { push @k, $k } @k };
+                die "GAP: a ?: used as the target of an op= is not yet lowered -- its store would be lost\n"
+                    if $t && $t->name eq 'cond_expr';
+                die "GAP: an x= whose target is a list is not yet lowered -- its store would be lost\n";
+            }
             my $count = $sim->pop_node;
             my $elems = $sim->pop_to_mark;
             my $list  = $factory->make('ArrayLiteral', inputs => [@$elems],
@@ -13761,8 +13809,11 @@ class SoN::FromOptree 0.01 {
                 # (final audit 2026-11-24, class D: `($x = 5) += 2` printed
                 # 5). An assignment or a ?: as the target is what the probes
                 # found.
+                # (NOT ONLY ON AN OPf_MOD TARGET: a fused store, `($x = $x + 1)
+                # *= $x`'s add, carries none -- audit 2, K4. The op= form is
+                # an lvalue whatever its target says.)
                 if (($op->flags & 64) && B::class($op) eq 'BINOP'
-                    && $op->first && ${$op->first} && ($op->first->flags & 32)
+                    && $op->first && ${$op->first}
                     && !$is_compound && !$field_compound && !defined $elem_lvalue && !defined $pkg_lvalue && !defined $stacked_dest) {
                     my $t = $op->first;
                     $t = $t->first while $t->name eq 'null' && $t->can('first') && ${$t->first};
@@ -13780,7 +13831,7 @@ class SoN::FromOptree 0.01 {
                       . " (one of two `my` scalars by + - * . is: another arm or op would need an If)\n"
                         if $t->name eq 'cond_expr';
                     die "GAP: an assignment used as the target of an op= is not yet lowered -- its store would be lost\n"
-                        if $t->name =~ /\A(?:sassign|padsv_store)\z/ || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) );
+                        if $t->name =~ /\A(?:sassign|padsv_store)\z/ || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) ) || _stores_its_targ($t);
                     die "GAP: an op= whose target is " . $t->name . " is not yet lowered -- its store would be lost\n";
                 }
 
@@ -14833,10 +14884,21 @@ class SoN::FromOptree 0.01 {
     # may have moved the list. Walked in execution order, both arms of a
     # branch, until the loop's own iter op comes round again.
     sub _topic_read_after_a_call ($cv, $enteriter) {
+        # (A MAP OR GREP goes round from its body to its mapwhile/grepwhile)
+        if ( $enteriter->name =~ /\A(map|grep)start\z/ ) {
+            my $w = $enteriter->next;
+            return 1 unless $$w && $w->name eq "$1while";
+            return _topic_read_after_a_call_in( $cv, $w->other, $w );
+        }
         my $it = $enteriter->next;
         $it = $it->next while $$it && $it->name ne 'iter';
         return 1 unless $$it && ${ $it->next } && $it->next->name eq 'and';
-        my @todo = ([ $it->next->other, 0 ]);
+        return _topic_read_after_a_call_in( $cv, $it->next->other, $it );
+    }
+    # _topic_read_after_a_call_in($cv, $start, $stop) -> the walk above, of
+    # the body from $start round to $stop
+    sub _topic_read_after_a_call_in ($cv, $start, $it) {
+        my @todo = ([ $start, 0 ]);
         my %seen;
         while (my $w = shift @todo) {
             my ($op, $called) = @$w;
@@ -16888,6 +16950,12 @@ class SoN::FromOptree 0.01 {
         };
         for my $t (@items) {
             my $n = $t->name;
+            # (AN ASSIGNMENT is perl's alias of the variable it stored, and the
+            # list holds its value: a write through the alias was lost --
+            # `for ($x += 5) { $_++ }` left 6 for perl's 7, audit 2, K4)
+            return "GAP: an assignment as an item of a foreach, map or grep list whose body may write"
+                 . " its alias is not yet lowered -- the store would be lost\n"
+                if $stores && ( _arg_place_target($t) || $n =~ /\A(?:sassign|cond_expr)\z/ || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) ) );
             # (a package scalar or an element is its place: _alias_list_items)
             my $slice = $n =~ /\A(?:aslice|hslice)\z/;
             next unless $slice;
@@ -17000,6 +17068,9 @@ class SoN::FromOptree 0.01 {
         $o = _strip_null($o);
         my $n = $o->name;
         return $o if $n eq 'padsv_store';
+        # (AN OP THAT STORES INTO ITS TARG -- TARGMY: `$x = $x + 1` is an add,
+        # `$x .= "b"` a multiconcat -- stores the `my` scalar its targ names)
+        return $o if _stores_its_targ($o);
         return _assign_target( $o->last ) // _strip_null( $o->last )
             if $n eq 'sassign' && ( $o->flags & 4 ) && !( $o->private & B::OPpASSIGN_BACKWARDS() );
         return _assign_target( $o->first ) // _strip_null( $o->first )
@@ -17035,8 +17106,14 @@ class SoN::FromOptree 0.01 {
     # (a padsv or padsv_store, or a package scalar's op), or undef
     sub _arg_place_target ($o) {
         my $t = _assign_target($o) // return undef;
-        return $t if $t->name =~ /\A(?:padsv|padsv_store)\z/ && $t->targ || _scalar_gv_op($t);
+        return $t if ( $t->name =~ /\A(?:padsv|padsv_store)\z/ || _stores_its_targ($t) ) && $t->targ || _scalar_gv_op($t);
         return undef;
+    }
+    # _stores_its_targ($op) -> true for an op perl fused with the store of its
+    # value into the `my` scalar its targ names (OPpTARGET_MY)
+    sub _stores_its_targ ($o) {
+        return ( $o->private & B::OPpTARGET_MY() )
+            && ( $B::Op_private::bits{ $o->name }{4} // '' ) eq 'OPpTARGET_MY' ? 1 : 0;
     }
     # _target_place($cv, $op, $factory) -> the place of a `$` variable target
     # (_arg_place_target's): a `my` one kept in memory, or a package scalar

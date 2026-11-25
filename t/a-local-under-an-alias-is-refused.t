@@ -29,6 +29,8 @@ for my $src (
     'our %h=(k=>1); sub f { local $h{k}=5; $_[0] } print f($h{k}), "\n";',
     'our $x=1; sub f { local $x=5; g2($_[0]) } sub g2 { $_[0]=7; $x } print f($x), $x, "\n";',
     'our $x=1; sub f { my $r=\$_[0]; local $x=5; $$r=7; $x } print f($x),$x,"\n";',
+    # (a code value: any sub the program has that localizes $x may be it)
+    '$main::x=1; my %d=(f=>sub { local $main::x=5; $_[0]=7; $main::x }); print $d{f}->($main::x),$main::x,"\n";',
 ) {
     like compile($src), $gap, "refused: $src";
 }
@@ -38,6 +40,9 @@ for my $src (
     'our $x=1; sub f { local $x=5; $_[0] } print f($x),$x,"\n";',
     'our $x=1; sub g { $_[0]=7 } sub f { local $x=5; g($x); $x } print f(),$x,"\n";',
     'our ($x,$y)=(1,2); sub f { local $y=5; $_[0]=7; $y } print f($x),$x,"\n";',
+    # (a code value, where nothing the program has localizes what it is handed)
+    'sub apply { my ($f,@l)=@_; map { $f->($_) } @l } my @r=apply(sub { $_[0]*2 }, 1,2); print "@r\n";',
+    'sub k { $_[1]->(); $_[0] } sub w { my $v=1; my $s=sub { $v=9 }; k($v,$s) } print w(),"\n";',
 ) {
     unlike compile($src), qr/GAP/, "not refused: $src";
 }
