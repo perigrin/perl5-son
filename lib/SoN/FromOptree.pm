@@ -25657,7 +25657,7 @@ class SoN::FromOptree 0.01 {
     # its target runs: how to read that target again (a pad slot, or the
     # lvalue node on the stack), or undef.
     sub _alias_result_target ($op, $sim) {
-        return undef if ( $op->flags & 3 ) == 1 || !$sim->stack_depth;   # (void)
+        return undef if ( $op->flags & 3 ) == 1;   # (void)
         my $n = $op->name;
         require B::Op_private;
         my $pad = sub ($o) { $o = _strip_null($o); $o && $$o && $o->name eq 'padsv' ? { targ => $o->targ } : undef };
