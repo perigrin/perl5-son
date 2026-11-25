@@ -6207,6 +6207,14 @@ class SoN::FromOptree 0.01 {
                 # (A POSTINCREMENT'S VALUE IS A COPY: `f($g, $g++)` hands f the
                 # old $g, read before the store, not $g -- audit 2, K6)
                 next if @ops == $n && _strip_null( $ops[$i] )->name =~ /\A(?:i_)?post(?:inc|dec)\z/;
+                # (A `my` SCALAR KEPT IN NO MEMORY -- an invocant no method
+                # stores -- has no place: the node is its binding's value, and
+                # a place made of that named whatever the value was read from:
+                # `my ($l) = @_; $l->m` handed m `$_[0]` of the caller.)
+                if ( @ops == $n && ( my $po = _strip_null( $ops[$i] ) )->name eq 'padsv' ) {
+                    my $t = $po->targ;
+                    next unless $ADDR_TAKEN && $ADDR_TAKEN->{$t} || $CELLS && ( $CELLS->{cells}{$t} || $CELLS->{cell_params}{$t} );
+                }
                 $args->[$i] = ( $t ? _target_place( $cv, $t, $factory ) : undef )
                     // _alias_place( $args->[$i], $factory ) // $args->[$i];
             }

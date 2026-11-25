@@ -220,7 +220,7 @@ sub args_escape ( $s, $h ) {
                     for my $v ( $s->consumers( $h, $u ) ) {
                         my $tgt = $v->{op} eq 'Assign' && !_f($v)->{record}
                             && grep { defined && !ref && $_ == $u->{id} } $v->{inputs}->@[ 0 .. ( _f($v)->{targets} // 1 ) - 1 ];
-                        $esc = 1 if $tgt || $v->{op} =~ /\A(?:Ref|EntryWrite|Delete)\z/ || _f($u)->{place}
+                        $esc = 1 if $tgt || $v->{op} eq q{Ref} || _f($u)->{place}
                             || $v->{mem_out} && grep { $_ eq 'P' } $s->effects( $h, $v )->@*;
                     }
                     next;
