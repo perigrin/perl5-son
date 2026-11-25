@@ -393,6 +393,42 @@ sub _module_start_state {
         return undef;
     };
     my ( @lines, %refuse );
+    # A PACKAGE SCALAR WITH TWO NAMES, OR TIED, AT CHECK (audit 3, N12): `use
+    # English` aliases $PROGRAM_NAME to $0 by a glob, an exporter shares one
+    # scalar between two packages, `use Env` ties $HOME to %ENV. The wire
+    # names each by its own name, and a tie's FETCH is not on it: refused by
+    # name in each graph that names one (`$PROGRAM_NAME` read "" for "-e").
+    {
+        my %seen;
+        for my $g ( sort keys %$graphs ) {
+            for my $n ( $graphs->{$g}->nodes->@* ) {
+                next unless ref($n) && $n->isa('SoN::IR::Node::EntryDef') && ( eval { $n->sigil } // '' ) eq '$';
+                my ( $pkg, $sym ) = map { scalar eval { $n->$_ } } qw(package symbol);
+                next unless defined $pkg && defined $sym && length $sym;
+                my $why = $seen{"$pkg\0$sym"} //= do {
+                    my $stash = \%{"${pkg}::"};
+                    my $gv = exists $stash->{$sym} ? B::svref_2object( \$stash->{$sym} ) : undef;
+                    my $w = '';
+                    if ( $gv && $gv->isa('B::GV') ) {
+                        my $sv = $gv->SV;
+                        my $tied = 0;
+                        for ( my $mg = $sv && $$sv ? eval { $sv->MAGIC } : undef; $mg; $mg = $mg->MOREMAGIC ) { $tied = 1 if $mg->TYPE eq 'q' }
+                        $w = $tied ? "\$${pkg}::$sym is tied (use Env, a tie at compile time)"
+                           : $gv->GvREFCNT > 1 && $sym =~ /\A[A-Za-z_]\w*\z/ && $sym ne 'ARGV' ? "\$${pkg}::$sym is another variable's name too (a glob alias: use English)"
+                           : $sv && $$sv && $sv->REFCNT > 1 && $sym =~ /\A[A-Za-z_]\w*\z/ ? "\$${pkg}::$sym is one scalar with another package's (an import)"
+                           : '';
+                    }
+                    $w;
+                };
+                next unless length $why;
+                next if exists $REFUSED{$g};
+                delete $graphs->{$g};
+                $REFUSED{$g} = "GAP: a package scalar with two names or a tie at compile time ($why) is not yet lowered -- the wire names each by its own name";
+                warn "B::SoN: skipped $g: $REFUSED{$g}\n";
+                last;
+            }
+        }
+    }
     for my $k ( sort keys %named ) {
         my ( $sig, $pkg, $sym ) = split / /, $k;
         my $full = "${pkg}::$sym";
