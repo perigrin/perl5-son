@@ -6662,6 +6662,7 @@ class SoN::FromOptree 0.01 {
     my %EXISTED;   # refaddr of an element read -> the Exists made beside it
     my %OPERAND_DEPTH;      # padsv/gvsv/rv2sv op, or element operand, address -> the stack slot its read took
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        _local_shape_gap($op) if $op->private & B::OPpLVAL_INTRO();
         # A FUSED ELEMENT OF A PACKAGE ARRAY is the peephole's, in code perl
         # compiled before B::SoN turned it off (DynaLoader, loaded at
         # startup). The op map made it an element of nothing, and the list
@@ -19985,6 +19986,30 @@ class SoN::FromOptree 0.01 {
     # the innermost loop is the silent miscompile this exists to end.
     # _is_sub_argument($op) -> true when $op is an argument of a sub call: its
     # parent, through null (ex-list) ops, is the entersub.
+    # _local_shape_gap($op): a `local` whose restore the walk does not make,
+    # refused by name (third final audit, N8). A local UNDER A CONDITION --
+    # `local $g = 5 if $c`, `$c and local $g = 5` -- is saved and restored
+    # only where it ran: the walk restored it on every path, or none (`55`
+    # for perl's `51`). `delete local $h{k}` deletes and puts back: the walk
+    # deleted for good (yj41).
+    sub _local_shape_gap ($op) {
+        my $n = $op->name;
+        require B::Op_private;
+        return unless ( $B::Op_private::bits{$n}{7} // '' ) eq 'OPpLVAL_INTRO';
+        return unless $n =~ /\A(?:gvsv|rv2[ash]v|aelem|helem|delete|[ah]slice)\z/;
+        # (`local` of a package variable; a `my` is a pad op)
+        return if $n =~ /\Arv2[ash]v\z/ && !( ( $op->flags & B::OPf_KIDS() ) && ${ $op->first } && $op->first->name =~ /\A(?:gv|rv2gv|padsv|null)\z/ );
+        die "GAP: `delete local` is not yet lowered -- the element would not be put back\n" if $n eq 'delete';
+        for ( my $p = eval { $op->parent }; $p && $$p; $p = eval { $p->parent } ) {
+            my $pn = $p->name;
+            last if $pn =~ /\A(?:lineseq|leave|leavesub|leaveloop|scope|leavetry|leaveeval|leavesublv)\z/;
+            die "GAP: a `local` under a condition (`local ... if`, `and local`, `?:`) is not yet lowered -- its"
+              . " restore would be made on every path or none\n"
+                if $p->isa('B::LOGOP');
+        }
+        return;
+    }
+
     # _local_is_assigned($op) -> true when the `local` $op is an assignment's
     # target (`local $g = 5`, `local ($g) = @l`): the assignment gives it its
     # value. Otherwise perl's new scalar is undef.
@@ -25484,6 +25509,11 @@ class SoN::FromOptree 0.01 {
         my $stores;
         $stores = sub ($o, $key) {
             return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
+            # (A `local` STORES A NEW SCALAR: the operand read before it is
+            # the old one, which keeps its value -- `print $g, local $g = 5`
+            # is 15 in perl, and the read again said 55. Audit 3, N8.)
+            return $stores->( $o->first, $key )
+                if $o->name eq q{sassign} && ( $o->flags & B::OPf_KIDS ) && SoN::FromOptree::ModSets::_is_local($o);
             # A BUILTIN OR A LIST ASSIGNMENT storing it: chomp, chop, s///,
             # tr///, `($x, $y) = ...` (SoN::FromOptree::ModSets::_stores).
             return 1 if SoN::FromOptree::ModSets::stores_var($cv, $o, $key);
