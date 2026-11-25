@@ -25699,7 +25699,9 @@ class SoN::FromOptree 0.01 {
             $ALIAS_OPERAND{$$op} = { %d, how => 'target', $target->%* };
             return;
         }
-        return if $op->flags & B::OPf_MOD;    # (a store's target, or a call's place)
+        # (a store's target, or a call's place -- a variable marked so is
+        # noted still: its consumer decides, _reread_alias_operand_stored_later)
+        return if ( $op->flags & B::OPf_MOD ) && $n !~ /\A(?:padsv|gvsv)\z/;
         if ( $n eq 'padsv' ) {
             return if $op->private & B::OPpLVAL_INTRO;
             $ALIAS_OPERAND{$$op} = { %d, how => 'target', targ => $op->targ };
@@ -25902,7 +25904,9 @@ class SoN::FromOptree 0.01 {
         for my $i ( 0 .. $#kids ) {
             my $k = $kids[$i];
             next if ( $k->flags & 3 ) == 1;                       # (a statement, not an operand)
-            next if $k->flags & B::OPf_MOD;                       # (a store's own target)
+            # (a store's own target -- but a variable perl marks OPf_MOD only
+            # because its consumer may take it as an lvalue, sprintf's, is read)
+            next if ( $k->flags & B::OPf_MOD ) && !( _strip_null($k)->name =~ /\A(?:padsv|gvsv)\z/ && $op->name =~ /\A(?:sprintf|join|print|say|prtf|multiconcat)\z/ );
             next if $i == 0 && $stacked;                          # (an op='s target)
             next if $i == $#kids && $op->name eq 'sassign';
             my $p = _strip_null($k);

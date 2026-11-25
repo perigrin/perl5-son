@@ -268,7 +268,9 @@ sub alias_refused ($src, $name) {
     like producer_stderr(), qr/read by alias.*a later operand stores it/,
         "$name: the refusal names the alias";
 }
-alias_refused('our $n = 1; sub f { $n .= ($n = 5); $n } print f(), " $n\n";',
+# (design B: the op= reads its target when it runs, after its operand's
+# store -- lowered, and perl's answer)
+round_trips('our $n = 1; sub f { $n .= ($n = 5); $n } print f(), " $n\n";',
     'an op= target its operand stores');
 
 # A BRANCH CONDITION is consumed before its arm runs, and a copy before the
