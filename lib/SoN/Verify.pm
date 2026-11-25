@@ -181,6 +181,15 @@ sub _alias_private ( $wire, $res ) {
             next unless $mphi->{op} eq 'Phi' && _fields($mphi)->{memory} && $loop->{op} eq 'Loop';
             my $iphi = $by{$g}{ $r->{inputs}[1] // '' } or next;
             next unless $iphi->{op} eq 'Phi' && ( _fields($iphi)->{region} // -1 ) == $loop->{id};
+            # (THE LOOP'S OWN ITEM: its test is `Count(list) > i` over this list
+            # and index -- a foreach, map or grep. `$a[$i]` in a counted loop
+            # over a range is an element read made where it stands.)
+            next unless grep {
+                my $t = $by{$g}{ $_->{inputs}[1] // '' } // {};
+                my $cnt = $by{$g}{ $t->{inputs}[0] // '' } // {};
+                $t->{op} eq 'NumGt' && ( $t->{inputs}[1] // -1 ) == $iphi->{id}
+                    && $cnt->{op} eq 'Count' && ( $cnt->{inputs}[0] // -1 ) == ( $r->{inputs}[0] // -2 )
+            } grep { $_->{op} eq 'If' && ( $_->{control_in} // -1 ) == $loop->{id} } values $by{$g}->%*;
             my $key = $src->( $g, $r ) // next;
             # (the uses that run: through pure values to a node on a chain)
             my ( @anchor, %seen );
@@ -540,28 +549,19 @@ sub _graph_v2 ( $name, $g, $res ) {
             $mutated{$k} = 1 if defined $k;
         }
     }
-    # (A GRAPH THAT STORES ONLY ITS OWN `my` VARIABLES reads the same @_
-    # wherever it reads it: no call, no store into anything a caller may have
-    # handed it. Where it stores beyond them, a record of @_ has no version
-    # to be made at -- audit 2, K1.)
-    my $own = sub ($t) {
-        return 0 unless $t;
-        return 1 if $t->{op} eq 'ArgsSource';
-        my $f = _fields($t);
-        return 0 if $f->{shared} || $f->{place};
-        return 1 if $t->{op} eq 'PadAccess';
-        return $t->{op} =~ /^(?:ArrayLiteral|HashLiteral)$/ && defined $f->{symbol} && $f->{symbol} !~ /::/;
-    };
+    # (A GRAPH THAT STORES INTO AN ELEMENT OF @_ -- a caller's variable --
+    # changes what @_ holds after a copy of it: there a record of @_ has no
+    # version to be made at -- audit 2, K1. Whether a caller hands a sub
+    # places otherwise (it reads @_ after a store, or a call no one sees into
+    # may be its call) is the producer's question, ModSets::args_may_be_places;
+    # a wire does not say.)
     my $stores_beyond_own = grep {
         my ( $op, $f, $in ) = ( $_->{op}, _fields($_), $_->{inputs} // [] );
-        ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) ne 'builtin' )
-            || $op =~ /^(?:EntryWrite|CellWrite|Delete|ElemRestore|LocalAlias|MakeCell)$/
-            || ( $_->{mem_out} && !$record->($_) && grep {
-                   my ( $t, $elem ) = ( $by{$_}, 0 );
-                   ( $t, $elem ) = ( $container->($t), 1 ) while $t && $t->{op} =~ /^(?:Subscript|Slice)$/;
-                   # (an element of @_ is a caller's variable; @_ whole is the sub's)
-                   !$own->($t) || $elem && $t->{op} eq 'ArgsSource'
-               } grep { defined && !ref } ( $op eq 'Assign' ? @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ] : $op eq 'Call' ? @$in : () ) );
+        $_->{mem_out} && !$record->($_) && grep {
+            my ( $t, $elem ) = ( $by{$_}, 0 );
+            ( $t, $elem ) = ( $container->($t), 1 ) while $t && $t->{op} =~ /^(?:Subscript|Slice)$/;
+            $elem && $t && $t->{op} eq 'ArgsSource'
+        } grep { defined && !ref } ( $op eq 'Assign' ? @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ] : $op eq 'Call' ? @$in : () );
     } @nodes;
     my $place_class;
     $place_class = sub ($n) {
