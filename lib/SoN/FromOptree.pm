@@ -16644,6 +16644,27 @@ class SoN::FromOptree 0.01 {
     # $iter_key names the iteration variable in the scope map: a pad targ for a
     # lexical, `stash::$name` for a package scalar. Defaults to the op's targ so
     # existing callers are unchanged.
+    # _outer_my_iterator($cv, $enteriter, $targ) -> true for a foreach whose
+    # variable is a `my` declared outside it and kept in memory (a closure, a
+    # named sub, a reference or a call may see it): the loop's scalar is its
+    # own. Refused by name where the body itself writes it, hands it to a call,
+    # refers to it or closes over it -- its own scalar would then need storage
+    # the wire cannot give a loop.
+    sub _outer_my_iterator ($cv, $enteriter, $targ) {
+        return 0 unless $targ =~ /\A\d+\z/ && !( $enteriter->private & 128 )
+            && ( $ADDR_TAKEN && $ADDR_TAKEN->{$targ} || $CELLS && ( $CELLS->{cells}{$targ} || $CELLS->{cell_params}{$targ} ) );
+        my $loop = $enteriter->parent;
+        for my $o ( _subtree_ops($loop) ) {
+            next if $$o == $$enteriter;
+            my $hit = $o->name eq 'padsv' && $o->targ == $targ && ( $o->flags & B::OPf_MOD )
+                || ( $o->private & B::OPpTARGET_MY() ) && $o->can('targ') && $o->targ == $targ && $o->name ne 'padsv'
+                || $o->name eq 'padsv_store' && $o->targ == $targ
+                || $o->name eq 'anoncode' && grep { ( $_->{outer_idx} // -1 ) == $targ } _anoncode_capture_info( $cv, $o );
+            die "GAP: a foreach over an outer `my` whose body writes it, hands it to a call, refers to it or"
+              . " closes over it is not yet lowered -- perl's loop scalar is not the outer one\n" if $hit;
+        }
+        return 1;
+    }
     sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high, $iter_key = undef) {
         # nexts from creation: the walk records this loop's own `next` edges,
         # merged at the latch.
@@ -16782,7 +16803,16 @@ class SoN::FromOptree 0.01 {
         # so `twice($n)` read a slot nothing wrote: perl 2 4 6, emitted 0 0 0.
         # The pass's value is stored into the slot where the body starts, and
         # a callee's write through $_[0] still lands there.
-        if ($i_targ =~ /\A\d+\z/ && $ADDR_TAKEN && $ADDR_TAKEN->{$i_targ}) {
+        # AN OUTER `my` AS THE LOOP VARIABLE (`my $i; for $i (...)`) is not
+        # the loop's scalar: perl gives the loop its own, and a closure, a
+        # named sub or a reference made outside sees the outer one untouched
+        # (audit 3, N10: `7777` printed `1233`). The body's own reads take the
+        # pass's value as a binding, and the outer slot is never stored.
+        my $own = _outer_my_iterator($cv, $enteriter, $i_targ);
+        local $ADDR_TAKEN->{$i_targ} = 0 if $own;
+        delete local $CELLS->{cells}{$i_targ} if $own && $CELLS;
+        delete local $CELLS->{cell_params}{$i_targ} if $own && $CELLS;
+        if (!$own && $i_targ =~ /\A\d+\z/ && $ADDR_TAKEN && $ADDR_TAKEN->{$i_targ}) {
             my $slot = $factory->make('PadAccess', targ => $i_targ,
                 do { my ($sg, $sy) = _padparts($cv, $i_targ);
                      (sigil => $sg, symbol => $sy) },
@@ -17983,6 +18013,13 @@ class SoN::FromOptree 0.01 {
                  || !$iter_is_element && grep { $_ isa SoN::IR::Node::Call } $array->inputs->@* )
             && _iterator_may_be_written($cv, $loop_root, $x_targ);
         $ALIAS_STATS{ 'iter-' . ( $iter_is_element ? 'place' : 'value' ) }++;
+        # (AN OUTER `my` as the variable over a list of temporaries: the loop's
+        # scalar is its own, as in _translate_foreach_range -- audit 3, N10)
+        my $own = $demoted_iter && !$iter_is_element && _outer_my_iterator($cv, $enteriter, $x_targ);
+        local $ADDR_TAKEN->{$x_targ} = 0 if $own;
+        delete local $CELLS->{cells}{$x_targ} if $own && $CELLS;
+        delete local $CELLS->{cell_params}{$x_targ} if $own && $CELLS;
+        $demoted_iter = 0 if $own;
         if ($demoted_iter && !$iter_is_element) {
             my $store = $factory->make('Assign', inputs => [$iter_slot->(), $elem]);
             _place($sim, $store);
