@@ -26,6 +26,11 @@
   `probes/cpa/`: cpa01-cpa35, the fix probes of designs A and B1
   (docs/plans/2026-11-24-copy-and-local-unwind.md), copied from chalk's
   `t/data/audit-probes` beside the audit's own.
+  `probes/z/`: the 828 probes of the 2026-11-25 second final audit
+  (../2026-11-25-memory-model-final-audit-2.md, section 4); `_run1.log` is their
+  sweep at producer 888d71b, chalk f1d9aa74 (57 WRONG). `zlib/` holds the two
+  modules the package probes load; `unverified/` the two whose wires break a
+  verifier rule (pa79, un75). Not in chalk's `t/data/audit-probes` yet.
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),
