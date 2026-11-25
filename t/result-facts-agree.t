@@ -78,6 +78,10 @@ subtest 'result_for answers, at every arity, capped' => sub {
     is($r->('Add', 'Unknown', 'Int'), undef, 'an unnarrowed operand is an honest GAP');
     is($r->('Add', undef, 'Int'), undef, 'so is an absent one');
     is($r->('NoSuchOp', 'Int'), undef, 'an op the table does not describe says nothing');
+    # `*STDOUT || 1` is a GLOB (perl 5.42.0), and Glob is not below List:
+    # a short-circuit's bound is the top, as chalk's `||` row says.
+    is($r->('Or', 'Glob', 'Glob'), 'Glob', 'a short-circuit over Globs is a Glob, not a List');
+    is($r->('Or', 'Int', 'Str'), 'Str', '... and over scalars is their join');
 };
 
 # FromOptree must not grow a second copy of this table back.

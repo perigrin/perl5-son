@@ -91,13 +91,13 @@ my %SIGNATURES = (
     # (any value has a truth interpretation), and a requirement here would make
     # the coercion pass insert a Coerce on every `||` in the corpus.
     #
-    # The bound is `List`, the widest thing a scalar-or-list arm can be, which
-    # meets transparently: meet(Int,List) is Int, meet(ArrayRef,List) is
-    # ArrayRef. An operator that hands back its operand unchanged must not
-    # narrow it, and a tighter bound here would do exactly that.
-    And        => { operands => [], result => 'List' },
-    Or         => { operands => [], result => 'List' },
-    DefinedOr  => { operands => [], result => 'List' },
+    # The bound is the top, `Unknown`, which meets transparently: an operator
+    # that hands back its operand unchanged must not narrow it. It was `List`,
+    # which narrowed a Glob arm: `*STDOUT || *STDERR` is a GLOB (5.42.0), and
+    # Glob is not below List. chalk's `&&`/`||`/`//` rows say Unknown too.
+    And        => { operands => [], result => 'Unknown' },
+    Or         => { operands => [], result => 'Unknown' },
+    DefinedOr  => { operands => [], result => 'Unknown' },
     UnaryPlus  => { operands => ['Num'],        result => 'Num' },
     # `++` on a maybe-string: NO operand requirement, because a Num requirement
     # would have the coercion pass insert the very Coerce that destroys the
@@ -694,6 +694,14 @@ sub result_for ($ir_op, @operands) {
     # answer: what the operator yields is a fact about the OPERATOR, not about
     # what happened to arrive.
     return ( !$capped || $capped->type eq 'None' ) ? $result : $capped->type;
+}
+
+# signature($ir_op) -> a copy of its row, { operands => [...], result => ... },
+# or undef. For t/operator-table-agrees-with-chalk.t, which compares rows; a
+# caller wanting an op's type asks result_for.
+sub signature ($ir_op) {
+    my $sig = $SIGNATURES{$ir_op} or return undef;
+    return { operands => [ $sig->{operands}->@* ], result => $sig->{result} };
 }
 
 # known_ops() -> every op this table describes. For tests that assert coverage.
