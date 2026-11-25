@@ -776,6 +776,9 @@ class SoN::FromOptree 0.01 {
     # promoted argument is read at, where nothing between stores it).
     our %ARG_READ_AT;
     our $PENDING_READ_AT;   # (_handle_entersub_call's %read_at, for the Call it makes)
+    # refaddr -> a read of $_[i] made for `my (...) = @_`, left untyped as the
+    # parameter record the promotion pass may make of it (B::SoN skips its floor)
+    our %ARGS_COPY;
     # The main walk's closure cells, for the same walkers: a capture read in an
     # arm or loop body is a cell read, and a fresh ctx without them made it a
     # PadAccess naming a slot the closure does not own (`$w` in a recursive
@@ -6852,7 +6855,7 @@ class SoN::FromOptree 0.01 {
             if $op->name eq 'aelemfast';
         my $target = _alias_result_target($op, $sim);
         my @r = _step_op($cv, $op, $sim, $factory, $opmap, $ctx);
-        _note_alias_operand($cv, $op, $sim, $target) if ( $r[1] // '' ) eq 'handled';
+        _note_alias_operand($cv, $op, $sim, $target, $factory) if ( $r[1] // '' ) eq 'handled';
         return @r;
     }
 
@@ -13094,6 +13097,7 @@ class SoN::FromOptree 0.01 {
                                 const_type => 'integer',
                                 stamp => SoN::IR::Stamp->new(type => 'Int'))], mem => $sim->memory, @untyped);
                 } 0 .. $lhs->$#*;
+                $ARGS_COPY{ refaddr $_ } = $_ for @untyped ? @args_elems : ();
             }
             # (the record of a copy from an array variable names the elements
             # it copied, each at its version -- not the array at none. In
@@ -18358,8 +18362,15 @@ class SoN::FromOptree 0.01 {
             if ($collect eq 'grep') {
                 die "GAP: grep block did not produce a single predicate value\n"
                     unless @produced == 1;
+                # (GREP RETURNS THE ELEMENT ITSELF, as the body left it: a
+                # body that stores -- a call handed `$_` -- is read after)
+                my $kept = $elem;
+                my $now  = $sim->memory;
+                $kept = _at_memory( $factory, $elem, $now ) // $elem
+                    if blessed($elem) && $elem->can('mem_in') && blessed( $elem->mem_in ) && blessed($now)
+                    && refaddr($now) != refaddr( $elem->mem_in ) && _stored_since( $now, $elem->mem_in );
                 $acc_next = $factory->make('ListAppend',
-                    inputs    => [$acc_phi, $elem, $produced[0]],
+                    inputs    => [$acc_phi, $kept, $produced[0]],
                     collector => 'grep',
                     stamp     => SoN::IR::Stamp->new(type => 'Array'));
             }
@@ -25686,7 +25697,7 @@ class SoN::FromOptree 0.01 {
 
     # _note_alias_operand($cv, $op, $sim, $target): after $op ran, if it
     # pushed an SV, how its consumer reads it again.
-    sub _note_alias_operand ( $cv, $op, $sim, $target ) {
+    sub _note_alias_operand ( $cv, $op, $sim, $target, $factory = undef ) {
         return if ( $op->flags & 3 ) == 1 || !$sim->stack_depth;   # (void)
         my $depth = $sim->stack_depth - 1;
         my $top   = $sim->node_at($depth);
@@ -25718,6 +25729,16 @@ class SoN::FromOptree 0.01 {
             || $top->isa('SoN::IR::Node::Subscript') || $top->isa('SoN::IR::Node::FieldAccess') || $top->isa('SoN::IR::Node::CellRead');
         return unless defined $top->mem_in;
         $ALIAS_OPERAND{$$op} = { %d, how => $top->isa('SoN::IR::Node::Subscript') ? 'element' : 'read' };
+        # (AN ELEMENT A LATER OPERAND'S CALL MAY STORE: whether it existed is
+        # asked here, where perl pushed it -- pinned, so that it is spelled
+        # before the call; perl pushed undef for an element that did not)
+        if ( $factory && $top isa SoN::IR::Node::Subscript
+            && grep { my $s = $_; grep { $_->name =~ /\Aentersub\z/ } _subtree_ops($s) } _later_siblings($op) ) {
+            my $ex = $factory->make('Exists', kind => $top->kind, inputs => [ $top->v1_inputs->@[ 0, 1 ] ],
+                mem => $sim->memory, stamp => SoN::IR::Stamp->new(type => 'Boolean'));
+            { local $PIN_OP = $op; _pin_tied_read( $sim, $ex ) }
+            $ALIAS_OPERAND{$$op}{existed} = $ex;
+        }
         return;
     }
 
@@ -25939,15 +25960,15 @@ class SoN::FromOptree 0.01 {
                     }
                 }
                 $new = _at_memory( $factory, $old, $mem );
-                # (an element of a list made here -- a call's, a literal list --
+                # (an element of a list made here -- a call's, a range, a literal list --
                 # exists for the index the walk reads it at: no guard)
                 my $c0 = $old->v1_inputs->[0];
-                my $temp = blessed($c0) && ( $c0->operation eq 'Call'
+                my $temp = blessed($c0) && ( $c0->operation =~ /\A(?:Call|Range)\z/
                     || $c0->operation eq 'ArrayLiteral' && !defined( eval { $c0->symbol } ) && ( $c0->stamp ? $c0->stamp->type : '' ) eq 'List' );
                 if ( $new && $d->{how} eq 'element' && !$temp ) {
                     # (perl pushed the element only if it existed: else undef)
                     # (made at the old version, not where this op stands: never pinned here)
-                    my $ex = do { local $SoN::IR::NodeFactory::ON_VALUE = undef;
+                    my $ex = $d->{existed} // do { local $SoN::IR::NodeFactory::ON_VALUE = undef;
                         $factory->make('Exists', kind => $old->kind, inputs => [ $old->v1_inputs->@[ 0, 1 ] ],
                         mem => $old->mem_in, stamp => SoN::IR::Stamp->new(type => 'Boolean')) };
                     { local $PIN_OP = $p; _pin_tied_read( $sim, $new ) }
