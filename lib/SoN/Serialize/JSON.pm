@@ -61,6 +61,12 @@ sub _extract_fields ($node, $id_remap) {
         return {
             dispatch_kind => $node->dispatch_kind,
             name          => $node->name,
+            # (FOR THE PROMOTION PASS ONLY, which takes it off the wire: where
+            # each place argument's variable was read where perl pushed it --
+            # the version a promoted value is read at, where nothing between
+            # stores it. SoN::FromOptree's %ARG_READ_AT.)
+            ( do { my $r = $SoN::FromOptree::ARG_READ_AT{ Scalar::Util::refaddr($node) };
+                   $r ? ( arg_read_at => [ map { blessed($_) && defined $id_remap->{ $_->id } ? $id_remap->{ $_->id } : undef } @$r ] ) : () } ),
             # WHAT A FOLDED `sort` COMPARES. Emitted only for sort, where perl
             # folded the comparator into flags and the block is therefore
             # absent -- without these, `sort {$a<=>$b}`, `sort {$b<=>$a}` and a

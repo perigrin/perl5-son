@@ -771,6 +771,11 @@ class SoN::FromOptree 0.01 {
     # op= whose target is that op= (design 3). Local to each CV's walk.
     our %ASSIGN_LVALUE;
     our %ALIAS_OPERAND;   # (see _note_alias_operand)
+    # Call refaddr -> [ per input: the memory its place's variable was read
+    # at where perl pushed it, or undef ] (for SoN::Promote: the version a
+    # promoted argument is read at, where nothing between stores it).
+    our %ARG_READ_AT;
+    our $PENDING_READ_AT;   # (_handle_entersub_call's %read_at, for the Call it makes)
     # The main walk's closure cells, for the same walkers: a capture read in an
     # arm or loop body is a cell read, and a fresh ctx without them made it a
     # PadAccess naming a slot the closure does not own (`$w` in a recursive
@@ -6197,6 +6202,8 @@ class SoN::FromOptree 0.01 {
     sub _handle_entersub_call ($cv, $op, $sim, $factory, $ctx) {
         my $args = $sim->pop_to_mark;
         # (the arguments, not the code a direct or indirect call names last)
+        my %read_at;   # place refaddr -> the memory its variable was read at
+        local $PENDING_READ_AT = \%read_at;
         if ($ARGS_ARE_PLACES) {
             my $n = defined $ctx->{pending_method} ? scalar $args->@* : $args->$#*;
             # (AN ASSIGNMENT passes the variable it stored: `inc($x += 1)`,
@@ -6215,8 +6222,11 @@ class SoN::FromOptree 0.01 {
                     my $t = $po->targ;
                     next unless $ADDR_TAKEN && $ADDR_TAKEN->{$t} || $CELLS && ( $CELLS->{cells}{$t} || $CELLS->{cell_params}{$t} );
                 }
+                my $read_at = blessed( $args->[$i] ) && $args->[$i]->can('mem_in') ? $args->[$i]->mem_in : undef;
+                my $was = $args->[$i];
                 $args->[$i] = ( $t ? _target_place( $cv, $t, $factory ) : undef )
                     // _alias_place( $args->[$i], $factory ) // $args->[$i];
+                $read_at{ refaddr $args->[$i] } = $read_at if refaddr( $args->[$i] ) != refaddr($was) && !$t && blessed($read_at);
             }
         }
 
@@ -6655,7 +6665,12 @@ class SoN::FromOptree 0.01 {
     # direct-call site for the measurements; a METHOD call is the same hazard -- a method
     # incrementing a file lexical left the program's later read ordered before
     # the calls, and it saw the initial value.
+    # ($PENDING_READ_AT: _handle_entersub_call's %read_at, for the Call it makes)
     sub _call_memory_barrier ($sim, $node, $ctx) {
+        if ( $PENDING_READ_AT && %$PENDING_READ_AT ) {
+            $ARG_READ_AT{ refaddr $node } = [ map { blessed($_) ? $PENDING_READ_AT->{ refaddr $_ } : undef } $node->inputs->@* ];
+            $ARG_READ_AT{ "keep" . refaddr $node } = $node;   # (held: its address is not reused)
+        }
         return unless defined $sim->memory;
         $node->set_mem_out(1);
         $sim->set_memory($node);

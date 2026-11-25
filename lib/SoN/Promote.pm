@@ -24,8 +24,27 @@ our %CALLED_UNKNOWN;
 my %PLACE_OP = map { ( $_ => 1 ) } qw(EntryDef PadAccess Subscript FieldAccess CellRead);
 
 sub promote ($data) {
-    return $data if $ENV{SON_NO_PROMOTE};
     my $p = SoN::AliasProof->new($data);
+    # (the hint B::SoN leaves a Call -- where each place argument's variable
+    # was read where perl pushed it -- is this pass's alone: off the wire)
+    my %hint;
+    for my $g ( $p->graphs ) {
+        for my $c ( grep { $_->{op} eq 'Call' } $p->nodes($g) ) {
+            $hint{$g}{ $c->{id} } = delete $c->{fields}{arg_read_at} if exists( ( $c->{fields} // {} )->{arg_read_at} );
+        }
+    }
+    return $data if $ENV{SON_NO_PROMOTE};
+    # (each read of a variable already on the wire, by what it reads and where)
+    my $sig = sub ( $op, $f, $in, $mem ) {
+        my %f = %$f; delete @f{qw(place vivify promoted)};
+        return join "\0", $op, ( map { "$_=" . ( ref $f{$_} ? '' : $f{$_} // '' ) } sort keys %f ), join( ',', map { $_ // '' } @$in ), $mem // '';
+    };
+    my %reads;
+    for my $g ( $p->graphs ) {
+        for my $n ( grep { $PLACE_OP{ $_->{op} } && defined $_->{mem_in} && !( $_->{fields} // {} )->{place} && !defined $_->{control_in} } $p->nodes($g) ) {
+            $reads{$g}{ $sig->( $n->{op}, $n->{fields} // {}, $n->{inputs} // [], $n->{mem_in} ) } //= $n;
+        }
+    }
     my %new;    # graph -> [ [ before_id, node ] ... ]
     my %dead;   # graph -> { id => 1 }: a place no consumer is left
     for my $g ( $p->graphs ) {
@@ -41,11 +60,27 @@ sub promote ($data) {
                 my $a = $p->node( $g, $c->{inputs}[$i] );
                 my %f = ( $a->{fields} // {} )->%*;
                 delete @f{qw(place vivify)};
+                # (READ WHERE PERL PUSHED IT, where nothing on the chain between
+                # that and the call may store it: the read the walk made)
+                my $at = $c->{mem_in};
+                my $h = ( $hint{$g}{ $c->{id} } // [] )->[$i];
+                $at = $h if defined $h && $p->reaches( $g, $c->{mem_in}, $h )
+                    && !defined $p->stored_between( $g, $c->{mem_in}, $h, $p->src( $g, $a ) );
+                # (THE READ THE WALK MADE, where it is still on the wire -- the
+                # same node, as before the place: marked, not made again)
+                my $key = $sig->( $a->{op}, \%f, $a->{inputs}, $at );
+                if ( my $same = $reads{$g}{$key} ) {
+                    $same->{fields}{promoted} = JSON::PP::true();
+                    $c->{inputs}[$i] = $same->{id};
+                    $dead{$g}{ $a->{id} } = 1;
+                    next;
+                }
                 my $r = { id => $next++, op => $a->{op}, inputs => [ ( $a->{inputs} // [] )->@* ],
                           fields => { %f, promoted => JSON::PP::true() },
-                          mem_in => $c->{mem_in}, mem_operand => JSON::PP::true(),
+                          mem_in => $at, mem_operand => JSON::PP::true(),
                           ( defined $a->{stamp} ? ( stamp => $a->{stamp} ) : () ) };
                 push $new{$g}->@*, [ $c->{id}, $r ];
+                $reads{$g}{$key} = $r;
                 $c->{inputs}[$i] = $r->{id};
                 $dead{$g}{ $a->{id} } = 1;
             }

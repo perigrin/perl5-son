@@ -125,6 +125,8 @@ sub effects ( $s, $g, $n ) {
         return [ keys %w ];
     }
     my $op = $n->{op};
+    # (a LocalAlias binds `$_` to an element: a store of $_ only)
+    return [ '$main::' . ( _f($n)->{name} // '_' ) ] if $op eq 'LocalAlias';
     my @t = $op eq 'Assign' ? ( _f($n)->{record} ? () : $n->{inputs}->@[ 0 .. ( _f($n)->{targets} // 1 ) - 1 ] )
           : $op =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] )
           # (memory versions that store nothing a value is read from)
@@ -259,6 +261,18 @@ sub arg_private ( $s, $g, $c, $i, $src = undef ) {
         # (a record of @_ reads it at entry: nothing between)
     }
     return undef;
+}
+
+# reaches($g, $from, $to) -> $to is on every way back along the memory chain
+# from $from (a version the walk made before it, with no merge between).
+sub reaches ( $s, $g, $from, $to ) {
+    for ( my ( $v, $n ) = ( $from, 0 ); defined $v && $n < 100000; $n++ ) {
+        return 1 if $v == $to;
+        my $vn = $s->node( $g, $v ) or return 0;
+        return 0 if $vn->{op} eq 'Phi' || $vn->{op} eq 'MemStart';
+        $v = $vn->{mem_in};
+    }
+    return 0;
 }
 
 # stored_between($g, $from, $to, $src) -> undef when no version on the memory
