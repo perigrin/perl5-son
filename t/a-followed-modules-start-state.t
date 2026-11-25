@@ -38,7 +38,12 @@ sub begin_writes ($json) {
     is begin_writes($json), ['K9::Mod::n=1'], 'a scalar only a sub of the module reads';
 }
 unlike compile('use K9::Mod; print "@K9::Mod::l $K9::Mod::r->[0] @{ $K9::Mod::h{k} }\n";'), qr/GAP/, 'arrays, hashes and references of plain values: lowered';
-like compile('use K9::Mod; print ref($K9::Mod::o), "\n";'), qr/GAP: a followed module's package variable its file-level code set \(\$K9::Mod::o\)/, 'an object: refused';
+# (an object: its own module now -- a bless at file level is code beyond
+# plain data, named on the wire as the start-up's too; third final audit, N9)
+{   my $out = compile('use K9::ModObj; print ref($K9::ModObj::o), "\n";');
+    like $out, qr/GAP: a followed module's package variable its file-level code set \(\$K9::ModObj::o\)/, 'an object: refused';
+    like $out, qr/"start_up"\s*:\s*"GAP: a followed module's file-level code beyond plain `our` data \(K9::ModObj: bless\)/, '...and its start-up named on the wire';
+}
 {   my $json = compile( 'use K9::Mod; BEGIN { $K9::Mod::n = 5 } print "$K9::Mod::n\n";', '2>/dev/null' );
     is begin_writes($json), ['K9::Mod::n=5'], 'a BEGIN block that writes it: the state after it, after it';
 }

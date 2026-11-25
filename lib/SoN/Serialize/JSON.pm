@@ -743,7 +743,7 @@ sub _serialize_graph ($graph) {
 # -----------------------------------------------------------------------
 sub to_json ($named_graphs, $classes = undef, $data_section = undef,
              $phase_blocks = [], $modules = [], $graph_module = {}, $refused = {},
-             $dowarn = undef) {
+             $dowarn = undef, $start_up = undef) {
     my %methods;
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
@@ -786,6 +786,11 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     # A followed module's subs B::SoN refused, { name => "GAP: ..." }: a
     # consumer that reaches one refuses in the module's words. Absent: none.
     $data->{refused} = $refused if $refused && %$refused;
+    # WHAT RAN BEFORE THE MAIN LINE AND IS NOT ON THE WIRE (B::SoN's
+    # _start_up_refusal, audit 3, N9): "GAP: ...". A consumer that runs the
+    # program from this wire refuses it; one that loads the modules itself
+    # (the deparser's output does) need not.
+    $data->{start_up} = $start_up if defined $start_up;
 
     # PERL'S WARNING SWITCHES for the program, a fact of the whole run:
     # { on => -w or $^W, all_on => -W, all_off => -X }, each a boolean. A

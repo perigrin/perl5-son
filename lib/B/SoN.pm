@@ -53,6 +53,7 @@ our %LOADED_INC = %INC;
 # File::Glob, %! Errno, %+ and %- Tie::Hash::NamedCapture.
 our %BUILTIN_MODULE = map { $_ => 1 } qw(File::Glob Errno Tie::Hash::NamedCapture);
 our %REFUSED;    # { sub name => GAP } for every refused sub, the program's and a followed module's
+our $START_UP;   # "GAP: ..." when what runs before the main line is not on the wire (_start_up_refusal)
 our $FOLLOWED;   # set at CHECK, before the walk can load anything (B::Op_private)
 sub _followed_modules {
     return $FOLLOWED if $FOLLOWED;
@@ -296,6 +297,7 @@ sub compile {
         local $FOLLOWED = _followed_modules();
         _recompile_preloaded($FOLLOWED);
         local %REFUSED;
+        local $START_UP;
         # At CHECK the program has compiled: these are its keys, imports and all.
         local %SoN::Serialize::JSON::STASH_KEYS =
             map { $_ => ( $LOADED_KEYS{$_} ? undef : 1 ) } keys %main::;
@@ -306,7 +308,7 @@ sub compile {
             print to_json( $graphs, $classes, _data_section(),
                 $phases,
                 [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
-                _graph_modules($graphs), \%REFUSED, \%switch );
+                _graph_modules($graphs), \%REFUSED, \%switch, $START_UP );
             # (tools/alias-fastpath.pl: how often the alias fast path held;
             # shortcut: a sub walked again inside one translation counts twice)
             print STDERR 'ALIAS_STATS ' . join( ' ', map { "$_=$SoN::FromOptree::ALIAS_STATS{$_}" } sort keys %SoN::FromOptree::ALIAS_STATS ) . "\n"
@@ -338,8 +340,139 @@ sub _translate_program {
     my ($filter) = @_;
     my ( $graphs, $classes ) = _discover_and_translate($filter);
     my $phases = _phase_blocks();
+    _start_up_refusal( $graphs, $phases );    # (before the start state joins the BEGIN blocks)
     _module_start_state( $graphs, $phases );
     return ( $graphs, $classes, $phases );
+}
+
+# _start_up_refusal(\%graphs, \@phase_blocks) -- WHAT RUNS BEFORE THE MAIN
+# LINE AND IS NOT ON THE WIRE refuses the program, by name (third final audit,
+# N9): the GAP goes on the wire as `start_up`. The wire starts the main
+# line from the program's BEGIN and END blocks and a followed module's
+# package data as it stood at CHECK (_module_start_state). That is exact
+# for plain data and nothing else:
+#
+#   - an INIT or CHECK block, of the program or a followed module, and a
+#     followed module's END block: they run, and are not on the wire;
+#   - a followed module's file-level code with an effect of its own --
+#     output, a die or an exit, a store into another package's variable --
+#     or an import of its own that stores into another package: whether or
+#     not the program reads the module, it ran at `use` time;
+#   - a followed module the wire reads (a sub on it, a variable a graph
+#     names) whose file-level code is anything beyond plain `our`
+#     assignments of literals: a file lexical its subs close over, a
+#     reference two variables share, state built by code (B::SoN::StartUp
+#     compiles the file again to see its main line, which perl has freed);
+#   - a BEGIN block of the program that calls a followed module's sub: it
+#     runs before the start state the wire sets.
+sub _start_up_refusal {
+    my ( $graphs, $phases ) = @_;
+    return unless $graphs->{'main::__PROGRAM__'};
+    my $mods  = _followed_modules();
+    my %file  = map { $mods->{$_} => $_ } keys %$mods;
+    my $prog  = _compilation_file();
+    my $why;
+    BLOCK: for my $p ( [ 'INIT', B::init_av() ], [ 'CHECK', B::check_av() ], [ 'END', B::end_av() ] ) {
+        my ( $kind, $av ) = @$p;
+        for my $cv ( ref($av) && $av->isa('B::AV') ? $av->ARRAY : () ) {
+            my $f = eval { $cv->FILE } // next;
+            next unless $file{$f} || ( $kind ne 'END' && $f eq $prog );
+            $why = $file{$f} ? "a followed module's $kind block ($file{$f})" : "an $kind block of the program";
+            $why =~ s/\Aan CHECK/a CHECK/;
+            last BLOCK;
+        }
+    }
+    # (what the program reads of a module: a sub of it the program reaches
+    # by its calls, a variable a reached graph names)
+    my $gm = _graph_modules($graphs);
+    my %reads;
+    my @q = ( $graphs->{'main::__PROGRAM__'}, map { $_->[1] } @$phases );
+    my %seen;
+    while ( my $g = shift @q ) {
+        next if $seen{ Scalar::Util::refaddr($g) }++;
+        for my $n ( $g->nodes->@* ) {
+            next unless ref $n;
+            if ( $n->isa('SoN::IR::Node::EntryDef') ) {
+                my $pkg = eval { $n->package } // next;
+                $reads{$pkg} = 1 if $pkg ne 'main' && $mods->{$pkg};
+            }
+            elsif ( $n->isa('SoN::IR::Node::Call') && ( $n->dispatch_kind // '' ) ne 'builtin' ) {
+                my $name = $n->name // next;
+                my @hit  = grep { $_ eq $name || /::\Q$name\E\z/ } keys %$graphs;
+                for my $h (@hit) { $reads{ $gm->{$h} } = 1 if defined $gm->{$h}; push @q, $graphs->{$h} }
+            }
+        }
+    }
+    no strict 'refs';
+    for my $m ( sort keys %$mods ) {
+        last if $why;
+        my $f = $mods->{$m};
+        next unless defined $f && -f $f && $f =~ /\.pm\z/;
+        my @seen = _start_up_of($f);
+        my ($effect) = grep { /\Aeffect / } @seen;
+        my ($code)   = grep { /\Acode / } @seen;
+        $why = "a followed module's file-level code ($m: " . ( $effect =~ s/\Aeffect //r ) . ')' if $effect;
+        $why //= "a followed module's file-level code beyond plain `our` data ($m: " . ( $code =~ s/\Acode //r ) . ')'
+            if $code && $reads{$m};
+        # (its own import: a store into another package, a call's caller's)
+        for my $sub (qw(import unimport)) {
+            last if $why;
+            my $cv = eval { B::svref_2object( \&{"${m}::$sub"} ) } or next;
+            next unless $$cv && !$cv->isa('B::SPECIAL') && ( eval { $cv->FILE } // '' ) eq $f && ${ $cv->ROOT };
+            $why = "the $sub of a followed module ($m) storing into another package"
+                if grep { $_->[0] eq 'store' && $_->[1] ne $m } _foreign_stores($cv);
+        }
+    }
+    unless ($why) {
+        for my $b ( grep { $_->[0] eq 'BEGIN' } @$phases ) {
+            for my $n ( $b->[1]->nodes->@* ) {
+                next unless ref($n) && $n->isa('SoN::IR::Node::Call') && ( $n->dispatch_kind // '' ) eq 'direct';
+                my ( $pkg, $sub ) = ( $n->name // '' ) =~ /\A(.+)::(\w+)\z/ or next;
+                next if $sub =~ /\A(?:un)?import\z/ || !$mods->{$pkg};
+                $why = "a BEGIN block of the program calling a followed module's sub ($pkg\::$sub)";
+                last;
+            }
+            last if $why;
+        }
+    }
+    return unless $why;
+    # (ON THE WIRE, not a skipped graph: a consumer that runs the program
+    # from the wire refuses it; the deparser's output `use`s the modules, and
+    # perl runs them)
+    $START_UP = "GAP: $why runs before the main line and is not on the wire -- not yet lowered";
+    return;
+}
+
+# _start_up_of($file) -> what a followed module's file-level code does beyond
+# plain package data (B::SoN::StartUp's lines), compiled again in a child.
+sub _start_up_of {
+    my ($file) = @_;
+    state %memo;
+    return $memo{$file}->@* if $memo{$file};
+    local $ENV{PERL5LIB} = join ':', grep { !ref } @INC;
+    my $out = qx{"$^X" -MO=-q,SoN::StartUp "$file" 2>/dev/null};
+    return ( $memo{$file} = [ map { s/\ASTARTUP //r } grep { /\ASTARTUP / } split /\n/, $out // '' ] )->@*;
+}
+
+# _foreign_stores($cv) -> [ 'store', package ] for each package scalar,
+# array or hash $cv's ops store by name.
+sub _foreign_stores {
+    my ($cv) = @_;
+    my @out;
+    my @q = ( $cv->ROOT );
+    while ( my $o = shift @q ) {
+        next unless ref($o) && $$o;
+        if ( $o->name =~ /\A(?:gv|gvsv)\z/ ) {
+            my $gv = eval { $o->isa('B::PADOP') ? ( $cv->PADLIST->ARRAYelt(1)->ARRAY )[ $o->padix ] : $o->gv };
+            # (its place: the ex-rv2sv over a gvsv, the rv2Xv over a gv)
+            my $place = eval { $o->parent };
+            $place = $o if $o->name eq 'gvsv' && !( $place && $$place && $place->name eq 'null' );
+            push @out, [ 'store', eval { $gv->STASH->NAME } // '' ]
+                if $gv && $place && $$place && ( ( $o->flags | $place->flags ) & B::OPf_MOD() );
+        }
+        if ( $o->flags & B::OPf_KIDS() ) { for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { push @q, $k } }
+    }
+    return @out;
 }
 
 # _module_start_state(\%graphs, \@phase_blocks) -- A FOLLOWED MODULE'S FILE RAN
