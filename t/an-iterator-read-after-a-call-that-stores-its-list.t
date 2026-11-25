@@ -20,10 +20,12 @@ sub compile ($src) {
 my $call_list = qr/GAP: a foreach, map or grep over what a call returns as aliases/;
 like compile( $_->[0] ), $_->[1], "refused: $_->[0]" for
     [ 'my @a=(3,1); sub z { $a[0]=7 } for my $x (sort @a) { z(); print $x } print "\n";', $call_list ],
-    # (a code value the body calls may store anything: no proof -- it was
-    # lowered by a shortcut that did not count such a call)
-    [ 'my $v=1; my @subs=(sub { $v+=1 }, sub { $v*=3 }); for my $s (@subs, reverse @subs) { $s->() } print "$v\n";', $call_list ];
+    # (a code value the body calls may store anything -- but not a `my` array
+    # of this sub that no reference or closure reaches: refused where one does)
+    [ 'my @s=(1,2); my $c = sub { $s[0] = 9 }; my $t=""; for my $x (reverse @s) { $c->(); $t .= $x } print "$t\n";', $call_list ];
 unlike compile($_), qr/GAP/, "lowered: $_" for
+    # (the code values close over $v, not @subs: nothing they run can store it)
+    'my $v=1; my @subs=(sub { $v+=1 }, sub { $v*=3 }); for my $s (@subs, reverse @subs) { $s->() } print "$v\n";',
     # (values %h: each value aliased by chalk -- HSliceAlias by its keys)
     'my %h=(a=>1); sub z { $h{a}=7 } for my $x (values %h) { z(); print $x } print "\n";',
     'my @a=(1,2); sub z { $a[1]=7 } print map { z(); $_ } @a; print "\n";',
