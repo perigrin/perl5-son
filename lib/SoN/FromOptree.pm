@@ -763,6 +763,10 @@ class SoN::FromOptree 0.01 {
     # body is walked: SoN::IR::NodeFactory builds the iterator's PadAccess as
     # that element (aliases-as-places). Local to each CV's walk.
     our %ITER_ELEMENT;
+    # A LOOP HEADER Phi's KEY: refaddr => [ key, Phi ], for the scope key it
+    # carries (audit 2, K8: a foreach alias set to another variable's Phi was
+    # taken for its own and not stored). Local to each CV's walk.
+    our %LOOP_PHI_KEY;
     # THE ELEMENT AN op= STORED, op address => its Subscript place, for an
     # op= whose target is that op= (design 3). Local to each CV's walk.
     our %ASSIGN_LVALUE;
@@ -2969,7 +2973,7 @@ class SoN::FromOptree 0.01 {
         local $ADDR_TAKEN   = $ctx->{addr_taken};
         local $CELLS        = { map { $_ => $ctx->{$_} } qw(cells cell_params cells_written) };
         local %PAD_SYMBOL   = _pad_aggregate_renames($cv)->%*;
-        local %ITER_ELEMENT = ();
+        local %ITER_ELEMENT = (); local %LOOP_PHI_KEY = ();
         local %ASSIGN_LVALUE = ();
         local %SHARED_SYMBOL = _shared_scalar_renames($cv, $ctx->{is_program})->%*;
         # A SLOT ANOTHER SUB SHARES is written behind this graph's back, so
@@ -15610,6 +15614,7 @@ class SoN::FromOptree 0.01 {
                 && !$container->( $pre_scope->{$_} )
             } keys %$pre_scope ) {
             $phis{$k} = _make_loop_phi($factory, $loop_node, $pre_scope->{$k}, $unstamped->{$k});
+            $LOOP_PHI_KEY{ refaddr $phis{$k} } = [ $k, $phis{$k} ];
             $sim->define($k, $phis{$k});
         }
         return \%phis;
@@ -17868,8 +17873,11 @@ class SoN::FromOptree 0.01 {
                 # (A LOOP'S PHI, at its header or bound at its exit: its init
                 # was stored before the loop and its back value at the write
                 # in the body. Stored at the exit, it was placed in the body.)
+                # (ITS OWN Phi, that is: another variable's, `($x, $y) = ($y,
+                # $x)` in the pass, is a value to store -- audit 2, K8)
                 return if $new->isa('SoN::IR::Node::Phi')
-                    && $new->region->isa('SoN::IR::Node::Loop');
+                    && $new->region->isa('SoN::IR::Node::Loop')
+                    && do { my $k = $LOOP_PHI_KEY{ refaddr $new }; !$k || $k->[1] != $new || $k->[0] eq $x_targ };
                 my $lvalue = $factory->make('Subscript', kind => 'array',
                     inputs => [$array, $i_phi]);
                 _place($s, $factory->make('Assign', inputs => [$lvalue, $new]));
@@ -17990,6 +17998,7 @@ class SoN::FromOptree 0.01 {
                 my $slot = $array->v1_inputs->[0]->targ;
                 $phis{$slot} = _make_loop_phi($factory, $loop_node, $pre_scope->{$slot})
                     if defined $slot && !$phis{$slot} && defined $pre_scope->{$slot};
+                $LOOP_PHI_KEY{ refaddr $phis{$slot} } = [ $slot, $phis{$slot} ] if defined $slot && $phis{$slot};
                 $sim->define($slot, $new_val) if defined $slot;
             }
             elsif (defined $new_val && $new_val != $elem && !$store_at_write) {
