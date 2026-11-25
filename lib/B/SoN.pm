@@ -953,18 +953,12 @@ sub _resolve_glob_slots {
             # `Scalar` and `Ref` sit ABOVE the four keys, missed, and the whole
             # graph was deleted. Asked of the lattice instead -- exactly one ref
             # kind under the stamp resolves, more than one does not.
-            # `is_subtype_of` IS STRICT: `ArrayRef` is not a subtype of
-            # itself, so a query over it alone returns ZERO for every leaf and
-            # nothing resolved. Measured -- `kinds under ArrayRef: [] count=0`.
-            # The design note said "exactly one kind under the stamp" and I
-            # wrote the query without checking the method's strictness, which
-            # made every single-slot bind fall through to `*`.
-            #
-            # The stamp counts as its own kind, hence the `eq` arm.
+            # The stamp counts as its own kind: `is_subtype_of` is reflexive
+            # (it was strict until 2026-11-25, when an `eq` arm here made
+            # `ArrayRef` resolve to itself).
             my @kinds = grep {
-                $_ eq $type
-                    || SoN::IR::Stamp->new( type => $_ )
-                           ->is_subtype_of( SoN::IR::Stamp->new( type => $type ) )
+                SoN::IR::Stamp->new( type => $_ )
+                    ->is_subtype_of( SoN::IR::Stamp->new( type => $type ) )
             } qw(ArrayRef HashRef CodeRef ScalarRef GlobRef);
             next if @kinds != 1;
 

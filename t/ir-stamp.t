@@ -31,6 +31,16 @@ subtest 'Subtyping: Int < Num < Str < Scalar' => sub {
     ok(!$scalar->is_subtype_of($str), 'Scalar is not < Str');
 };
 
+# REFLEXIVE, as chalk's is_subtype is (t/lattice-agrees-with-chalk.t): every
+# type is a subtype of itself, None and Unknown and a Maybe included. A caller
+# that wants "strictly below" says `ne` itself.
+subtest 'is_subtype_of is reflexive' => sub {
+    for my $t (sort( keys SoN::IR::Stamp::lattice_parents()->%* ), 'Maybe[Int]') {
+        my $s = SoN::IR::Stamp->new(type => $t);
+        ok($s->is_subtype_of(SoN::IR::Stamp->new(type => $t)), "$t <: $t");
+    }
+};
+
 subtest 'DualVar is in Scalar but NOT in Str or Num' => sub {
     my $dualvar = SoN::IR::Stamp->new(type => 'DualVar');
     my $scalar  = SoN::IR::Stamp->new(type => 'Scalar');
