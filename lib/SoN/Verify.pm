@@ -191,6 +191,15 @@ sub _alias_private ( $wire, $res ) {
                     && $cnt->{op} eq 'Count' && ( $cnt->{inputs}[0] // -1 ) == ( $r->{inputs}[0] // -2 )
             } grep { $_->{op} eq 'If' && ( $_->{control_in} // -1 ) == $loop->{id} } values $by{$g}->%*;
             my $key = $src->( $g, $r ) // next;
+            # (A `my` ARRAY OF THIS SUB'S OWN that it hands nothing a call
+            # could reach it by -- no reference, not a call's argument -- no
+            # call can store: only the graph's own stores are asked of it, as
+            # the producer's _list_is_private answers)
+            my $list = $by{$g}{ $r->{inputs}[0] // '' } // {};
+            my $private = $list->{op} =~ /^(?:ArrayLiteral|HashLiteral)$/ && defined _fields($list)->{symbol}
+                && _fields($list)->{symbol} !~ /::/ && !_fields($list)->{shared}
+                && !grep { $_->{op} eq 'Ref' || $_->{op} eq 'Call' && ( _fields($_)->{dispatch_kind} // '' ) ne 'builtin' }
+                       ( $cons{ $list->{id} } // [] )->@*;
             # (the uses that run: through pure values to a node on a chain)
             my ( @anchor, %seen );
             my @q = ( $cons{ $r->{id} } // [] )->@*;
@@ -209,7 +218,8 @@ sub _alias_private ( $wire, $res ) {
                 while ( defined( my $v = shift @c ) ) {
                     next if $cs{$v}++ || $v == $loop->{id};
                     my $vn = $by{$g}{$v} or next;
-                    if ( $stores->( $g, $v, $key ) || $stores->( $g, $v, $key =~ s/\Aelem://r ) ) {
+                    my $call = $vn->{op} eq 'Call' && ( _fields($vn)->{dispatch_kind} // '' ) ne 'builtin';
+                    if ( !( $private && $call ) && ( $stores->( $g, $v, $key ) || $stores->( $g, $v, $key =~ s/\Aelem://r ) ) ) {
                         push $res->{violations}->@*, { graph => $g, node => $r->{id}, op => 'Subscript', rule => 'alias-not-private',
                             detail => "the per-pass item of $key is used by $u->{op}#$u->{id} after $vn->{op}#$v may store it" };
                         last ANCHOR;
