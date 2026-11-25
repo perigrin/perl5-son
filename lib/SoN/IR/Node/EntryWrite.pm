@@ -47,6 +47,9 @@ class SoN::IR::Node::EntryWrite :isa(SoN::IR::Value) {
     my $write_counter = 0;
     field $write_id :reader;
     field $binds :param :reader = 0;
+    # A `local` OF THE NAME (design B, section 4): it binds the name to a new
+    # scalar holding the value -- the scalar it was bound to stays as it was.
+    field $local :param :reader = 0;
 
     ADJUST { $write_id = $write_counter++; }
 

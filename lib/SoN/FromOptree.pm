@@ -6148,13 +6148,33 @@ class SoN::FromOptree 0.01 {
         # value instead is the promotion pass's to prove, over the whole wire
         # (SoN::Promote, P1) -- not this walk's, by how a store is spelled.
         local $ARGS_ARE_PLACES = 1;
-        # A PLACE NAMES THE VARIABLE'S STORAGE, NOT THE SCALAR IN IT: under a
-        # `local` of that variable the place reaches the new scalar, where
-        # perl's alias keeps the saved one (audit 2, K2: `local $x = 5;
-        # $_[0] = 7` printed 71 for 57). Refused until a place is the scalar.
-        die "GAP: a variable handed to a sub as its \$_[N] where that sub localizes it is not yet lowered -- "
-          . "perl's alias keeps the saved scalar, and the wire's place is the name's storage\n"
-            if SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, $ARGS_ARE_PLACES);
+        # (A PLACE IS THE SCALAR, NOT THE NAME -- design B, section 4: a
+        # `local` of the variable in the callee binds the name to a new scalar
+        # and the place keeps the old one, as perl's alias does; audit 2, K2.)
+        # A PLACE OF A PACKAGE SCALAR A LATER ARGUMENT LOCALIZES (`f($g, local
+        # $g = 5)`): the place is taken where the call is, after the local --
+        # perl's is the scalar before it (audit 3, N8 ye54). Refused by name.
+        {
+            my @args = _entersub_args_and_invocant($op);
+            my %before;
+            for my $a (@args) {
+                for my $o ( _subtree_ops($a) ) {
+                    my $g = $o->name eq 'gvsv' ? $o : $o->name eq 'rv2sv' && ( $o->flags & 4 ) && _strip_null( $o->first )->name eq 'gv' ? _strip_null( $o->first ) : undef;
+                    next unless $g;
+                    my $gv = _op_gv($cv, $g) or next;
+                    my $k = $gv->STASH->NAME . '::' . $gv->NAME;
+                    die "GAP: a package scalar handed to a sub where a later argument localizes it is not yet lowered --"
+                      . " perl's alias is the scalar before the local\n" if ( $o->private & 128 ) && $before{$k};
+                    $before{$k} = 1 unless $o->private & 128;
+                }
+            }
+        }
+        # AN ELEMENT'S `local` is not yet a new scalar: chalk's element alias is
+        # the aggregate and the key, so under a `local $h{k}` in the callee it
+        # reaches the new value, where perl's keeps the saved one (z/qb05).
+        die "GAP: an element handed to a sub as its \$_[N] where that sub localizes it is not yet lowered -- "
+          . "perl's alias keeps the saved element, and chalk's element alias is the aggregate and key\n"
+            if SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, 1, 1);
         $ALIAS_STATS{ 'call-' . ( $ARGS_ARE_PLACES ? 'place' : 'value' ) }++
             if grep { _strip_null($_)->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|aelemfast(?:_lex)?)\z/ } _entersub_args_and_invocant($op);
         _handle_entersub_call($cv, $op, $sim, $factory, $ctx);
@@ -9258,12 +9278,44 @@ class SoN::FromOptree 0.01 {
                     # it to: a scalar some sub writes is read from memory
                     # (_entry_live_value), or `b(); { local $g = 2 }` put back
                     # what $g held before b() changed it.
+                    # A `local` OF A NAMED SCALAR GIVES THE NAME A NEW SCALAR
+                    # (design B, section 4): the save is the scalar it was bound
+                    # to (`\$g` there), the local binds a new one (undef, which
+                    # the assignment after it stores into), and every way out
+                    # binds the saved one back. An alias or a reference taken
+                    # before keeps the old scalar: `sub f { local $x = 5;
+                    # $_[0] = 7 } f($x)` stores 7 where perl does (K2). Perl's
+                    # punctuation variables keep the value save and restore.
+                    # (A `local` IN AN ARM OF ITS OWN STATEMENT -- `local $g = 5
+                    # if $c`, `$c and local $g` -- is restored at the enclosing
+                    # block's end on the path it ran on only: not yet lowered;
+                    # audit 3, N8 yj33 yq19 yq21.)
+                    {
+                        my $c = $op;
+                        for ( my $p = eval { $op->parent }; $p && $$p; ( $c, $p ) = ( $p, eval { $p->parent } ) ) {
+                            last if $p->name =~ /\A(?:lineseq|leave|leaveloop|leavesub|scope|leavetry|leaveeval)\z/;
+                            die "GAP: a `local` in an arm of its own statement (`local \$g = 1 if \$c`, `\$c and local \$g`) is not yet"
+                              . " lowered -- perl restores it at the block's end only on the path it ran on\n"
+                                if $p->name =~ /\A(?:cond_expr|and|or|dor|xor)\z/ && ${ $p->first } != $$c;
+                        }
+                    }
+                    if ( $gv->NAME =~ /\A[A-Za-z_]\w*\z/ && defined $sim->memory ) {
+                        my $prior = $factory->make('EntryDef', package => $gv->STASH->NAME, sigil => '$',
+                            symbol => $gv->NAME, mem => $sim->memory);
+                        push $ctx->{local_saves}->@*,
+                            { key => $key, node => $factory->make('Ref', inputs => [$prior]), target => $entry, glob_bind => 1 };
+                        _entry_store($factory, $sim, $entry,
+                            $factory->make('Constant', value => undef, const_type => 'undef', stamp => SoN::IR::Stamp->new(type => 'Undef')),
+                            0, 1);
+                    }
+                    else {
                     my $prior = _entry_live_value($factory, $sim, $entry);
                     $prior = undef if $prior == $entry;   # (no memory to read: nothing to put back)
                     push $ctx->{local_saves}->@*,
                         { key    => $key,
                           node   => $prior,
                           target => $entry };
+                    }
                 }
 
                 # SIGIL-QUALIFIED: `$g` and `@g` are different variables
@@ -10757,6 +10809,10 @@ class SoN::FromOptree 0.01 {
         # IT ADVANCES MEMORY, which is the difference from Exists. A later read
         # threads to the Delete rather than past it, so the removal is observed.
         if ($name eq 'delete') {
+            # `delete local $h{k}`: deleted now, put back at the block's end --
+            # the restore is not modelled (audit 3, N8 yj41): refused by name.
+            die "GAP: `delete local` is not yet lowered -- the element is put back at the block's end\n"
+                if $op->private & 128;   # OPpLVAL_INTRO
             # A SLICE DELETES MANY KEYS AT ONCE and its operands arrive as a
             # list, not as one key -- a different arity, and popping two would
             # take one key and whatever happened to sit under it. Refused rather
@@ -24826,12 +24882,12 @@ class SoN::FromOptree 0.01 {
         $sim->set_memory($factory->make_unique('Phi', inputs => [@memory], region => $region, memory => 1));
     }
 
-    sub _entry_store ($factory, $sim, $target, $value, $binds = 0) {
+    sub _entry_store ($factory, $sim, $target, $value, $binds = 0, $local = 0) {
         return unless $target
             && $target->isa('SoN::IR::Node::EntryDef')
             && defined $sim->memory;
         my $write = $factory->${ \( $EXC_EDGE ? 'make_unique' : 'make' ) }('EntryWrite',
-            binds  => $binds,
+            binds  => $binds, local => $local,
             inputs => [$target, $value], mem => $sim->memory);
         _place($sim, $write);
         return;
@@ -25774,6 +25830,18 @@ class SoN::FromOptree 0.01 {
                 elsif ( defined $mem ) { $new = _at_memory( $factory, $d->{lv}, $mem ) }
             }
             elsif ( defined $mem && refaddr( $old->mem_in ) != refaddr($mem) ) {
+                # (A `local` of it between: perl's operand is the scalar it
+                # pushed, the name's is a new one -- `print $g, local $g = 5`,
+                # audit 3 N8. The wire's read is by name: refused.)
+                if ( $old isa SoN::IR::Node::EntryDef ) {
+                    for ( my $m = $mem; blessed($m) && refaddr($m) != refaddr( $old->mem_in ); $m = $m->can('mem_in') ? $m->mem_in : undef ) {
+                        die "GAP: a scalar operand read by alias where a later operand localizes it is not yet lowered --"
+                          . " perl reads the scalar it pushed, the name is bound to a new one\n"
+                            if $m isa SoN::IR::Node::EntryWrite && $m->local && $m->v1_inputs->[0]->symbol eq $old->symbol
+                            && $m->v1_inputs->[0]->package eq $old->package;
+                        last if $m->operation eq 'Phi';
+                    }
+                }
                 $new = _at_memory( $factory, $old, $mem );
                 if ( $new && $d->{how} eq 'element' ) {
                     # (perl pushed the element only if it existed: else undef)

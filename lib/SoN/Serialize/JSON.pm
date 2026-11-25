@@ -278,7 +278,8 @@ sub _extract_fields ($node, $id_remap) {
     # reference. Emitted only when true, so an ordinary store is unchanged on
     # the wire.
     if ($op eq 'EntryWrite') {
-        return $node->binds ? { binds => JSON::PP::true } : undef;
+        return undef unless $node->binds || $node->local;
+        return { ( $node->binds ? ( binds => JSON::PP::true ) : () ), ( $node->local ? ( local => JSON::PP::true ) : () ) };
     }
     # WHEN THE LOOP'S BOUND IS EVALUATED -- see SoN::IR::Node::Loop. Emitted
     # only for the 'entry' form, so a consumer that does not know the field
