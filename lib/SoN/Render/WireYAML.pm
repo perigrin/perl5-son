@@ -23,11 +23,12 @@ use JSON::PP ();
 # index is the id and a reference is an index -- and the comment repeats it for
 # a reader. Each node is
 #
-#   [op, fields, inputs, control_in, stamp, mem_in, mem_out]
+#   [op, fields, inputs, control_in, stamp, mem_in, mem_out, mem_operand]
 #
 # with `~` where the wire has nothing and trailing `~`s dropped (mem_out is
-# `true` on a memory version: wire v2). A Region's `head` rides in its fields
-# map, which keeps every node to seven positions.
+# `true` on a memory version: wire v2; mem_operand `true` where the node was
+# built reading its mem_in as an operand). A Region's `head` rides in its
+# fields map, which keeps every node to eight positions.
 #
 # EVERY SCALAR KEEPS ITS WIRE TYPE. It is encoded as JSON first, so a number
 # stays a number and a string stays a string ("50" is not 50), and a string is
@@ -71,6 +72,7 @@ sub _graph ($name, $g) {
             _scalar($n->{stamp}),
             _scalar($n->{mem_in}),
             ($n->{mem_out} ? 'true' : '~'),
+            ($n->{mem_operand} ? 'true' : '~'),
         );
         pop @parts while @parts > 1 && $parts[-1] eq '~';
         push @lines, [ '  [' . join(', ', @parts) . ']', $n->{id} ];

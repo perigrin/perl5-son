@@ -24,7 +24,7 @@ sub from_yaml ($g) {
     my @nodes;
     my $nodes = $g->{nodes} // [];
     for my $id (0 .. $#$nodes) {
-        my ($op, $f, $in, $ctl, $stamp, $mem_in, $mem_out) = $nodes->[$id]->@*;
+        my ($op, $f, $in, $ctl, $stamp, $mem_in, $mem_out, $mem_operand) = $nodes->[$id]->@*;
         my %f = %{ $f // {} };
         my $head = delete $f{head};
         push @nodes, {
@@ -34,6 +34,7 @@ sub from_yaml ($g) {
             (defined $stamp ? (stamp => $stamp)      : ()),
             (defined $mem_in ? (mem_in => $mem_in)   : ()),
             ($mem_out      ? (mem_out => JSON::PP::true) : ()),
+            ($mem_operand  ? (mem_operand => JSON::PP::true) : ()),
             (defined $head ? (head => $head)         : ()),
         };
     }
