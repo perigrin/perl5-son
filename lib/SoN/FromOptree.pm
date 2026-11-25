@@ -12405,6 +12405,14 @@ class SoN::FromOptree 0.01 {
         # than a stray, dead Assign node. Real list-assigns with values on the
         # stack fall through to the generic dispatch below.
         if ($name eq 'aassign') {
+            # A TARGET THAT IS A STORE (`($x = $y) = 7`) is that store's
+            # target in perl; the walk took its value and stored into the
+            # value -- a record of nothing, the store lost (audit 3, N6).
+            for my $t ( grep { $_->name ne 'pushmark' } _list_kids( $op->last ) ) {
+                die "GAP: an assignment, op= or increment used as the target of a list assignment is not"
+                  . " yet lowered -- its store would be lost\n"
+                    if _returns_its_target($t);
+            }
             # The LHS list is the most recent mark; the RHS list (if present) is
             # the mark before it. Perl lays out aassign as
             # pushmark RHS... pushmark LHS..., so popping to the last mark yields
@@ -16960,11 +16968,13 @@ class SoN::FromOptree 0.01 {
             for (my $k = $list->first->sibling; $k && $$k; $k = $k->sibling) { push @items, $k }
             $body = $op->sibling;
             $iter = $op->targ ? [ 'pad', $op->targ ]
-                : do { my ($gv) = grep { $_->name eq 'gv' } @kids; $gv ? [ 'gv', _op_gv($cv, $gv)->NAME ] : undef };
+                : $op->private & 8 ? [ 'gv', '_', 'g$main::_' ]    # (OPpITER_DEF: `$_`)
+                : do { my ($gv) = grep { $_->name eq 'gv' } @kids; my $g = $gv && _op_gv($cv, $gv);
+                       $g ? [ 'gv', $g->NAME, 'g' . _stash_name_key( '$', $g->STASH->NAME, $g->NAME ) ] : undef };
         }
         elsif ( $name eq 'mapstart' || $name eq 'grepstart' ) {
             ( undef, $body, @items ) = @kids;
-            $iter = [ 'gv', '_' ];
+            $iter = [ 'gv', '_', 'g$main::_' ];
         }
         else {
             @items = grep { my $t = _strip_null($_); $t->name =~ /\A(?:aslice|hslice)\z/ } _entersub_args_and_invocant($op);
@@ -16992,6 +17002,13 @@ class SoN::FromOptree 0.01 {
                 $stores = 1 if $$p && $p->name eq 'entersub';   # (a call may store it through $_[N])
                 $stores = 1 if $$p && $p->name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/;
             }
+            # ANY OP THAT STORES IT, by the one table of stores
+            # (ModSets::_stores): s///, tr///, chomp, `.=`, a list assign --
+            # not only the spellings above (audit 3, N6: `s/a/z/ for ($x .=
+            # "a")` stored into the list's value and was lost).
+            my $key = $iter->[0] eq 'pad' ? "p$iter->[1]" : $iter->[2];
+            $stores ||= grep { SoN::FromOptree::ModSets::stores_var( $cv, $_, $key ) } _subtree_ops($body)
+                if defined $key;
         }
         # (not a stash, `$::{"P::"}`: Carp aliases an entry it has just
         # checked exists -- shortcut: an `exists` guard is not proved, upgrade
@@ -17009,7 +17026,7 @@ class SoN::FromOptree 0.01 {
             # `for ($x += 5) { $_++ }` left 6 for perl's 7, audit 2, K4)
             return "GAP: an assignment as an item of a foreach, map or grep list whose body may write"
                  . " its alias is not yet lowered -- the store would be lost\n"
-                if $stores && ( _arg_place_target($t) || $n eq 'sassign' || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) ) );
+                if $stores && _returns_its_target($t);
             # (a package scalar or an element is its place: _alias_list_items)
             my $slice = $n =~ /\A(?:aslice|hslice)\z/;
             next unless $slice;
@@ -17131,6 +17148,21 @@ class SoN::FromOptree 0.01 {
             if B::class($o) eq 'BINOP' && ( $o->flags & 64 ) && $n !~ /\A(?:sassign|sort)\z/;
         return undef;
     }
+    # _returns_its_target($op) -> true for a store whose VALUE IS ITS TARGET,
+    # perl's lvalue and not a copy: an assignment (`$x = $y`, a list one), an
+    # op= (`$x .= "b"`, `x=`, a fused TARGMY op), a pre-increment. Where such
+    # an op stands for a place -- an assignment's target, an alias list's item
+    # -- the store into it is a store into its target (audit 3, N6: `($x =
+    # $y) = 7`, `for (++$x) { $_++ }`); the sinks that cannot make it so refuse.
+    sub _returns_its_target ($o) {
+        $o = _strip_null($o);
+        my $n = $o->name;
+        return 1 if defined _assign_target($o);
+        return 1 if $n =~ /\A(?:i_)?pre(?:inc|dec)\z/;
+        return 1 if $n eq 'multiconcat' && ( $o->flags & B::OPf_STACKED );
+        return 1 if $n eq 'aassign';
+        return 0;
+    }
     # _store_through_ternary($sim, $factory, $cond_expr, $target, $new_of) ->
     # true when `($c ? $a : $b) OP ...` stored: each arm a `my` scalar the walk
     # binds as a value, each rebound to `$c ? NEW : OLD` -- the merge an If
@@ -17192,6 +17224,14 @@ class SoN::FromOptree 0.01 {
     sub _strip_null_up ($o) {
         $o = $o->parent while $$o && $o->name eq 'null' && ${ $o->parent };
         return $o;
+    }
+    # _list_kids($op) -> the items of a list op, through null and list ops.
+    sub _list_kids ($o) {
+        return () unless $o && $$o;
+        return ($o) unless $o->name =~ /\A(?:null|list)\z/ && ( $o->flags & B::OPf_KIDS );
+        my @k;
+        for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { push @k, $k->name =~ /\A(?:null|list)\z/ && ( $k->flags & B::OPf_KIDS ) && $k->first->name eq 'pushmark' ? _list_kids($k) : $k }
+        return @k;
     }
     sub _strip_null ($o) {
         $o = $o->first while $o && $$o && $o->name eq 'null' && ( $o->flags & 4 ) && ${ $o->first } && !${ $o->first->sibling };

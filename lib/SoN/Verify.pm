@@ -337,6 +337,11 @@ sub _describe ( $n, $by ) {
 #   loop                 V11 (stage 9a): a Loop has one or two inputs
 #                        and one control successor, and no Proj takes it; a
 #                        Phi at it has one input per input of it.
+#   store-into-value     V13 (audit 3): an Assign whose target is a value, not
+#                        a place: a store the walk had no rule for, dropped.
+#   effect-floating      V2b: an effect on no control chain -- a Print, a
+#                        builtin the EffectTable pins, a division that may
+#                        fault, and (audit 3) a sub call, a store's target too.
 sub _graph_v2 ( $name, $g, $res ) {
     my @nodes = ( $g->{nodes} // [] )->@*;
     my %by    = map { $_->{id} => $_ } @nodes;
@@ -423,6 +428,21 @@ sub _graph_v2 ( $name, $g, $res ) {
         $d < 8 && grep { $_->[0]{op} eq 'Phi' || $_->[0]{op} =~ /^(?:TernaryExpr|And|Or|DefinedOr)$/ && $_->[1] > 0
                          || $_->[0]{op} eq 'Coerce' && $in_arm->( $_->[0], $d + 1 ) } ( $cons{ $n->{id} } // [] )->@*;
     };
+    # (V13) A STORE IS INTO A PLACE. An Assign's target is a variable, an
+    # element, a field, a cell, a slice, an aggregate, a dereference, a ?: of
+    # places, a call (an :lvalue sub, pos) or undef (a list assign's skip): never a value.
+    # A store whose target is a value was one the walk had no rule for -- the
+    # store dropped, the wire still well formed (audit 3, N6: `($x = $y) = 7`
+    # was a record of 7 into the Constant 2).
+    for my $n ( grep { $_->{op} eq 'Assign' } @nodes ) {
+        for my $t ( grep { defined && !ref } ( $n->{inputs} // [] )->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ] ) {
+            my $x = $by{$t} or next;
+            next if $x->{op} =~ /\A(?:PadAccess|EntryDef|FieldAccess|MakeCell|CellRead|Subscript|Slice|ArrayLiteral|HashLiteral|ArgsSource|PostfixDeref|Call|TernaryExpr|Phi|Coerce)\z/;
+            next if $x->{op} eq 'Constant' && ( _fields($x)->{const_type} // '' ) eq 'undef';
+            $bad->( $n, 'store-into-value', "its target is a $x->{op}" );
+        }
+    }
+
     # A SUB CALL RUNS CODE, a store's target too: `slot() = 42` calls the
     # :lvalue sub where the store stands (audit 3: corpus 398's floated, and
     # this rule asked only of builtins).
