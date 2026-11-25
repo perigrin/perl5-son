@@ -299,7 +299,7 @@ sub compile {
         # At CHECK the program has compiled: these are its keys, imports and all.
         local %SoN::Serialize::JSON::STASH_KEYS =
             map { $_ => ( $LOADED_KEYS{$_} ? undef : 1 ) } keys %main::;
-        my ( $graphs, $classes, $phases ) = _translate_until_settled($filter);
+        my ( $graphs, $classes, $phases ) = _translate_program($filter);
 
         if ( $format eq 'json' ) {
             my $mods = _followed_modules();
@@ -323,34 +323,21 @@ sub compile {
     };
 }
 
-# _translate_until_settled($filter) -> ($graphs, $classes, $phase_blocks): the
-# whole wire, translated until no pass learns of a package scalar's writer.
+# _translate_program($filter) -> ($graphs, $classes, $phase_blocks): the
+# whole wire, translated once.
 #
 # WHICH PACKAGE SCALARS ARE WRITTEN decides how every graph reads them
 # (FromOptree's _package_scalars_written), and some writers are met only as
 # the walk goes: a class the program calls from a file that is not followed,
-# an ADJUST block. A graph translated before such a writer was read may have
-# forwarded a value the writer changes, so the pass is not the wire: it is
-# run again with what it learned, which only ever grows. One pass for nearly
-# every program; warnings are those of the pass that is kept.
-sub _translate_until_settled {
+# an ADJUST block. Until branch single-walk a graph translated before such a
+# writer was read sent this round the whole program again (the settle pass).
+# Now a scalar of a package the first scan did not read whole is taken as
+# written, and a writer of any other met late is refused by name
+# (_scan_run_set_cv): every sub is walked once (clause 3).
+sub _translate_program {
     my ($filter) = @_;
-    while (1) {
-        my $late = SoN::FromOptree::package_writes_found_late();
-        my ( @warned, $graphs, $classes, $phases );
-        %SoN::FromOptree::ALIAS_STATS = ();    # (counted again on a walk again)
-        my $ok = eval {
-            local $SIG{__WARN__} = sub { push @warned, @_ };
-            ( $graphs, $classes ) = _discover_and_translate($filter);
-            $phases = _phase_blocks();
-            1;
-        };
-        my $settled = SoN::FromOptree::package_writes_found_late() == $late;
-        if ( !$ok || $settled ) { warn $_ for @warned }
-        die $@ unless $ok;
-        return ( $graphs, $classes, $phases ) if $settled;
-        %REFUSED = ();
-    }
+    my ( $graphs, $classes ) = _discover_and_translate($filter);
+    return ( $graphs, $classes, _phase_blocks() );
 }
 
 # _phase_blocks() -- the program's own BEGIN and END blocks, in order, as
@@ -429,8 +416,8 @@ sub _discover_and_translate {
     %SoN::FromOptree::EVAL_ORDINAL = ();
     %SoN::FromOptree::REPLROOT_OF = ();
     $SoN::FromOptree::EVAL_SCANNED = 0;
-    # Evals are numbered from 1 in each pass (_translate_until_settled): a
-    # second pass over the program is the same wire, byte for byte.
+    # Evals are numbered from 1 in each compile: a program compiled twice in
+    # one process is the same wire, byte for byte.
     $SoN::FromOptree::EVAL_COUNT = 0;
     %SoN::FromOptree::QR_CODE_BODIES = ();
     %SoN::FromOptree::SORT_BODY_SEQ = ();

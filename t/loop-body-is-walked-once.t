@@ -100,7 +100,8 @@ sub program_walked_once ( $name, $src, $loops, %o ) {
         open my $g, '>', "$f.d.pl" or die $!;
         print $g $out;
         close $g;
-        is scalar qx{$^X '$f.d.pl' 2>&1}, scalar qx{$^X '$f' 2>&1}, 'and it prints what perl prints';
+        # (stdout, as tools/corpus-roundtrip.pl compares: the emission may warn)
+        is scalar qx{$^X '$f.d.pl' 2>/dev/null}, scalar qx{$^X '$f' 2>/dev/null}, 'and it prints what perl prints';
     };
 }
 
@@ -147,17 +148,45 @@ class K { field $r = [3, 4, 5, 6]; method s { my @x = grep { $_ > 3 } $r->@[0 ..
 print K->new->s, "\n";
 EOS
 
+# THREE SHAPES OF CHALK'S LIB the pre-scan first refused (its wires are the
+# ratchet's): an s/// in an arm, on an iterator it demotes, is stored in
+# place, not rebound (EmitHelpers::_repair_stale_merge); a name in an inner
+# foreach's list is aliased, not written (Actions::VariableList); a `last`
+# of an inner loop goes on round the outer one (Earley::_run_parse). Not
+# through the deparser: it prints `a b` for `z b`, ` 2 3` for `1 2 3`, and
+# refuses the third, at the base as here (the same wires).
+program_walked_once( 'an s/// in an arm, on the iterator', <<'EOS', 1, refused => 1 );
+sub g { 1 }
+sub f { my ($xs) = @_; my @fixed; my $fired = 0;
+  for my $line ($xs->@*) { if ($line =~ /a/) { g() unless $fired++; $line =~ s/a/z/ } push @fixed, $line }
+  return "@fixed" }
+print f(["a", "b"]), "\n";
+EOS
+program_walked_once( "a name in an inner foreach's list", <<'EOS', 2, refused => 1 );
+sub f { my @n; for my $val (1, [2, 3]) { for my $v (ref($val) eq 'ARRAY' ? $val->@* : $val) { push @n, $v } } "@n" }
+print f(), "\n";
+EOS
+program_walked_once( 'a last of an inner loop', <<'EOS', 3, refused => 1 );
+sub f { my $s = ''; for my $sp ([1, undef], [undef]) { my $all = 1;
+    for my $oh ($sp->@*) { last unless $all; for my $v ($oh) { if (defined $v) { $all = 0; last } } }
+    $s .= $all } $s }
+print f(), "\n";
+EOS
+
+# A PACKAGE SCALAR WRITTEN ONLY BY A CLASS FROM A FILE B::SoN DOES NOT FOLLOW
+# (p/w1lib4): the settle pass walked the program again for it.
+{
+    open my $fh, '<', 'docs/research/son-ir-audit-2026-11-19/probes/p/w1lib4.pl' or die $!;
+    program_walked_once( 'a writer in a class B::SoN does not follow (w1lib4)', do { local $/; <$fh> }, 1 );
+}
+
 # THE CORPUS AND THE PROBES: each compiled under t/lib/WalkCount.pm, which
 # reports a loop body walked twice in one process (a sub walked twice walks
 # its loops twice). SON_WALK_ONCE_QUICK=1 leaves this out.
 #
-# HELD BY NAME: B::SoN's settle pass (_translate_until_settled) translates
-# the whole program again when a walk meets a writer of a package scalar it
-# had not scanned -- a method of a class from a file it does not follow, the
-# only writer of `$w1step::n`, here. Not a loop's guess, and not removed by
-# branch single-walk: a pre-scan of the run set is a design of its own
-# (baseline section 25).
-my %HELD = map { $_ => 1 } qw(probes/p/w1lib4.pl);
+# (B::SoN's settle pass walked the whole program again when a walk met a
+# writer of a package scalar the first scan had not read -- p/w1lib4. Gone:
+# t/package-scalar-of-an-unscanned-package-is-written.t.)
 use lib 'tools/lib';
 use PvmCorpus qw(read_cases);
 SKIP: {
@@ -174,7 +203,7 @@ SKIP: {
     }
     push @files, sort glob 'docs/research/son-ir-audit-2026-11-19/probes/*/*.pl';
     my $jobs = $ENV{SON_WALK_ONCE_JOBS} // 4;
-    my ( %kids, @rewalk, @held, $loops, $ran );
+    my ( %kids, @rewalk, $loops, $ran );
     my $reap = sub {
         my $pid = waitpid -1, 0;
         my $f = delete $kids{$pid} // return;
@@ -183,7 +212,7 @@ SKIP: {
         while (<$fh>) {
             $loops += $1 if /^LOOPS (\d+)/;
             my $name = $f =~ s{\A\Q$dir\E/|\Adocs/research/son-ir-audit-2026-11-19/}{}r;
-            push @{ $HELD{$name} ? \@held : \@rewalk }, "$name: $1" if /^(REWALK .*)/;
+            push @rewalk, "$name: $1" if /^(REWALK .*)/;
         }
     };
     for my $f (@files) {
@@ -198,10 +227,7 @@ SKIP: {
     $reap->() while %kids;
     is $ran, scalar @files, 'every corpus case and probe was compiled';
     cmp_ok $loops // 0, '>=', 1000, 'and their loops were counted (the instrument ran)';
-    is \@rewalk, [], 'no loop body was walked twice (but in a program %HELD names)';
-    diag "held by name: $_" for @held;
-    my %seen = map { s/:.*//sr => 1 } @held;
-    diag "held, and no longer walked twice (take it out of %HELD): $_" for grep { !$seen{$_} } sort keys %HELD;
+    is \@rewalk, [], 'no loop body was walked twice';
 }
 
 done_testing;

@@ -2182,24 +2182,48 @@ class SoN::FromOptree 0.01 {
     # only as the walk meets them, so every body the walk translates is read
     # as it starts (_scan_run_set_cv) -- its own stores are then always known
     # to it -- and a name found that way, after another graph may have asked,
-    # is counted (package_writes_found_late): B::SoN translates again until a
-    # pass finds none. Measured before this, `my $f = sub { $main::g += 10 };
+    # is refused by name unless its package was not read whole (whose
+    # scalars are all taken as written: %PKG_UNREAD). B::SoN translated the
+    # program again for such a name until branch single-walk. Measured before this, `my $f = sub { $main::g += 10 };
     # my $x = $main::g; for (1..3) { print "$main::g\n"; $f->() }` printed four
     # empty lines for perl's "", 10, 20, 30: the anon sub was not read.
     my %PKG_SCALAR_WRITTEN;
     my $PKG_SCALAR_SCANNED = 0;
     my %PKG_SCALAR_CV;          # CV address => 1: its ops have been read
-    my $PKG_SCALAR_LATE = 0;    # names found after the first answer was given
-    sub package_writes_found_late () { $PKG_SCALAR_LATE }
+    # A PACKAGE THE FIRST ANSWER DID NOT READ WHOLE -- one with a sub that is
+    # not the program's (a module B::SoN does not follow) -- may have any of
+    # its scalars written by a body the walk meets later: its scalars are
+    # taken as written (perigrin, 2026-11-25: "B"). %PKG_UNREAD: package =>
+    # 1. A body met later that writes a scalar of a package read whole is
+    # refused by name (_scan_run_set_cv): B::SoN no longer translates the
+    # program again for it (the settle pass; clause 3, a sub is walked once).
+    my %PKG_UNREAD;
+
+    # _scalar_written($key) -> whether some sub may write the package scalar
+    # named by scope key $key ('$main::n'): one the scan saw written, any if
+    # a store through a name was seen, or one of a package not read whole.
+    sub _scalar_written ($key) {
+        my $w = _package_scalars_written();
+        return 1 if $w->{$key} || $w->{'*'};
+        my ($pkg) = $key =~ /\A\W(.*)::[^:]+\z/s or return 0;
+        return $PKG_UNREAD{$pkg} ? 1 : 0;
+    }
 
     # _scan_run_set_cv($cv) -- read a body the walk is about to translate,
     # unless the scan has. A subtree body (a sort block, a replacement, a
-    # field default) is read with the CV whose pad it runs in.
+    # field default) is read with the CV whose pad it runs in. After the
+    # first answer, a scalar it writes that the answer took for unwritten is
+    # refused: graphs already walked read it as a value.
     sub _scan_run_set_cv ($cv) {
         return unless ref($cv) && $$cv && !$PKG_SCALAR_CV{$$cv};
-        my $before = keys %PKG_SCALAR_WRITTEN;
+        my %had = map { ( $_ => 1 ) } keys %PKG_SCALAR_WRITTEN;
         _scan_cv_package_writes($cv);
-        $PKG_SCALAR_LATE += keys(%PKG_SCALAR_WRITTEN) - $before if $PKG_SCALAR_SCANNED;
+        return unless $PKG_SCALAR_SCANNED;
+        my @late = sort grep { !$had{$_} && !$had{'*'} && !( /\A\W(.*)::[^:]+\z/s && $PKG_UNREAD{$1} ) }
+            keys %PKG_SCALAR_WRITTEN;
+        die "GAP: a body the first scan did not read writes a package scalar it took for unwritten"
+          . " (@late), not yet lowered -- the graphs walked before it read it as a value\n"
+            if @late;
         return;
     }
 
@@ -2294,8 +2318,11 @@ class SoN::FromOptree 0.01 {
             # program, so a write in one is a write the program makes --
             # Test::Chalk's subtest saving and restoring its counters.)
             my $ours = B::SoN->can('_cv_is_user_code');
-            next if $st ne 'main::' && !( $ours ? $ours->($sub_cv)
-                : defined $file && ( eval { $sub_cv->FILE } // '' ) eq $file );
+            if ( $st ne 'main::' && !( $ours ? $ours->($sub_cv)
+                : defined $file && ( eval { $sub_cv->FILE } // '' ) eq $file ) ) {
+                $PKG_UNREAD{ $st =~ s/::\z//r } = 1;
+                next;
+            }
             _scan_cv_package_writes($sub_cv);
         }
 
@@ -9092,7 +9119,7 @@ class SoN::FromOptree 0.01 {
                 # `$@` NEVER FORWARDS: every eval rewrites it without a store
                 # the graph can see, so no earlier read or binding is current.
                 my $forwardable = ( $aliased || $carried
-                    || !( _package_scalars_written()->{$key} || _package_scalars_written()->{"*"} ) ) && $gv_name ne '@';
+                    || !_scalar_written($key) ) && $gv_name ne '@';
                 # A CALL ARGUMENT IS OPf_MOD AND A READ. Perl passes arguments
                 # by alias, so it marks them as potential lvalues -- the padsv
                 # handler's trap one op over. For a lexical the name token is
@@ -14925,9 +14952,8 @@ class SoN::FromOptree 0.01 {
     sub _entry_live_value ($factory, $sim, $entry) {
         my $key   = _stash_key($entry);
         my $bound = $sim->lookup($key);
-        my $w     = _package_scalars_written();
         my $forwardable = ( grep { $_ eq $key } @ALIAS_BOUND_KEYS, @LOOP_PHI_KEYS )
-            || !( $w->{$key} || $w->{'*'} );
+            || !_scalar_written($key);
         return $bound if defined $bound && $forwardable;
         return $bound // $entry unless defined $sim->memory;
         my $stamp = $bound && $bound->can('stamp') ? $bound->stamp
@@ -14947,8 +14973,7 @@ class SoN::FromOptree 0.01 {
     sub _key_lives_in_memory ($key) {
         return 0 unless $key =~ /\A\$\w*::/;
         return 0 if grep { $_ eq $key } @ALIAS_BOUND_KEYS;
-        my $w = _package_scalars_written();
-        return $w->{$key} || $w->{'*'} ? 1 : 0;
+        return _scalar_written($key);
     }
 
     sub _restore_iterator_binding ($sim, $targ, $pre_scope) {
@@ -14958,6 +14983,26 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+
+    # _jump_loop($op, $own) -> the leaveloop of the loop a next/last/redo
+    # $op jumps in, when it is a loop inside $own (else undef: $own's own, or
+    # one outside it). Unlabelled, the innermost; labelled, the one whose
+    # statement carries the label.
+    sub _jump_loop ($op, $own) {
+        my $label = $op->can('pv') ? $op->pv : '';
+        for ( my $p = eval { $op->parent }; $p && $$p; $p = eval { $p->parent } ) {
+            return undef if $own && $$own && $$p == $$own;
+            next unless $p->name eq 'leaveloop';
+            return $p unless length $label;
+            my $up = eval { $p->parent } or next;
+            for ( my ( $k, $prev ) = ( $up->first, undef ); ref $k && $$k; ( $prev, $k ) = ( $k, $k->sibling ) ) {
+                next unless $$k == $$p;
+                return $p if $prev && $prev->can('label') && ( $prev->label // '' ) eq $label;
+                last;
+            }
+        }
+        return undef;
+    }
 
     # _loop_cycle_ops($start) -- the ops on a loop's cycle: reachable from its
     # first op by `next` / `other`, and reaching it again (`next` and `redo`
@@ -14983,9 +15028,21 @@ class SoN::FromOptree 0.01 {
             my $name = $op->name;
             my @succ = ( $op->next );
             push @succ, $op->other if $op->can('other') && ref $op->other;
-            @succ = ($next_to) if $name eq 'next';
-            push @succ, $start if $name eq 'redo';
-            @succ = () if $name eq 'last' || $name eq 'return' || $name eq 'die';
+            # (a `last`, `next` or `redo` of an INNER loop goes on in this
+            # one: `if (...) { $all = false; last }` in a nested foreach --
+            # chalk's Earley::_run_parse)
+            my $inner = $name =~ /\A(?:next|last|redo)\z/ ? _jump_loop( $op, $own ) : undef;
+            if ($inner) {
+                @succ = $name eq 'last' ? ( $inner->next )
+                      : $name eq 'next' ? ( eval { $inner->first->nextop } // $inner->next )
+                      :                   ( eval { $inner->first->redoop } // $inner->next );
+            }
+            else {
+                @succ = ($next_to) if $name eq 'next';
+                push @succ, $start if $name eq 'redo';
+                @succ = () if $name eq 'last';
+            }
+            @succ = () if $name eq 'return' || $name eq 'die';
             for my $s ( grep { ref && $$_ } @succ ) { push $pred{$$s}->@*, $$op; push @q, $s }
         }
         my ( %back, @b );
@@ -15046,6 +15103,9 @@ class SoN::FromOptree 0.01 {
                 && !( $intro && $name =~ /\Apad[ah]v\z/ )
                 && ( $intro || !( $IN_PLACE_OP{$pname} || $pname eq 'enteriter' || _is_call_argument_op($op)
                     || $pname =~ /\A(?:aelem|helem|aslice|hslice|kvaslice|kvhslice|multideref|rv2av|rv2hv|rv2sv)\z/ ) );
+            # (A SCALAR IN AN INNER foreach's LIST whose body writes its alias
+            # is rebound by that loop's write-back: _op_writes_key)
+            $w{ $op->targ } = 1 if $name eq 'padsv' && $op->targ && $pname eq 'enteriter' && _op_writes_key( $op, $op->targ );
             # (a scalar's store; an element's, aelemfastlex_store, is memory)
             $w{ $op->targ } = 1 if $name eq 'padsv_store' && $op->targ;
             $w{ $op->targ } = 1 if ( $op->private & B::OPpTARGET_MY() ) && $op->targ && $name !~ /\Apad/;
@@ -15547,7 +15607,20 @@ class SoN::FromOptree 0.01 {
     # f/n20, al/g03) over `my @a` and `our @a`. A form this misses is
     # refused where the walk finds it (_check_writes).
     sub _demoted_rebinds ($op) {
-        return 1 if $op->name =~ /\A(?:subst|trans)\z/;
+        # (an s/// rebinds it where the loop body's own walker meets it, a
+        # statement of the pass; in an arm the main walker stores it in place:
+        # chalk's EmitHelpers::_repair_stale_merge, `if (...) { $line =~ s/// }`)
+        if ( $op->name =~ /\A(?:subst|trans)\z/ ) {
+            for ( my $p = eval { $op->parent }; $p && $$p; $p = eval { $p->parent } ) {
+                my $n = $p->name;
+                return 0 if $n =~ /\A(?:cond_expr|or|dor|xor|andassign|orassign|dorassign)\z/;
+                next unless $n eq 'and';
+                my $f = $p->first;
+                $f = $f->first while $$f && $f->name eq 'null' && ( $f->flags & B::OPf_KIDS() );
+                return $f->name eq 'iter' ? 1 : 0;
+            }
+            return 1;
+        }
         return 0 if $op->name eq 'padsv_store' || $op->name !~ /\Apad/;    # (TARGMY: an assignment)
         my $up = eval { $op->parent };
         $up = eval { $up->parent } while $up && $$up && $up->name eq 'null';
@@ -15610,6 +15683,22 @@ class SoN::FromOptree 0.01 {
         my $u = $up->name;
         return 1 if $u =~ /\A(?:chomp|chop|schomp|schop)\z/;
         return 0 unless $place->flags & B::OPf_MOD();
+        # A NAME IN AN INNER foreach's, map's or grep's LIST is aliased by it,
+        # through a `?:` or a list: written where that loop writes its alias
+        # (`for my $v (ref $val ? @$val : $val)` reads $val -- chalk's
+        # Actions::VariableList).
+        for ( my $p = eval { $place->parent }; $p && $$p; $p = eval { $p->parent } ) {
+            my $n = $p->name;
+            if ( $n eq 'enteriter' ) {
+                my $and = eval { $p->next->next };
+                return $and && $$and && $and->name eq 'and' && _body_writes( $and->other, _enteriter_key($p) // return 1 ) ? 1 : 0;
+            }
+            if ( $n =~ /\A(?:grepstart|mapstart)\z/ ) {
+                my $block = eval { $p->first->sibling };
+                return ( grep { _op_writes_key( $_, '$main::_' ) } _subtree_ops($block) ) ? 1 : 0;
+            }
+            last unless $n =~ /\A(?:null|list|cond_expr)\z/;
+        }
         # (an assignment's value is no write of it: `$y = $_`)
         # (a one-kid sassign is an op='s right side: `$y ||= $_` writes $y)
         if ( $u eq 'sassign' ) {
@@ -24117,7 +24206,7 @@ class SoN::FromOptree 0.01 {
             my $existing    = $sim->lookup($key);
             my $forwardable = (grep { $_ eq $key }
                                    @ALIAS_BOUND_KEYS, @LOOP_PHI_KEYS)
-                || !( _package_scalars_written()->{$key} || _package_scalars_written()->{"*"} );
+                || !_scalar_written($key);
             my $live = $existing && $forwardable ? $existing
                 : $factory->make('EntryDef',
                     package => $subject->package,
@@ -25134,8 +25223,7 @@ class SoN::FromOptree 0.01 {
             # A CALL WRITES A PACKAGE SCALAR some sub in the program stores, and
             # a string eval may store any.
             if ( $o->name =~ /\Aenter(?:sub|eval)\z/ && $key =~ /\Ag(.+)\z/s ) {
-                my $w = _package_scalars_written();
-                return 1 if $o->name eq q{entereval} || $w->{$1} || $w->{'*'};
+                return 1 if $o->name eq q{entereval} || _scalar_written($1);
             }
             # SO DOES AN EVAL STRING compiled here, of what it captures and
             # writes (_const_eval).
