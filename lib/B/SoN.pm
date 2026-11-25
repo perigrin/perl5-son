@@ -1057,6 +1057,9 @@ sub _floor_subscripts {
             next unless $node->isa('SoN::IR::Node::Subscript');
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
             my @in = ( $node->v1_inputs // [] )->@*;
+            # (AN ARGUMENT OF @_ stays untyped, as a parameter of the record
+            # the promotion pass may make of it does -- P2)
+            next if ( $in[0] // 0 ) isa SoN::IR::Node::ArgsSource;
 
             # ARITY IS NOT THE QUESTION. `$x[0] = 'foo'` compiles to a single
             # `aelemfast[*x] sM` with no separate memory operand, so its

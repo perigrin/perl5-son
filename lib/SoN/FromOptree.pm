@@ -13079,12 +13079,16 @@ class SoN::FromOptree 0.01 {
                 && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') ? 1 : _is_array_variable($rhs[0]) )
                 && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
                 my $args = $rhs[0];
+                # (AN ARGUMENT OF @_ IS UNTYPED, as a parameter is: stamped as
+                # the record's target would be, so that what is typed from it
+                # is the same whichever form the promotion pass leaves -- P2)
+                my @untyped = $rhs[0]->isa(q{SoN::IR::Node::ArgsSource}) ? ( stamp => SoN::IR::Stamp->new(type => q{Unknown}) ) : ();
                 @args_elems = map {
                     $factory->make('Subscript', kind => 'array',
                         inputs => [$args,
                             $factory->make('Constant', value => $_,
                                 const_type => 'integer',
-                                stamp => SoN::IR::Stamp->new(type => 'Int'))], mem => $sim->memory);
+                                stamp => SoN::IR::Stamp->new(type => 'Int'))], mem => $sim->memory, @untyped);
                 } 0 .. $lhs->$#*;
             }
             # (the record of a copy from an array variable names the elements
