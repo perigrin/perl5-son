@@ -59,6 +59,8 @@ my %src = (
     # (aliases as places: a call whose callee stores the argument by name and
     # then reads @_)
     t11 => 'our $x=1; sub f { $x=2; $_[0] } print f($x), "\n";',
+    # (design B, P1: a promoted argument -- the callee reads @_ and stores nothing)
+    t12 => 'our $x=1; sub f { my $v = $_[0]; $x = 2; $v } print f($x), "\n";',
 );
 sub rejected ( $what, $w, $rule ) {
     my @v = SoN::Verify::verify($w)->{violations}->@*;
@@ -206,5 +208,26 @@ sub unplace ( $node, $version ) {
     my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
     unplace( $a, $c->{mem_in} );
     rejected( 'M17 an argument a callee stores by name before reading @_, passed as a value', $w, qr/\Aalias-not-private\z/ );
+}
+# promote($node): the place $node marked as SoN::Promote marks a value it proved
+# private (design B, P1), read at the call's version.
+sub promote ( $node, $version ) { unplace( $node, $version ); $node->{fields}{promoted} = JSON::PP::true }
+{   my $w = wire( $src{t12} );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
+    ok( $a->{fields}{promoted} && !$a->{fields}{place}, 't12: the pass promoted the argument a callee only reads' );
+}
+for my $case (
+    [ 'M18 a promoted argument a callee stores by name before reading @_', 'our $x=1; sub f { $x=2; $_[0] } print f($x), "\n";' ],
+    [ 'M19 a promoted argument a callee stores by tr/// before reading @_', 'our $x="ab"; sub f { $x =~ tr/a/z/; $_[0] } print f($x), "\n";' ],
+    [ 'M20 a promoted argument a callee stores through a reference', 'our $x=1; our $r=\\$x; sub f { $$r=2; $_[0] } print f($x), "\n";' ],
+    [ 'M21 a promoted argument a callee stores through $_[0]', 'our $x=1; sub f { $_[0]=2; 0 } f($x); print "$x\n";' ],
+) {
+    my $w = wire( $case->[1] );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
+    ok( $a->{fields}{place}, "$case->[0]: the pass left it a place" );
+    promote( $a, $c->{mem_in} );
+    rejected( $case->[0], $w, qr/\Apromoted-not-private\z/ );
 }
 done_testing;

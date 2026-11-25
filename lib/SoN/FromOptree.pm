@@ -6027,14 +6027,11 @@ class SoN::FromOptree 0.01 {
                 if $what && !_arg_place_target($t) && SoN::FromOptree::ModSets::call_stores_through_args($cv, $op);
         }
         if ( my $gap = _alias_list_gap($cv, $op, $sim) ) { die $gap }
-        # AN ALIAS NOT PROVED PRIVATE IS A PLACE: a method that stores $_[0]
-        # (the caller's invocant), or a sub that stores an argument's variable
-        # by name and then reads @_ (final audit classes H, C), or one that
-        # stores through $_[N]. Its `$_[N]` reads and writes the variable as it
-        # is then; a value would be the one before, and need a write-back.
-        local $ARGS_ARE_PLACES = SoN::FromOptree::ModSets::stores_invocant($cv, $op)
-            || SoN::FromOptree::ModSets::arg_stored_by_call($cv, $op)
-            || SoN::FromOptree::ModSets::call_stores_through_args($cv, $op) ? 1 : 0;
+        # EVERY ARGUMENT PERL ALIASES IS A PLACE (design B): its `$_[N]` reads
+        # and writes the variable as it is then. Whether it may be a plain
+        # value instead is the promotion pass's to prove, over the whole wire
+        # (SoN::Promote, P1) -- not this walk's, by how a store is spelled.
+        local $ARGS_ARE_PLACES = 1;
         # A PLACE NAMES THE VARIABLE'S STORAGE, NOT THE SCALAR IN IT: under a
         # `local` of that variable the place reaches the new scalar, where
         # perl's alias keeps the saved one (audit 2, K2: `local $x = 5;
@@ -12841,8 +12838,9 @@ class SoN::FromOptree 0.01 {
                 # version. A record over @_ itself had none, and chalk took
                 # the argument at $p's first read, after `$_[0] = 9` -- audit 2,
                 # K1.)
-                # (where its caller may hand it places: SoN::FromOptree::ModSets::args_may_be_places)
-                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') ? !$introduces || SoN::FromOptree::ModSets::args_may_be_places($cv) : _is_array_variable($rhs[0]) )
+                # (ALWAYS, design B: a caller may hand it places; a record is the
+                # promotion pass's to prove, not this walk's -- audit 3, N1)
+                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') ? 1 : _is_array_variable($rhs[0]) )
                 && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
                 my $args = $rhs[0];
                 @args_elems = map {

@@ -1,0 +1,86 @@
+# ABOUTME: The promotion pass: after the walk, rewrite each place or late read the wire proves
+# ABOUTME: private into the plain value, marked `promoted` for SoN::Verify to check (design B).
+package SoN::Promote;
+use v5.42.0;
+use SoN::AliasProof ();
+
+# DESIGN B (docs/plans/2026-11-25-places-everywhere.md). Construction is naive:
+# every alias perl makes is a place, every SV operand is read where perl reads
+# it. This pass, like mem2reg after Clang's allocas, turns a place back into a
+# value only where SoN::AliasProof proves it over the whole wire, and marks the
+# node it made `promoted`, so that the verifier checks the proof again rather
+# than trusting the pass. SON_NO_PROMOTE=1 leaves the naive wire.
+#
+# It runs on the wire data SoN::Serialize::JSON::to_json builds, before it is
+# encoded: the form the verifier reads, with every graph of the program.
+
+# How often each proof held ('<kind>-value') or failed ('<kind>-place'), for
+# tools/alias-fastpath.pl (B::SoN prints them under SON_ALIAS_STATS).
+our %STATS;
+
+my %PLACE_OP = map { ( $_ => 1 ) } qw(EntryDef PadAccess Subscript FieldAccess CellRead);
+
+sub promote ($data) {
+    return $data if $ENV{SON_NO_PROMOTE};
+    my $p = SoN::AliasProof->new($data);
+    my %new;    # graph -> [ [ before_id, node ] ... ]
+    my %dead;   # graph -> { id => 1 }: a place no consumer is left
+    for my $g ( $p->graphs ) {
+        my $next = 1 + ( sort { $b <=> $a } map { $_->{id} } ( $p->{g}{$g}{nodes} // [] )->@* )[0];
+        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
+            my @pl = grep { my $a = $p->node( $g, $c->{inputs}[$_] ); $a && ( $a->{fields} // {} )->{place} && $PLACE_OP{ $a->{op} } }
+                0 .. $#{ $c->{inputs} // [] };
+            next unless @pl;
+            my $all = 1;
+            for my $i (@pl) {
+                # P1: a place a call is handed -> its source read at the call's version
+                if ( !defined $c->{mem_in} || defined $p->arg_private( $g, $c, $i ) ) { $all = 0; next }
+                my $a = $p->node( $g, $c->{inputs}[$i] );
+                my %f = ( $a->{fields} // {} )->%*;
+                delete @f{qw(place vivify)};
+                my $r = { id => $next++, op => $a->{op}, inputs => [ ( $a->{inputs} // [] )->@* ],
+                          fields => { %f, promoted => JSON::PP::true() },
+                          mem_in => $c->{mem_in}, mem_operand => JSON::PP::true(),
+                          ( defined $a->{stamp} ? ( stamp => $a->{stamp} ) : () ) };
+                push $new{$g}->@*, [ $c->{id}, $r ];
+                $c->{inputs}[$i] = $r->{id};
+                $dead{$g}{ $a->{id} } = 1;
+            }
+            $STATS{ 'call-' . ( $all ? 'value' : 'place' ) }++;
+        }
+    }
+    for my $g ( keys %new ) {
+        # (a place still handed to another call stays)
+        my %used = map { ( $_ => 1 ) } map { grep { defined && !ref } ( $_->{inputs} // [] )->@* } ( $p->{g}{$g}{nodes} // [] )->@*;
+        $p->{g}{$g}{nodes} = [ grep { !$dead{$g}{ $_->{id} } || $used{ $_->{id} } } $p->{g}{$g}{nodes}->@* ];
+        _renumber( $p->{g}{$g}, $new{$g} );
+    }
+    return $data;
+}
+
+# _renumber($graph, [[before, node] ...]) -> put each new node just before the
+# node that uses it, and number the graph's nodes 0.. again in that order:
+# the wire names every input before its consumer (a forward edge is a loop
+# Phi's back edge, and nothing else).
+sub _renumber ( $graph, $new ) {
+    my %before;
+    push $before{ $_->[0] }->@*, $_->[1] for @$new;
+    my @order;
+    for my $n ( $graph->{nodes}->@* ) { push @order, ( $before{ $n->{id} } // [] )->@*, $n }
+    my %map; $map{ $order[$_]{id} } = $_ for 0 .. $#order;
+    my $m = sub ($v) { defined $v && !ref $v && exists $map{$v} ? $map{$v} : $v };
+    for my $n (@order) {
+        $n->{id} = $map{ $n->{id} };
+        $n->{inputs} = [ map { ref $_ eq 'ARRAY' ? [ map { $m->($_) } @$_ ] : $m->($_) } ( $n->{inputs} // [] )->@* ];
+        for my $k (qw(control_in mem_in head)) { $n->{$k} = $m->( $n->{$k} ) if exists $n->{$k} }
+        my $f = $n->{fields} or next;
+        for my $k (qw(region eval_entry)) { $f->{$k} = $m->( $f->{$k} ) if exists $f->{$k} }
+        $f->{predecessors} = [ map { $m->($_) } $f->{predecessors}->@* ] if ref $f->{predecessors} eq 'ARRAY';
+    }
+    $graph->{nodes} = \@order;
+    $graph->{start} = $m->( $graph->{start} ) if exists $graph->{start};
+    $graph->{returns} = [ map { $m->($_) } $graph->{returns}->@* ] if ref $graph->{returns} eq 'ARRAY';
+    return;
+}
+
+1;

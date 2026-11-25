@@ -50,6 +50,7 @@ sub verify ($wire) {
         _graph_v2( $name, $wire->{methods}{$name}, \%res );
     }
     _alias_private( $wire, \%res );
+    _promoted_private( $wire, \%res );
     return \%res;
 }
 
@@ -226,6 +227,28 @@ sub _alias_private ( $wire, $res ) {
                     }
                     push @c, _control_preds($vn);
                 }
+            }
+        }
+    }
+    return;
+}
+
+# (V13) A PROMOTED NODE IS PRIVATE (design B, docs/plans/2026-11-25-places-everywhere.md):
+# SoN::Promote made it from a place or a late read, and the proof it made it
+# by is asked again here, of the wire as it left -- the pass is not trusted.
+# P1: a call's argument is private (SoN::AliasProof::arg_private).
+sub _promoted_private ( $wire, $res ) {
+    require SoN::AliasProof;
+    my $p = SoN::AliasProof->new($wire);
+    for my $g ( $p->graphs ) {
+        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
+            for my $i ( 0 .. $#{ $c->{inputs} // [] } ) {
+                my $a = $p->node( $g, $c->{inputs}[$i] ) or next;
+                next unless ( $a->{fields} // {} )->{promoted};
+                my $why = ( defined $a->{mem_in} && defined $c->{mem_in} && $a->{mem_in} == $c->{mem_in} ) ? $p->arg_private( $g, $c, $i )
+                    : "read at another version than its call's";
+                push $res->{violations}->@*, { graph => $g, node => $c->{id}, op => 'Call', rule => 'promoted-not-private',
+                    detail => "argument $i: $why" } if defined $why;
             }
         }
     }

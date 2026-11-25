@@ -11,6 +11,7 @@ our @EXPORT_OK = qw(to_json);
 
 use JSON::PP ();
 use Scalar::Util qw(blessed);
+use SoN::Promote ();
 
 # THE WIRE IS VERSION 2 (docs/plans/2026-11-20-wire-v2.md, section 3): `inputs`
 # are values only, and `mem_in` / `mem_out` name the memory edges; an eval's
@@ -802,6 +803,10 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
         { phase => $_->[0], _serialize_graph( $_->[1] )->%*,
           ( defined $_->[2] ? ( package => $_->[2] ) : () ) }
     } $phase_blocks->@* ] if $phase_blocks && $phase_blocks->@*;
+
+    # THE PROMOTION PASS (design B): every graph is here; turn each place the
+    # wire proves private back into a value, marked for the verifier.
+    SoN::Promote::promote($data);
 
     # ->utf8 BECAUSE THE WIRE IS BYTES AND THE VALUES ARE CHARACTERS.
     # Without it `encode` returns a character string, and printing that to a
