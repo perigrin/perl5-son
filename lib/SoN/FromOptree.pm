@@ -17753,22 +17753,12 @@ class SoN::FromOptree 0.01 {
             # as the pass's copy, `sub z { $a[0] = 7 } for my $x (@a) { z();
             # print $x }` printed 12 for perl's 72 -- audit 2, K3.)
             $why //= 'a call' if _body_calls_store_array($cv, $enteriter, $targ);
-            # (OVER A LIST OF SEVERAL ITEMS, OR ONE A CALL RETURNS (`values
-            # %h`), the pass's element is a copy in a temporary list, and a
-            # reference to it is no alias of the variables')
-            die "GAP: a foreach over a list of several items, or one a call returns, whose aggregate"
-              . " a call in its body may store is not yet lowered -- perl's alias is the aggregate's"
-              . " element, the pass reads a copy\n"
-                if !defined $targ && $named
-                # (a list of variables, elements and constants is a list of
-                # places, _alias_list_items: read where they stand)
-                && do {
-                    my @i = map { _strip_null($_) } _foreach_list_items($enteriter);
-                    !( @i == 1 && $i[0]->name =~ /\A(?:padav|rv2av)\z/ )
-                        && grep { $_->name !~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|aelemfast(?:_lex)?|multideref|const)\z/ } @i
-                }
-                && _topic_read_after_a_call($cv, $enteriter, $x_targ)
-                && _body_calls_store_array($cv, $enteriter, undef, 1);
+            # (A LIST OF SEVERAL ITEMS, OR ONE A CALL RETURNS, whose aggregate a
+            # call in the body may store, was refused by name -- audit 2, K3. An
+            # array item is now its place, aliased per element (_alias_list_items);
+            # a call's list perl aliases -- values, sort, grep, reverse -- is
+            # refused by _refuse_aliased_call_list where the body may store it;
+            # any other item is a temporary, as perl's is.)
             # NOT WHEN THE BODY TAKES `\$x`: that is a reference to the
             # alias, which the copy's own rules below decide.
             my $refs = _iterator_references($cv, $enteriter->parent, $x_targ);
@@ -17803,18 +17793,10 @@ class SoN::FromOptree 0.01 {
                 && _iterator_call_values($cv, $enteriter->parent, $x_targ);
         }
 
-        # THE TOPIC (a foreach over `$_`, a map, a grep) OR A PACKAGE
-        # ITERATOR, read after a call that may store its list: the body's
-        # reads are the element as the pass began, and no reference stands in
-        # for it as for a lexical iterator (`sub z { $a[1] = 7 } map { z(); $_
-        # } @a` gave 12 for perl's 17 -- audit 2, K3).
-        if (!$writes_iter && $x_targ !~ /\A\d+\z/) {
-            my $targ = $array->isa('SoN::IR::Node::PadAccess') ? $array->targ : undef;
-            die "GAP: a foreach, map or grep's \$_ (or a package iterator) read after a call that may store"
-              . " its list is not yet lowered -- the read is the element as the pass began\n"
-                if _body_calls_store_array($cv, $enteriter, $targ, 1)
-                && ( $x_targ ne '$main::_' || _topic_read_after_a_call($cv, $enteriter) );
-        }
+        # (THE TOPIC OR A PACKAGE ITERATOR read after a call that may store
+        # its list was refused by name -- audit 2, K3 -- and is lowered now:
+        # an array item of the list is its place, aliased per element, and
+        # the topic reads through its alias where it is read; design B.)
 
         # THE WRITE-BACK GOES TO THE INDEX, AND PERL'S ALIAS TO THE ELEMENT.
         # They agree until the body moves the elements: `for my $x (@a) { $x
@@ -25835,12 +25817,30 @@ class SoN::FromOptree 0.01 {
             next if ( $k->flags & 3 ) == 1 || ( $k->flags & B::OPf_MOD );
             my @src = _alias_list_sources( $cv, $k ) or next;
             my @later = $kids->@[ $i + 1 .. $#$kids ];
-            my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @later;
+            # (A RESHAPE -- a push, a shift, a new key -- moves no element the
+            # list holds, and their values are what the read where they were
+            # pushed gives: only a store into one, or a call nothing can be said
+            # of, is a conflict. A HASH flattened is read where its list is
+            # used, its own list's stores seen: only a call's count.)
+            my @eff = grep { !$_->{reshape} } map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @later;
+            my @call_eff = grep { !$_->{reshape} } map { SoN::FromOptree::ModSets::op_effects( $cv, $_ ) } @later;
             next unless @eff;
             my $worst = '';
             for my $s (@src) {
                 my $pl = SoN::FromOptree::ModSets::aggregate_place( $cv, $s );
-                my $c = $pl ? SoN::FromOptree::ModSets::conflict( $pl, \@eff ) : 'unknown';
+                # (a key the hash's literal does not hold is a new one: no
+                # element the list holds -- as audit 2's K7 rule)
+                my @use = $s->name =~ /hv\z/ ? @call_eff : @eff;
+                if ( $s->name =~ /hv\z/ ) {
+                    my $lit = $s->name eq 'padhv' ? $sim->lookup( $s->targ )
+                        : do { my ($e) = SoN::FromOptree::ModSets::_target_effects( $cv, $s ); $e && $e->{loc} =~ /\AN:%(.*)\z/s ? $sim->lookup( '%' . $1 ) : undef };
+                    if ( $lit isa SoN::IR::Node::HashLiteral && !$MUTATED_LITERALS{ refaddr $lit } ) {
+                        my @in = $lit->v1_inputs->@*;
+                        my %keys = map { $in[ 2 * $_ ] isa SoN::IR::Node::Constant ? ( $in[ 2 * $_ ]->value => 1 ) : ( '*' => 1 ) } 0 .. $#in / 2;
+                        @use = grep { $_->{loc} eq 'U' || $keys{'*'} || $_->{key} eq '*' || $keys{ $_->{key} } } @use;
+                    }
+                }
+                my $c = $pl ? ( @use ? SoN::FromOptree::ModSets::conflict( $pl, \@use ) : undef ) : 'unknown';
                 $worst = $c if $c && ( !$worst || $c ne 'store' );
             }
             next unless $worst;

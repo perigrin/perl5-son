@@ -17,7 +17,10 @@ sub compile ($src) {
     close $o;
     return scalar qx($^X -Ilib -MO=-q,SoN,json $f 2>&1);
 }
-my $gap = qr/GAP: an aggregate flattened into a list is read by alias and a later item may store into its elements/;
+# (design B: the refusal is keyed on the property -- a list item perl
+# aliases element by element, and a later item that may store into one --
+# not on the spelling of the aggregate: docs/plans/2026-11-25-places-everywhere.md)
+my $gap = qr/GAP: a list item perl aliases element by element .* is read when its list is used, and a later item may store into or reshape/;
 like compile($_), $gap, "refused: $_" for
     'my @a=(1,2,3); my @b=(@a, $a[0]=9); print "@b\n";',
     'my @a=(1,2,3); print "@{[ @a, $a[0]++ ]}\n";',
