@@ -10165,7 +10165,9 @@ class SoN::FromOptree 0.01 {
             # (no target, no binding: targ 0 is no slot, and binding it made
             # every targetless split rebind one shared scope key)
             $sim->define($targ, $node) if $targ;
-            $sim->push_node($node);
+            # (INTO AN ARRAY, IN SCALAR CONTEXT, its value is the count of the
+            # fields it stored: `scalar(my @p = split ...)` -- audit 3, N12)
+            $sim->push_node( $targ && $want_flag == 2 ? _make_count($factory, $node, $sim) : $node );
             return ($op->next, 'handled');
         }
 
