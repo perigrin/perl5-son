@@ -4101,7 +4101,7 @@ class SoN::FromOptree 0.01 {
 
             # Handle die specially: creates an Unwind CFG node, nothing pushed to stack
             if ($name eq 'die') {
-                my $args = $sim->pop_to_mark;
+                my $args = _die_args($sim, $factory);
                 my $unwind = $factory->make_cfg('Unwind',
                     inputs => [$args]);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
@@ -4960,6 +4960,23 @@ class SoN::FromOptree 0.01 {
         my @in = $value->inputs->@*;
         return map { $factory->make('Call', inputs => [@in], dispatch_kind => 'builtin', name => 'reverse',
             stamp => SoN::IR::Stamp->new(type => $_)) } qw(List Str);
+    }
+    # _die_args($sim, $factory) -> a die's message list. AN EMPTY ONE REUSES
+    # $@ (perlfunc die): where $@ holds a message, it is that message and
+    # "\t...propagated at FILE line N.\n"; else "Died" (audit 3, N12:
+    # `eval { die "first\n" }; die` died "Died at ...").
+    sub _die_args ($sim, $factory) {
+        my $args = $sim->pop_to_mark;
+        return $args if $args->@* || !defined $sim->memory;
+        my ( $file, $line ) = ( $SoN::IR::NodeFactory::SITE // [] )->@[ 0, 1 ];
+        my $err = $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@', mem => $sim->memory);
+        my $str = sub ($v) { $factory->make('Constant', value => $v, const_type => 'string', stamp => SoN::IR::Stamp->new(type => 'Str')) };
+        my $has = $factory->make('NumGt', inputs => [ $factory->make('Length', inputs => [$err], stamp => SoN::IR::Stamp->new(type => 'Maybe[Int]')),
+            $factory->make('Constant', value => 0, const_type => 'integer', stamp => SoN::IR::Stamp->new(type => 'Int')) ],
+            stamp => SoN::IR::Stamp->new(type => 'Boolean'));
+        my $prop = $factory->make('Concat', inputs => [ $err, $str->( "\t...propagated at " . ( $file // '-' ) . ' line ' . ( $line // 0 ) . ".\n" ) ],
+            stamp => SoN::IR::Stamp->new(type => 'Str'));
+        return [ $factory->make('TernaryExpr', inputs => [ $has, $prop, $str->('Died') ], stamp => SoN::IR::Stamp->new(type => 'Str')) ];
     }
     sub _merged_aggregate_return ($factory, $value) {
         return ($value) unless defined $value && blessed($value)
@@ -19781,7 +19798,7 @@ class SoN::FromOptree 0.01 {
             # ran on (audit 2026-11-22, risk 1). Its pass ends at the Unwind,
             # which is the way round as a dead input, as an arm's is a merge's.
             if ($name eq 'die') {
-                my $unwind = $factory->make_cfg('Unwind', inputs => [ $sim->pop_to_mark ]);
+                my $unwind = $factory->make_cfg('Unwind', inputs => [ _die_args($sim, $factory) ]);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 _set_message_site($unwind, $op);
                 _pin_die($sim, $factory, $unwind);
@@ -23315,7 +23332,7 @@ class SoN::FromOptree 0.01 {
             # past and vanished -- `for (...) { die "x" if $c }` ran on.
             if ($name eq 'die') {
                 $visited->{$$op}++;
-                my $args = $sim->pop_to_mark;
+                my $args = _die_args($sim, $factory);
                 my $unwind = $factory->make_cfg('Unwind',
                     inputs => [$args]);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
