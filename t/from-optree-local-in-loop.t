@@ -100,6 +100,9 @@ SRC
         return () if $seen->{$id}++;                      # round the loop: nothing new
         return $n->{fields}{value} // '?' if $n->{op} eq 'Constant';
         return $value_of->( $n->{mem_in}, $seen ) if $n->{op} eq q(EntryDef) && defined $n->{mem_in};
+        # (the restore binds the name back to the saved scalar, a Ref of it
+        # read before the `local`, since places-everywhere: its value then)
+        return $value_of->( $n->{inputs}[0], $seen ) if $n->{op} eq q(Ref);
         return $value_of->( $n->{inputs}[1], $seen ) if $n->{op} eq 'EntryWrite';
         return map { $value_of->( $_, $seen ) } $n->{inputs}->@* if $n->{op} eq 'Phi';
         return '?';
