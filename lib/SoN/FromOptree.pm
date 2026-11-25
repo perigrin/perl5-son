@@ -6078,6 +6078,11 @@ class SoN::FromOptree 0.01 {
     # call's result (audit 3, N3). The body's MOD set says (a call by its subs,
     # one nothing can be said of by everything).
     sub _refuse_aliased_call_list ($cv, $op) {
+        # (substr or $#a as an item: perl's alias is a magic lvalue, not on
+        # the wire -- audit 3, N11)
+        die "GAP: substr or \$#a as a foreach, map or grep item is not yet lowered -- perl's alias is a"
+          . " magic lvalue, and the wire has no such place\n"
+            if grep { _strip_null($_)->name =~ /\A(?:substr|av2arylen)\z/ } _alias_list_item_ops($op);
         my @body = $op->name eq 'enteriter' ? grep { $$_ } $op->sibling : do { my $b = $op->first->sibling; $b && $$b ? ($b) : () };
         return unless @body;
         my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @body;
@@ -6169,6 +6174,15 @@ class SoN::FromOptree 0.01 {
                 }
             }
         }
+        # SUBSTR OR $#a HANDED TO A SUB THAT MAY STORE THROUGH $_[N] (or one
+        # nothing can be said of): perl's alias is a magic lvalue -- a store
+        # through it splices the string or sets the length (audit 3, N11).
+        # The wire has no such place yet: refused by name, where a store may
+        # come; a value elsewhere.
+        die "GAP: substr or \$#a handed to a sub that may store through \$_[N] is not yet lowered --"
+          . " perl's alias is a magic lvalue, and the wire has no such place\n"
+            if grep( { _strip_null($_)->name =~ /\A(?:substr|av2arylen)\z/ } _entersub_args_and_invocant($op) )
+            && ( !( SoN::FromOptree::ModSets::_callees($cv, $op) )[0] || SoN::FromOptree::ModSets::call_stores_through_args($cv, $op) );
         # AN ELEMENT'S `local` is not yet a new scalar: chalk's element alias is
         # the aggregate and the key, so under a `local $h{k}` in the callee it
         # reaches the new value, where perl's keeps the saved one (z/qb05).
