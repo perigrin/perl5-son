@@ -9154,6 +9154,17 @@ class SoN::FromOptree 0.01 {
                         { key    => $key,
                           node   => $prior,
                           target => $entry };
+                    # THE NEW SCALAR IS UNDEF where no assignment gives it a
+                    # value: `local $g;` read $g's own value after it (audit
+                    # 3, N8, yj37: `d` for perl's `u`). A store, as an
+                    # assignment's is, so a sub it calls reads it too.
+                    unless ( _local_is_assigned($op) ) {
+                        my $undef = $factory->make('Constant', value => undef, const_type => 'undef',
+                            stamp => SoN::IR::Stamp->new(type => 'Undef'));
+                        $sim->define($key, $undef);
+                        _place($sim, $factory->make('EntryWrite', inputs => [$entry, $undef], mem => $sim->memory))
+                            if defined $sim->memory;
+                    }
                 }
 
                 # SIGIL-QUALIFIED: `$g` and `@g` are different variables
@@ -19946,6 +19957,16 @@ class SoN::FromOptree 0.01 {
     # the innermost loop is the silent miscompile this exists to end.
     # _is_sub_argument($op) -> true when $op is an argument of a sub call: its
     # parent, through null (ex-list) ops, is the entersub.
+    # _local_is_assigned($op) -> true when the `local` $op is an assignment's
+    # target (`local $g = 5`, `local ($g) = @l`): the assignment gives it its
+    # value. Otherwise perl's new scalar is undef.
+    sub _local_is_assigned ($op) {
+        my ( $c, $p ) = ( $op, eval { $op->parent } );
+        ( $c, $p ) = ( $p, eval { $p->parent } ) while $p && $$p && $p->name =~ /\A(?:null|list)\z/;
+        return 0 unless $p && $$p && $p->name =~ /\A[sa]assign\z/ && !( $p->private & B::OPpASSIGN_BACKWARDS() );
+        return ${ $p->last } == $$c ? 1 : 0;
+    }
+
     sub _is_sub_argument ($op) {
         my $p = eval { $op->parent };
         $p = eval { $p->parent } while $p && $$p && $p->name eq 'null';
