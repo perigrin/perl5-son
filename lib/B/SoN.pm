@@ -345,12 +345,16 @@ sub _translate_program {
 # _module_start_state(\%graphs, \@phase_blocks) -- A FOLLOWED MODULE'S FILE RAN
 # AT `use` TIME (audit 2, K9): `our $n = 1` in ZUp.pm set $ZUp::n before the
 # program began, and perl freed that code. Its effect is read here, at CHECK,
-# for every package variable of a followed module some graph names, and put
-# first on the wire as a BEGIN block of plain stores. What a store of a
-# constant cannot say -- an aggregate with elements, a reference, a glob --
-# is refused by name in each graph that names it, and so is a program BEGIN
-# block that writes such a variable or calls a sub (it ran after the module,
-# so the state read here holds its effect already).
+# for every package variable of a followed module some graph names, and put on
+# the wire as a BEGIN block of plain stores, AFTER the program's own BEGIN
+# blocks: the state read here is the state after them, so what they wrote is
+# in it, and it is what the program's main line starts from. A value a store
+# of a literal cannot say -- an object, code, a glob, a cycle -- is refused by
+# name in each graph that names it, and so is a variable a program BEGIN block
+# reads by name (it ran, in perl, before the state read here was final).
+# shortcut: a sub a BEGIN block calls (a followed module's import) that reads
+# one reads it as the wire has it then, unset; upgrade when one is seen
+# printing or dying by it.
 sub _module_start_state {
     my ( $graphs, $phases ) = @_;
     no strict 'refs';
@@ -365,6 +369,29 @@ sub _module_start_state {
             push $named{$k}->@*, $g unless grep { $_ eq $g } ( $named{$k} // [] )->@*;
         }
     }
+    # (a literal for a plain value: a string, a number, undef, and arrays and
+    # hashes of them; undef for anything else)
+    my $lit;
+    $lit = sub ( $v, $depth ) {
+        return undef if $depth > 32;
+        if ( !ref $v ) {
+            return 'undef' unless defined $v;
+            my $f = B::svref_2object( \$v )->FLAGS;
+            return $f & B::SVf_POK ? B::perlstring($v) : $f & B::SVf_IOK ? int($v) : $f & B::SVf_NOK ? sprintf( '%.17g', $v ) : undef;
+        }
+        return undef if Scalar::Util::blessed($v);
+        if ( ref $v eq 'ARRAY' ) {
+            my @e;
+            for (@$v) { push @e, $lit->( $_, $depth + 1 ) // return undef }
+            return '[' . join( ',', @e ) . ']';
+        }
+        if ( ref $v eq 'HASH' ) {
+            my @e;
+            for ( sort keys %$v ) { push @e, B::perlstring($_) . '=>' . ( $lit->( $v->{$_}, $depth + 1 ) // return undef ) }
+            return '{' . join( ',', @e ) . '}';
+        }
+        return undef;
+    };
     my ( @lines, %refuse );
     for my $k ( sort keys %named ) {
         my ( $sig, $pkg, $sym ) = split / /, $k;
@@ -372,44 +399,35 @@ sub _module_start_state {
         if ( $sig eq '$' ) {
             my $v = ${$full};
             next unless defined $v;
-            my $sv = B::svref_2object( \${$full} );
-            if ( ref $v || !( $sv->FLAGS & ( B::SVf_POK | B::SVf_IOK | B::SVf_NOK ) ) ) { $refuse{$k} = "\$$full"; next }
-            my $lit = $sv->FLAGS & B::SVf_POK ? B::perlstring($v)
-                    : $sv->FLAGS & B::SVf_IOK ? int($v)
-                    :                            sprintf( '%.17g', $v );
-            push @lines, [ $k, "\$$full = $lit;" ];
+            my $l = ref $v ? $lit->( $v, 0 ) : do {
+                my $f = B::svref_2object( \${$full} )->FLAGS;
+                $f & B::SVf_POK ? B::perlstring($v) : $f & B::SVf_IOK ? int($v) : $f & B::SVf_NOK ? sprintf( '%.17g', $v ) : undef;
+            };
+            if ( defined $l ) { push @lines, [ $k, "\$$full = $l;" ] } else { $refuse{$k} = "\$$full" }
         }
-        elsif ( $sig eq '@' ) { $refuse{$k} = "\@$full" if @{$full} }
-        elsif ( $sig eq '%' ) { $refuse{$k} = "\%$full" if %{$full} }
-    }
-    # (a program BEGIN ran after the module: what it wrote, or what a sub it
-    # called wrote, is in the state read above already)
-    if (@lines) {
-        my %init = map { $_->[0] => 1 } @lines;
-        for my $b ( grep { $_->[0] eq 'BEGIN' } @$phases ) {
-            for my $n ( $b->[1]->nodes->@* ) {
-                next unless ref $n;
-                # (a `use` is a require and an import: the import of a class
-                # whose own import is not followed code -- Exporter's, none
-                # -- writes nothing of a module's state)
-                my $calls = $n->isa('SoN::IR::Node::Call') && ( ( eval { $n->dispatch_kind } // '' ) ne 'builtin' )
-                    && !( ( eval { $n->name } // '' ) =~ /\A(?:import|unimport)\z/ && do {
-                        my $class = eval { $n->class_name } // '';
-                        my $im = $class =~ /\A[\w:]+\z/ ? *{"${class}::" . $n->name}{CODE} : undef;
-                        !$im || !defined _cv_module( B::svref_2object($im) );
-                    } );
-                my $writes = $n->isa('SoN::IR::Node::EntryWrite') && do {
-                    my $t = $n->inputs->[0];
-                    ref $t && $t->isa('SoN::IR::Node::EntryDef') && $init{ join ' ', $t->sigil // '$', $t->package, $t->symbol };
-                };
-                next unless $calls || $writes;
-                $refuse{ $_->[0] } = ( $_->[0] =~ s/\A(\S) (\S+) (\S+)\z/$1$2::$3/r ) . ', and a BEGIN block of the program'
-                    for @lines;
-                @lines = ();
-                last;
-            }
+        elsif ( $sig eq '@' ) {
+            next unless @{$full};
+            my $l = $lit->( \@{$full}, 0 );
+            if ( defined $l ) { push @lines, [ $k, "\@$full = (" . substr( $l, 1, -1 ) . ");" ] } else { $refuse{$k} = "\@$full" }
+        }
+        elsif ( $sig eq '%' ) {
+            next unless %{$full};
+            my $l = $lit->( \%{$full}, 0 );
+            if ( defined $l ) { push @lines, [ $k, "\%$full = (" . substr( $l, 1, -1 ) . ");" ] } else { $refuse{$k} = "\%$full" }
         }
     }
+    # (a variable a program BEGIN block reads or writes by name)
+    my %init = map { $_->[0] => 1 } @lines;
+    for my $b ( grep { $_->[0] eq 'BEGIN' } @$phases ) {
+        my %target = map { ( Scalar::Util::refaddr( $_->inputs->[0] ) => 1 ) }
+            grep { ref $_ && $_->isa('SoN::IR::Node::EntryWrite') } $b->[1]->nodes->@*;
+        for my $n ( $b->[1]->nodes->@* ) {
+            next unless ref $n && $n->isa('SoN::IR::Node::EntryDef') && !$target{ Scalar::Util::refaddr($n) };
+            my $k = join ' ', $n->sigil // '$', $n->package // '', $n->symbol // '';
+            $refuse{$k} = ( $k =~ s/\A(\S) (\S+) (\S+)\z/$1$2::$3/r ) . ', read by a BEGIN block of the program' if $init{$k};
+        }
+    }
+    @lines = grep { !$refuse{ $_->[0] } } @lines;
     for my $k ( sort keys %refuse ) {
         for my $g ( $named{$k}->@* ) {
             next if exists $REFUSED{$g};
@@ -423,7 +441,10 @@ sub _module_start_state {
     my $src = join "\n", 'no strict; no warnings; sub {', ( map { $_->[1] } @lines ), 'return }';
     my $code = eval $src or die "B::SoN: the modules' start state did not compile: $@";
     my $graph = do { local $SoN::FromOptree::START_STATE = 1; SoN::FromOptree->translate($code) };
-    unshift @$phases, [ 'BEGIN', $graph, 'main' ];
+    # (after the program's BEGIN blocks, before its END blocks)
+    my $at = 0;
+    $at++ while $at < @$phases && $phases->[$at][0] eq 'BEGIN';
+    splice @$phases, $at, 0, [ 'BEGIN', $graph, 'main' ];
     return;
 }
 

@@ -8606,7 +8606,7 @@ class SoN::FromOptree 0.01 {
                     && !grep { $_->isa('SoN::IR::Node::TernaryExpr')
                         # (nor @_: its elements are the caller's variables, read
                         # where the copy was made -- audit 2, K1)
-                        || $_->isa('SoN::IR::Node::ArgsSource')
+                        || $_->isa('SoN::IR::Node::ArgsSource') && _args_may_change($cv)
                         || ( ( $_->isa('SoN::IR::Node::HashLiteral') || $_->isa('SoN::IR::Node::ArrayLiteral') ) && defined $_->symbol )
                         # (nor another aggregate read whole at a version -- a
                         # shared `my @a` a sub reaches: pushed here, `"@c"`
@@ -12605,7 +12605,7 @@ class SoN::FromOptree 0.01 {
                         # ...OR @_, WHOSE ELEMENTS ARE THE CALLER'S VARIABLES:
                         # bound as @_ itself, `my @l = @_; $a[0] = 9; "@l"`
                         # read the store (audit 2, K1). A copy, made here.
-                        $names_storage ||= $only->isa('SoN::IR::Node::ArgsSource');
+                        $names_storage ||= $only->isa('SoN::IR::Node::ArgsSource') && _args_may_change($cv);
                         $names_storage ||= ( $only->isa('SoN::IR::Node::HashLiteral') || $only->isa('SoN::IR::Node::ArrayLiteral') )
                             && defined $only->symbol
                             && _copies_pad_hash($op);
@@ -12728,7 +12728,17 @@ class SoN::FromOptree 0.01 {
                     } $rhs->@*;
                     # (and @_, whose elements are the caller's variables: a
                     # copy read where it stands -- audit 2, K1)
-                    $copies_container ||= grep { $_->isa('SoN::IR::Node::ArgsSource') } $rhs->@*;
+                    $copies_container ||= _args_may_change($cv) && grep { $_->isa('SoN::IR::Node::ArgsSource') } $rhs->@*;
+                    # (and a target of a list assign made where it stands --
+                    # `my ($root, %o) = @_; my @s = ($root)`: its value is
+                    # that assign's, so the literal is read after it)
+                    $copies_container ||= grep {
+                        my $t = $_;
+                        $t isa SoN::IR::Node::PadAccess && grep {
+                            $_ isa SoN::IR::Node::Assign && defined $_->control_in && defined $_->targets
+                                && grep { $_ == $t } $_->inputs->@[ 0 .. $_->targets - 1 ]
+                        } ( $t->consumers // [] )->@*
+                    } $rhs->@*;
                     # A PACKAGE OR SHARED AGGREGATE ASSIGNED IN A LOOP BODY is
                     # made there too: its store below writes this literal, and
                     # floating, the literal was spelled above the loop with the
@@ -12831,7 +12841,8 @@ class SoN::FromOptree 0.01 {
                 # version. A record over @_ itself had none, and chalk took
                 # the argument at $p's first read, after `$_[0] = 9` -- audit 2,
                 # K1.)
-                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') || _is_array_variable($rhs[0]) )
+                # (where its caller may hand it places: SoN::FromOptree::ModSets::args_may_be_places)
+                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') ? !$introduces || SoN::FromOptree::ModSets::args_may_be_places($cv) : _is_array_variable($rhs[0]) )
                 && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
                 my $args = $rhs[0];
                 @args_elems = map {
@@ -12982,13 +12993,18 @@ class SoN::FromOptree 0.01 {
             # position, which _entry_store stores below) it is a record of
             # the rebinding, pinned further down where a slot is read by name.
             #
-            # A PARAMETER BIND WITH AN AGGREGATE (`my ($self, %opts) = @_`) IS
-            # A STORE TOO: it reads @_, whose elements are the caller's
-            # variables, where it stands. A record of it, made where the sub
-            # starts or where a target is first read, took `$_[1] = 9` made
-            # after it (audit 2, K1).
+            # A PARAMETER BIND IS THE OTHER RECORD: `my ($self, %opts) = @_`
+            # declares its targets and fills them from @_ as the sub is
+            # entered, as both consumers bind it -- where nothing the sub does
+            # may change what @_ holds. Where it may, it is a store, made where
+            # it stands: a record took `$_[1] = 9` made after it (audit 2, K1).
+            my $param_bind = $introduces && @rhs == 1
+                && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && !grep( { !$_->isa('SoN::IR::Node::PadAccess') } $lhs->@* )
+                && !_args_may_change($cv);
             my $stores = grep { !/\A(?:ssa|skip)\z/
-                               && !( $positional && $_ eq 'package' ) } @storage;
+                               && !( $positional && $_ eq 'package' )
+                               && !( $param_bind && $_ eq 'aggregate' ) } @storage;
             # A RECORD, OR A STORE: decided here, once, and said on the node
             # (wire v2's `record`; the serializer no longer derives it from
             # "on neither chain", which made a store the walk forgot a record
@@ -13832,10 +13848,11 @@ class SoN::FromOptree 0.01 {
                 # 5). An assignment or a ?: as the target is what the probes
                 # found.
                 # (NOT ONLY ON AN OPf_MOD TARGET: a fused store, `($x = $x + 1)
-                # *= $x`'s add, carries none -- audit 2, K4. The op= form is
-                # an lvalue whatever its target says.)
+                # *= $x`'s add storing into its targ, carries none -- audit 2,
+                # K4.)
                 if (($op->flags & 64) && B::class($op) eq 'BINOP'
                     && $op->first && ${$op->first}
+                    && ( ( $op->first->flags & 32 ) || _stores_its_targ( _strip_null( $op->first ) ) )
                     && !$is_compound && !$field_compound && !defined $elem_lvalue && !defined $pkg_lvalue && !defined $stacked_dest) {
                     my $t = $op->first;
                     $t = $t->first while $t->name eq 'null' && $t->can('first') && ${$t->first};
@@ -14935,6 +14952,15 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    # _args_may_change($cv) -> true when what @_ holds may change after a copy
+    # of it is made: the sub, or one it calls, stores something outside its own
+    # lexicals (its MOD set) -- through $_[N], or into a variable a caller may
+    # have handed it as a place (audit 2, K1). A sub that stores nothing there
+    # reads the same @_ wherever it reads it.
+    sub _args_may_change ($cv) {
+        return scalar( SoN::FromOptree::ModSets::summary($cv)->@* ) ? 1 : 0;
+    }
+
     # _foreach_list_items($enteriter) -> the ops of a foreach's list, one per item.
     # (A range's bounds are its two.)
     sub _foreach_list_items ($enteriter) {
@@ -14950,7 +14976,11 @@ class SoN::FromOptree 0.01 {
     # _body_calls_store_array($cv, $enteriter, $targ) -> true when a call in
     # the loop's body may store into the lexical array $targ (its MOD set).
     # With no $targ, every array the foreach list names (`for (@a, @b)`).
-    sub _body_calls_store_array ($cv, $enteriter, $targ = undef) {
+    # $known_only: a call this walk cannot see into is not counted (a
+    # refusal's question; the alias by reference takes it).
+    # shortcut: an unknown call storing a list's element is not refused, as
+    # the call-argument rule does not; upgrade when one is seen doing it.
+    sub _body_calls_store_array ($cv, $enteriter, $targ = undef, $known_only = 0) {
         return 0 unless grep { $_->name eq 'entersub' } _subtree_ops($enteriter->parent);
         local $SoN::FromOptree::ModSets::KEEP_OWN = 1;
         my @places = defined $targ ? SoN::FromOptree::ModSets::array_place($cv, $targ)
@@ -14959,9 +14989,11 @@ class SoN::FromOptree 0.01 {
                 $_->name eq 'padav' ? SoN::FromOptree::ModSets::array_place($cv, $_->targ)
                     : map { { levels => [ { loc => $_->{loc}, key => '*', kind => $kind, refd => 1 } ] } }
                           SoN::FromOptree::ModSets::_target_effects($cv, $_, 'elems')
-              } grep { $_->name =~ /\A(?:pad|rv2)[ah]v\z/ } _subtree_ops($enteriter);
+              } grep { $_->name =~ /\A(?:pad|rv2)[ah]v\z/
+                       # (`keys` makes copies: no alias of the aggregate)
+                       && !( ${ $_->parent } && _strip_null_up( $_->parent )->name eq 'keys' ) } _subtree_ops($enteriter);
         return 0 unless @places;
-        my $eff = [ SoN::FromOptree::ModSets::op_effects($cv, $enteriter->parent) ];
+        my $eff = [ grep { !$known_only || $_->{loc} ne 'U' } SoN::FromOptree::ModSets::op_effects($cv, $enteriter->parent) ];
         return ( grep { !$_ || SoN::FromOptree::ModSets::conflict( $_, $eff ) } @places ) ? 1 : 0;
     }
 
@@ -16978,7 +17010,7 @@ class SoN::FromOptree 0.01 {
             # `for ($x += 5) { $_++ }` left 6 for perl's 7, audit 2, K4)
             return "GAP: an assignment as an item of a foreach, map or grep list whose body may write"
                  . " its alias is not yet lowered -- the store would be lost\n"
-                if $stores && ( _arg_place_target($t) || $n =~ /\A(?:sassign|cond_expr)\z/ || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) ) );
+                if $stores && ( _arg_place_target($t) || $n eq 'sassign' || ( B::class($t) eq 'BINOP' && ( $t->flags & 64 ) ) );
             # (a package scalar or an element is its place: _alias_list_items)
             my $slice = $n =~ /\A(?:aslice|hslice)\z/;
             next unless $slice;
@@ -17156,6 +17188,11 @@ class SoN::FromOptree 0.01 {
         return undef unless $o->name eq 'rv2sv' && ( $o->flags & 4 );
         my $k = _strip_null( $o->first );
         return $k->name eq 'gv' ? $k : undef;
+    }
+    # _strip_null_up($op) -> the first op above $op (or $op) that is not a null
+    sub _strip_null_up ($o) {
+        $o = $o->parent while $$o && $o->name eq 'null' && ${ $o->parent };
+        return $o;
     }
     sub _strip_null ($o) {
         $o = $o->first while $o && $$o && $o->name eq 'null' && ( $o->flags & 4 ) && ${ $o->first } && !${ $o->first->sibling };
@@ -17455,7 +17492,7 @@ class SoN::FromOptree 0.01 {
                 if !defined $targ && $named
                 && do { my @i = _foreach_list_items($enteriter); @i != 1 || _strip_null($i[0])->name !~ /\A(?:padav|rv2av)\z/ }
                 && _topic_read_after_a_call($cv, $enteriter, $x_targ)
-                && _body_calls_store_array($cv, $enteriter);
+                && _body_calls_store_array($cv, $enteriter, undef, 1);
             # NOT WHEN THE BODY TAKES `\$x`: that is a reference to the
             # alias, which the copy's own rules below decide.
             my $refs = _iterator_references($cv, $enteriter->parent, $x_targ);
@@ -17499,7 +17536,7 @@ class SoN::FromOptree 0.01 {
             my $targ = $array->isa('SoN::IR::Node::PadAccess') ? $array->targ : undef;
             die "GAP: a foreach, map or grep's \$_ (or a package iterator) read after a call that may store"
               . " its list is not yet lowered -- the read is the element as the pass began\n"
-                if _body_calls_store_array($cv, $enteriter, $targ)
+                if _body_calls_store_array($cv, $enteriter, $targ, 1)
                 && ( $x_targ ne '$main::_' || _topic_read_after_a_call($cv, $enteriter) );
         }
 
@@ -25576,8 +25613,11 @@ class SoN::FromOptree 0.01 {
                             %keys = map { $in[ 2 * $_ ] isa SoN::IR::Node::Constant ? ( $in[ 2 * $_ ]->value => 1 ) : ( '*' => 1 ) } 0 .. $#in / 2;
                         }
                     }
+                    # (shortcut: a call this walk cannot see into is not
+                    # counted, as for a call's arguments; upgrade when one is
+                    # seen storing a flattened element)
                     my $touches = sub ($e) {
-                        return 0 if $e->{reshape};
+                        return 0 if $e->{reshape} || $e->{loc} eq 'U';
                         return 0 if %keys && !$keys{'*'} && $e->{key} ne '*' && !$keys{ $e->{key} };
                         return 1;
                     };

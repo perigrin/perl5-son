@@ -38,6 +38,8 @@ is run_of($w), $want, 'the program renders to perl\'s answer';
 my ($chomp) = grep { $_->{op} eq 'Chomp' } $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
 my ($read)  = map { my $i = $_; grep { $_->{id} == $i } $w->{methods}{'main::__PROGRAM__'}{nodes}->@* } $chomp->{inputs}[0];
 $chomp->{mem_in} = $read->{mem_in};
+# (an operand, as the producer marks one -- audit 2: as_v1 reads the mark)
+$chomp->{mem_operand} = JSON::PP::true;
 my ($v1c) = grep { $_->{op} eq 'Chomp' } SoN::Wire::as_v1($w)->{methods}{'main::__PROGRAM__'}{nodes}->@*;
 ok $v1c->{fields}{memory_input}, 'as_v1 marks the memory it appended';
 is run_of($w), $want, '... and the deparser reads it as memory, not a value';

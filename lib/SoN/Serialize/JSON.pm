@@ -706,6 +706,10 @@ sub _serialize_graph ($graph) {
             $entry{control_in} = $id_remap{ _control_in($node)->id };
         }
         $entry{mem_in} = $id_remap{ $node->mem_in->id } if defined $node->mem_in;
+        # (WHICH mem_in IS AN OPERAND -- the memory the node was built reading,
+        # not memory it follows on the chain: said, so a reader of v1 need not
+        # guess it by kind; audit 2, clause 3)
+        $entry{mem_operand} = JSON::PP::true if defined $node->mem_in && $node->can('mem_operand') && $node->mem_operand;
         $entry{mem_out} = JSON::PP::true if $node->mem_out;
         # Region.head -> the owning If/Loop, set at produce time by
         # StackSim::merge / _build_single_exit / the Loop exit-Region
@@ -752,6 +756,8 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
         version => 2,
         source  => undef,
         methods => \%methods,
+        # (every node built with its memory as an operand says `mem_operand`)
+        marks   => { mem_operand => JSON::PP::true },
     };
 
     # The declarative class section (4c): name, parent, fields, method-refs.

@@ -540,6 +540,29 @@ sub _graph_v2 ( $name, $g, $res ) {
             $mutated{$k} = 1 if defined $k;
         }
     }
+    # (A GRAPH THAT STORES ONLY ITS OWN `my` VARIABLES reads the same @_
+    # wherever it reads it: no call, no store into anything a caller may have
+    # handed it. Where it stores beyond them, a record of @_ has no version
+    # to be made at -- audit 2, K1.)
+    my $own = sub ($t) {
+        return 0 unless $t;
+        return 1 if $t->{op} eq 'ArgsSource';
+        my $f = _fields($t);
+        return 0 if $f->{shared} || $f->{place};
+        return 1 if $t->{op} eq 'PadAccess';
+        return $t->{op} =~ /^(?:ArrayLiteral|HashLiteral)$/ && defined $f->{symbol} && $f->{symbol} !~ /::/;
+    };
+    my $stores_beyond_own = grep {
+        my ( $op, $f, $in ) = ( $_->{op}, _fields($_), $_->{inputs} // [] );
+        ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) ne 'builtin' )
+            || $op =~ /^(?:EntryWrite|CellWrite|Delete|ElemRestore|LocalAlias|MakeCell)$/
+            || ( $_->{mem_out} && !$record->($_) && grep {
+                   my ( $t, $elem ) = ( $by{$_}, 0 );
+                   ( $t, $elem ) = ( $container->($t), 1 ) while $t && $t->{op} =~ /^(?:Subscript|Slice)$/;
+                   # (an element of @_ is a caller's variable; @_ whole is the sub's)
+                   !$own->($t) || $elem && $t->{op} eq 'ArgsSource'
+               } grep { defined && !ref } ( $op eq 'Assign' ? @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ] : $op eq 'Call' ? @$in : () ) );
+    } @nodes;
     my $place_class;
     $place_class = sub ($n) {
         return undef unless $n;
@@ -580,7 +603,7 @@ sub _graph_v2 ( $name, $g, $res ) {
         # targets take @_ whenever they are first read -- audit 2, K1. Other
         # whole reads of @_ are a consumer's that names its own version.)
         elsif ( $op eq 'ArgsSource' ) {
-            $class = 'args' if grep { $live{ $_->[0]{id} } && $record->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;
+            $class = 'args' if $stores_beyond_own && grep { $live{ $_->[0]{id} } && $record->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;
         }
         elsif ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' ) { $class = B::SoN::EffectTable::reads_state( $f->{name} ) }
         # (A PACKAGE SCALAR IN AN ALIAS LIST is no place: the list is made

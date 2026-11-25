@@ -6,6 +6,8 @@ our $s = "a\"b";
 our $u;
 our @l = (1, 2);
 our $r = [1];
+our $o = bless {}, 'K9::Obj';
+our %h = (k => [1, 2]);
 sub bump { $n++; return }
 sub get  { $n }
 1;

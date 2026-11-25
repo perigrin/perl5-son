@@ -47,8 +47,14 @@ my %ORDERED_READ = map { $_ => 1 } qw(Call Ref FieldAccess);
 # read (below); their versions wait for the deparser to read v2 (stage 11).
 our %NO_V1_MEMORY = map { $_ => 1 } qw(Slice);
 
-sub _operand ($n) {
+# A WIRE THAT SAYS SO (`marks.mem_operand`) names each one: the producer's own
+# answer, `mem_operand` on the node (audit 2, clause 3). The rule above is for
+# a wire written before it.
+sub _operand ( $n, $marked = 0 ) {
     my $op = $n->{op};
+    return 0 if $NO_V1_MEMORY{$op};
+    return 0 if $op eq 'Call' && ( B::SoN::EffectTable::reads_state( ( $n->{fields} // {} )->{name} ) // '' ) eq 'external';
+    return $n->{mem_operand} ? 1 : 0 if $marked;
     return 0 if $FOLLOWS_ONLY{$op};
     return 0 if $NO_V1_MEMORY{$op};
     # (nor an external read -- time, -e, stat: stage 7 gave it memory, v1 had none)
@@ -65,6 +71,7 @@ sub as_v1 ($wire) {
     my $w = Storable::dclone($wire);
     return $w unless ( $w->{version} // 1 ) == 2;
     $w->{version} = 1;
+    my $marked = ( delete $w->{marks} // {} )->{mem_operand};
     for my $g ( values( ( $w->{methods} // {} )->%* ) ) {
         my $nodes = $g->{nodes} // [];
         # (dropped: the ids are positions again below, renumbered)
@@ -93,7 +100,8 @@ sub as_v1 ($wire) {
             $n->{inputs} = [ map { $past_alias->($_) } $n->{inputs}->@* ];
         }
         for my $n (@$nodes) {
-            my $operand = _operand($n);
+            my $operand = _operand( $n, $marked );
+            delete $n->{mem_operand};
             my $m = $past_alias->( delete $n->{mem_in} );
             delete $n->{mem_out};
             delete $n->{fields}{record} if $n->{fields};

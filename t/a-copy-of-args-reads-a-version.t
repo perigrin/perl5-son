@@ -53,12 +53,13 @@ for my $src (@k1) {
 
 # THE VERIFIER SEES THE OLD SHAPE: a record over @_ whose target is read is a
 # read of @_ with no version.
-{   my $w = wire('my $x=1; sub f { my $p; ($p) = @_; $p } print f($x), "\n";');
+{   my $w = wire('my $x=1; sub f { my ($p) = @_; $_[0] = 9; $p } print f($x), "\n";');
     my $nodes = $w->{methods}{'main::f'}{nodes};
     my ($args) = grep { $_->{op} eq 'ArgsSource' } @$nodes;
-    my ($pad)  = grep { $_->{op} eq 'PadAccess' && ( $_->{fields}{symbol} // '' ) eq 'p' } @$nodes;
-    ok $args && $pad, 'the hand-made wire has @_ and $p';
     my $id = 1 + ( sort { $b <=> $a } map { $_->{id} } @$nodes )[0];
+    my ($pad)  = grep { $_->{op} eq 'PadAccess' && ( $_->{fields}{symbol} // '' ) eq 'p' } @$nodes;
+    push @$nodes, $pad = { id => $id++, op => 'PadAccess', inputs => [], fields => { sigil => '$', symbol => 'p' }, stamp => 'Unknown' } unless $pad;
+    ok $args && $pad, 'the hand-made wire has @_ and $p';
     # (the record the producer made before audit 2: [$p, @_], read by the Return through $p)
     @$nodes = grep { !( $_->{op} eq 'Assign' && ( $_->{fields}{targets} // 0 ) ) } @$nodes;
     push @$nodes, { id => $id, op => 'Assign', inputs => [ $pad->{id}, $args->{id} ], fields => { record => JSON::PP::true, targets => 1 }, stamp => 'List' };
@@ -67,6 +68,15 @@ for my $src (@k1) {
     my @v = SoN::Verify::verify($w)->{violations}->@*;
     ok( ( grep { $_->{rule} eq 'read-unversioned:args' } @v ), 'a read record over @_ is rejected' )
         or diag join '; ', map { "$_->{op}#$_->{node} $_->{rule}" } @v;
+}
+
+# A SUB THAT STORES NOTHING BEYOND ITS OWN `my` VARIABLES reads the same @_
+# wherever it reads it: its parameter bind stays the record both consumers
+# bind where the sub starts (and its parameters keep the types their uses give).
+{   my $w = wire('sub f { my ($p, $q) = @_; my @l = @_; "$p$q@l" } print f(1, 2), "\n";');
+    is [ map { "$_->{op}#$_->{node} $_->{rule}" } SoN::Verify::verify($w)->{violations}->@* ], [], 'a pure sub: clean';
+    my @n = $w->{methods}{'main::f'}{nodes}->@*;
+    ok( ( grep { $_->{op} eq 'Assign' && $_->{fields}{record} } @n ), 'a pure sub: its parameter bind is a record' );
 }
 
 done_testing;

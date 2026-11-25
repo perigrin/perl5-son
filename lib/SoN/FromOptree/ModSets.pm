@@ -335,6 +335,46 @@ sub _user_subs () {
     return $BY_NAME = \%by;
 }
 
+# may_be_called_unknown($cv) -> true when a call this walk cannot see into may
+# be a call of $cv (and so hand it places, arg_stored_by_call's `unknown`): an
+# anonymous sub, a named one whose code is taken (`\&f`, `*f{CODE}`, `goto
+# &f` counts as seen), or any sub where the program calls a method by a name
+# made at run time (audit 2, K1).
+my ( %CODE_TAKEN, $DYNAMIC_METHOD, $SCANNED_CALLS );
+sub may_be_called_unknown ($cv) {
+    return 1 if $cv->CvFLAGS & B::CVf_ANON;
+    unless ($SCANNED_CALLS) {
+        $SCANNED_CALLS = 1;
+        my @roots = ( [ B::main_cv(), B::main_root() ], map { [ $_, _root($_) ] } map { $_->@* } values _user_subs()->%* );
+        for my $pair (@roots) {
+            my ( $rcv, $root ) = @$pair;
+            next unless $root && $$root;
+            for my $o ( _fo('_subtree_ops')->($root) ) {
+                $DYNAMIC_METHOD = 1 if $o->name eq 'method';
+                next unless $o->name =~ /\A(?:s?refgen|rv2gv|anoncode)\z/ || $o->name eq 'rv2cv' && !( $o->private & B::OPpENTERSUB_NOPAREN() );
+                for my $g ( grep { $_->name eq 'gv' } _fo('_subtree_ops')->($o) ) {
+                    my $gv = eval { _fo('_op_gv')->( $rcv, $g ) } // next;
+                    my $code = $gv && $$gv ? $gv->CV : undef;
+                    $CODE_TAKEN{$$code} = 1 if $code && $$code;
+                }
+            }
+        }
+    }
+    return 1 if $DYNAMIC_METHOD || $CODE_TAKEN{$$cv};
+    return 0;
+}
+
+# args_may_be_places($cv) -> true when a caller may hand $cv its arguments as
+# places (FromOptree's _handle_entersub): it, or one it calls, stores through
+# $_[N] or its invocant; or it reads @_ after a store; or a call this walk
+# cannot see into may be its call (audit 2, K1).
+sub args_may_be_places ($cv) {
+    my @s = summary($cv)->@* or return 0;
+    return 1 if grep { $_->{loc} eq 'P' } @s;
+    return 1 if _read_after_store( $cv, sub (@eff) { scalar @eff }, 1 );
+    return may_be_called_unknown($cv);
+}
+
 # Methods every object has that store nothing of the program's.
 my %UNIVERSAL_READ = map { $_ => 1 } qw(isa can DOES VERSION);
 
