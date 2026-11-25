@@ -64,7 +64,8 @@ sub src ( $s, $g, $n ) {
         return $sig eq '$' ? "my:\$$f->{symbol}" : "agg:$sig$f->{symbol}";
     }
     return "agg:$f->{sigil}|$g|$f->{symbol}" if $op =~ /\A(?:ArrayLiteral|HashLiteral)\z/ && defined $f->{symbol} && $f->{symbol} !~ /::/;
-    return "agg:$f->{sigil}$f->{symbol}" if $op =~ /\A(?:ArrayLiteral|HashLiteral)\z/ && defined $f->{symbol};
+    # (a package aggregate's literal names it `@main::a`, its sigil in it)
+    return 'agg:' . ( $f->{symbol} =~ /\A[\@%]/ ? $f->{symbol} : "$f->{sigil}$f->{symbol}" ) if $op =~ /\A(?:ArrayLiteral|HashLiteral)\z/ && defined $f->{symbol};
     return 'cell:' . $g . ':' . ( $n->{inputs}[0] // '' ) if $op eq 'CellRead';
     return 'F:' . $sig . ( $f->{name} // $f->{symbol} // '' ) if $op eq 'FieldAccess';
     return 'P' if $op eq 'ArgsSource';
@@ -126,7 +127,7 @@ sub effects ( $s, $g, $n ) {
     my @t = $op eq 'Assign' ? ( _f($n)->{record} ? () : $n->{inputs}->@[ 0 .. ( _f($n)->{targets} // 1 ) - 1 ] )
           : $op =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] )
           # (memory versions that store nothing a value is read from)
-          : $op =~ /\A(?:Ref|MakeCell|Transliterate|RegexSubst|RegexMatch|Bless|Exc|Unwind|Return|MemStart|Phi|Loop|Region|Start)\z/ ? ()
+          : $op =~ /\A(?:Ref|MakeCell|Transliterate|RegexSubst|RegexMatch|Bless|Exc|Unwind|Return|MemStart|Phi|Loop|Region|Start|Subscript|PostfixDeref|Exists|Count|EntryDef|PadAccess|FieldAccess|CellRead|RefType|Coerce|Slice|Keys)\z/ ? ()   # (a read pinned where it stands is a version that stores nothing)
           : $op eq 'ArrayLiteral' ? ()
           : $op eq 'Call' && ( _f($n)->{name} // '' ) =~ /\A(?:bless|print|say|prtf|warn|die)\z/ ? ()
           : grep { defined && !ref } ( $n->{inputs} // [] )->@*;
@@ -135,8 +136,10 @@ sub effects ( $s, $g, $n ) {
         my $tn = $s->node( $g, $t ) or next;
         my $k = $s->src( $g, $tn );
         if ( !defined $k ) {
-            # (a target the wire does not name: a value, or a ref of no class)
-            next unless $tn->{op} =~ /\A(?:Subscript|PostfixDeref|FieldAccess|CellRead|Slice)\z/;
+            # (a captured cell, by its handle: any cell; any other target the
+            # wire does not name: anything)
+            if ( $tn->{op} =~ /\A(?:CellParam|MakeCell)\z/ ) { push @e, 'cell:'; next }
+            next if $tn->{op} eq 'Constant';
             return ['any'];
         }
         push @e, $k;

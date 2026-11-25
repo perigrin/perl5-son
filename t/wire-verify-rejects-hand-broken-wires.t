@@ -222,9 +222,11 @@ for my $case (
     [ 'M19 a promoted argument a callee stores by tr/// before reading @_', 'our $x="ab"; sub f { $x =~ tr/a/z/; $_[0] } print f($x), "\n";' ],
     [ 'M20 a promoted argument a callee stores through a reference', 'our $x=1; our $r=\\$x; sub f { $$r=2; $_[0] } print f($x), "\n";' ],
     [ 'M21 a promoted argument a callee stores through $_[0]', 'our $x=1; sub f { $_[0]=2; 0 } f($x); print "$x\n";' ],
+    [ 'M22 a promoted argument a closure stores through its cell', 'my $x=1; my $f=sub { $x=2; $_[0] }; print $f->($x), "\n";' ],
+    [ 'M23 a promoted element of a package array a callee stores', 'our @a=(1); sub f { $a[0]=2; $_[0] } print f($a[0]), "\n";' ],
 ) {
     my $w = wire( $case->[1] );
-    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && ( fname($x) eq 'main::f' || fname($x) =~ /__ANON__/ ) } );
     my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
     ok( $a->{fields}{place}, "$case->[0]: the pass left it a place" );
     promote( $a, $c->{mem_in} );
