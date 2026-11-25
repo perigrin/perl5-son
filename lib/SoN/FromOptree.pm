@@ -2867,11 +2867,15 @@ class SoN::FromOptree 0.01 {
         } @captures;
     }
 
+    # $START_STATE: the body walked is B::SoN's store of a followed module's
+    # start state (B::SoN::_module_start_state), which runs before anything
+    # the scan read: its stores are no writer of the program's.
+    our $START_STATE;
     sub _translate_from ($cv, $start_op, %opts) {
         local $OPS_CV = $cv;
         my $program_root = $opts{program_root};
         # Its stores of package scalars are known before it is walked.
-        _scan_run_set_cv($cv);
+        _scan_run_set_cv($cv) unless $START_STATE;
 
         my $factory = SoN::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();
