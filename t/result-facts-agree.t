@@ -31,7 +31,8 @@ my %EXPECTED = (
     Divide => 'Num', Power => 'Num', Modulo => 'Int',
     BitAnd => 'Int', BitOr => 'Int', BitXor => 'Int',
     LeftShift => 'Int', RightShift => 'Int', Complement => 'Int',
-    Concat => 'Str', Length => 'Int', Count => 'Int',
+    # (length(undef) is undef, not 0: Maybe[Int] since places-everywhere, audit 3 N12)
+    Concat => 'Str', Length => 'Maybe[Int]', Count => 'Int',
     (map { $_ => 'Boolean' } qw(
         NumEq NumLt NumGt NumLe NumGe NumNe
         StrEq StrLt StrGt StrLe StrGe StrNe

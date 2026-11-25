@@ -34,6 +34,7 @@ is exc( JSON::PP->new->decode($json) ), [], 'the closed local: clean';
     }
     my ($r) = grep {
         my $s = $by{ $_->{inputs}[1] // '' } // {};
+        $s = $by{ $s->{inputs}[0] } // {} if ( $s->{op} // '' ) eq 'Ref';    # (a restore binds the saved scalar back)
         $_->{op} eq 'EntryWrite' && $s->{op} eq 'EntryDef' && defined $s->{mem_in} && !$on_exc{ $_->{id} }
     } @$nodes;
     ok $r, 'the wire has the inner restore';

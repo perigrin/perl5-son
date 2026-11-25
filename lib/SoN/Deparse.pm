@@ -3422,6 +3422,13 @@ class SoN::Deparse 0.01 {
             # The literal must follow EVERY binding it reads, so the latest one
             # is the only safe anchor.
             my $defer = $self->_last_bound_input($n);
+            # NOR BEFORE A LATER STORE IT READS: `my @l = ($a[0], $a[0]++)`
+            # holds the element read after the increment's store and the
+            # bound copy read before it; anchored at the copy, the list was
+            # spelled above the store and read 1 for perl's 2.
+            if ( defined $defer && defined( my $st = $self->_latest_store_read($n) ) ) {
+                $defer = $st if $st > $defer && !defined $self->_outermost_loop($st);
+            }
             # UNLESS A LOOP OR BRANCH IT HOLDS SETTLES LATER: `@in[grep {...}
             # 0 .. $#in]` in an elsif reads the grep's Phi, and placed after
             # the bound `inputs()` call the slice named it above its loop

@@ -56,7 +56,8 @@ sub promote ($data) {
             my $all = 1;
             for my $i (@pl) {
                 # P1: a place a call is handed -> its source read at the call's version
-                if ( !defined $c->{mem_in} || defined $p->arg_private( $g, $c, $i ) ) { $all = 0; next }
+                if ( !defined $c->{mem_in} || defined $p->arg_private( $g, $c, $i ) ) { $all = 0; $STATS{'arg-place'}++; next }
+                $STATS{'arg-value'}++;
                 my $a = $p->node( $g, $c->{inputs}[$i] );
                 my %f = ( $a->{fields} // {} )->%*;
                 delete @f{qw(place vivify)};
@@ -104,9 +105,10 @@ sub promote ($data) {
     }
     my %repl;    # graph -> { read id => target id }
     for my $h ( grep { $p->{g}{$_} && exists $CALLED_UNKNOWN{$_} } $p->graphs ) {
-        next if $CALLED_UNKNOWN{$h} || $placed{$h} || $p->args_escape($h);
+        my $blocked = $CALLED_UNKNOWN{$h} || $placed{$h} || $p->args_escape($h);
         my ($start) = grep { $_->{op} eq 'MemStart' } $p->nodes($h);
         for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} } $p->nodes($h) ) {
+            $STATS{'record-place'}++, next if $blocked;
             my $k = ( $as->{fields} // {} )->{targets} // next;
             my @in = ( $as->{inputs} // [] )->@*;
             my @t = @in[ 0 .. $k - 1 ];
@@ -121,11 +123,16 @@ sub promote ($data) {
                     && $ix && $ix->{op} eq 'Constant' && ( $ix->{fields}{value} // '' ) eq "$i";
                 $args = $src->{id};
             }
+            $STATS{ 'record-' . ( $ok && defined $args ? 'value' : 'place' ) }++;
             next unless $ok && defined $args;
             $repl{$h}{ $r[$_]{id} } = $t[$_] for 0 .. $#r;
+            # (the target stands for the read now: typed as its uses typed it)
+            for my $i ( 0 .. $#r ) {
+                my $t = $p->node( $h, $t[$i] ) or next;
+                $t->{stamp} = $r[$i]{stamp} if defined $r[$i]{stamp} && ( $t->{stamp} // 'Unknown' ) eq 'Unknown';
+            }
             $as->{inputs} = [ @t, $args ];
             $as->{fields}{promoted} = JSON::PP::true();
-            $STATS{'record-value'}++;
         }
     }
     for my $h ( keys %repl ) {

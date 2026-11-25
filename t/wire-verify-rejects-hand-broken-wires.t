@@ -232,6 +232,22 @@ for my $case (
     promote( $a, $c->{mem_in} );
     rejected( $case->[0], $w, qr/\Apromoted-not-private\z/ );
 }
+# A PROMOTED ARGUMENT READ WHERE PERL PUSHED IT -- before a later argument's
+# call -- is checked over the chain between: clean where that call stores
+# nothing it reads, rejected where it does.
+{   my $w = wire( 'our $x=1; sub g { 1 } sub f { $_[0] } print f($x, g()), "\n";' );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
+    ok( $a->{fields}{promoted} && ( $a->{mem_in} // -1 ) != $c->{mem_in}, 't14: promoted, read before the later argument\'s call' );
+    is( [ map { $_->{rule} } SoN::Verify::verify($w)->{violations}->@* ], [], 't14: clean' );
+}
+{   my $w = wire( 'our $x=1; sub g { $x=2; 1 } sub f { $_[0] } print f($x, g()), "\n";' );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $g = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::g' } );
+    my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
+    promote( $a, $g->{mem_in} );
+    rejected( 'M25 a promoted argument read before a later argument\'s call that stores it', $w, qr/\Apromoted-not-private\z/ );
+}
 # P2: a promoted parameter record, in a sub a call then hands a place.
 {   my $w = wire( 'my $x=1; sub f { my ($p) = @_; $p } print f($x), "\n";' );
     my @f = $w->{methods}{'main::f'}{nodes}->@*;

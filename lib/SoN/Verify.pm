@@ -245,8 +245,14 @@ sub _promoted_private ( $wire, $res ) {
             for my $i ( 0 .. $#{ $c->{inputs} // [] } ) {
                 my $a = $p->node( $g, $c->{inputs}[$i] ) or next;
                 next unless ( $a->{fields} // {} )->{promoted};
-                my $why = ( defined $a->{mem_in} && defined $c->{mem_in} && $a->{mem_in} == $c->{mem_in} ) ? $p->arg_private( $g, $c, $i )
-                    : "read at another version than its call's";
+                # (read at the call's version, or at one before it -- where
+                # perl pushed it -- with nothing on the chain between that may
+                # store what it reads)
+                my $why = !defined $a->{mem_in} || !defined $c->{mem_in} ? "read at no version"
+                    : $a->{mem_in} == $c->{mem_in} ? undef
+                    : !$p->reaches( $g, $c->{mem_in}, $a->{mem_in} ) ? "read at a version its call's does not follow"
+                    : do { my $w = $p->stored_between( $g, $c->{mem_in}, $a->{mem_in}, $p->src( $g, $a ) // '' ); defined $w ? "read before $w" : undef };
+                $why //= $p->arg_private( $g, $c, $i );
                 push $res->{violations}->@*, { graph => $g, node => $c->{id}, op => 'Call', rule => 'promoted-not-private',
                     detail => "argument $i: $why" } if defined $why;
             }

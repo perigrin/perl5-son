@@ -2253,11 +2253,13 @@ sub _infer_backward {
             # ...for a PARAMETER: what a caller passed, which may be undef --
             # a Parameter, or a variable `my (...) = @_` or `shift` binds.
             my %param;       # symbol => 1
+            my %raw_sym;     # symbol => 1: a place of it is taken as it is
             for my $node ( $graph->nodes->@* ) {
                 next unless $node->operation eq 'Assign';
                 my @in = ( $node->v1_inputs // [] )->@*;
                 my $src = $in[-1];
                 my $from_args = Scalar::Util::blessed($src) && ( $src->operation eq 'ArgsSource'
+                    || $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($src) }
                     || ( $src->operation eq 'Call' && ( $src->name // '' ) eq 'shift'
                          && grep { Scalar::Util::blessed($_) && $_->operation eq 'ArgsSource' } ( $src->v1_inputs // [] )->@* ) );
                 next unless $from_args;
@@ -2274,9 +2276,16 @@ sub _infer_backward {
                     my $want = B::SoN::TypeLibrary::operand_type( $op_name, $i );
                     unless (defined $want) {
                         my $raw = $inputs[$i];
+                        # (A PLACE handed on is the variable handed on: every read of
+                        # it may be what the promotion pass hands the call instead)
+                        $raw_sym{ $raw->symbol // '' } = 1
+                            if Scalar::Util::blessed($raw) && $raw->operation eq 'PadAccess' && $raw->can('place') && $raw->place
+                            && $SEES_UNDEF{ $node->operation } && $i >= $targets;
                         $raw{ $raw->id } = 1
                             if Scalar::Util::blessed($raw) && $raw->isa('SoN::IR::Value')
-                            && $SEES_UNDEF{ $node->operation } && $i >= $targets;
+                            && $SEES_UNDEF{ $node->operation } && $i >= $targets
+                            # (the copy `my (...) = @_` itself is not a use of the argument)
+                            && !( $node->operation eq 'Assign' && $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($raw) } );
                         next;
                     }
                     my $operand = $inputs[$i] or next;
@@ -2324,9 +2333,11 @@ sub _infer_backward {
                 next unless $node->isa('SoN::IR::Value');
                 next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
                 next unless _is_backward_inferable($node);
+                next if $node->operation eq 'PadAccess' && $raw_sym{ $node->symbol // '' } && $param{ $node->symbol // '' };
                 next if $raw{ $node->id }
                     && ( $node->operation eq 'Parameter'
-                         || ( $node->operation eq 'PadAccess' && $param{ $node->symbol // '' } ) );
+                         || ( $node->operation eq 'PadAccess' && $param{ $node->symbol // '' } )
+                         || $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($node) } );
                 # AN AGGREGATE'S DECLARATION IS ITS TYPE: nothing sits below
                 # Array or Hash, so no requirement narrows it, and one that
                 # contradicts it (a hash read as a string) is a coercion at
@@ -2385,6 +2396,9 @@ sub _is_backward_inferable {
     return 1 if $op eq 'PadAccess';
     return 1 if $op eq 'FieldAccess';
     return 1 if $op eq 'Parameter';
+    # (a copy of an argument for `my (...) = @_` is the parameter as the walk
+    # leaves it -- the record's target is, once SoN::Promote rewrites it)
+    return 1 if $op eq 'Subscript' && $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($node) };
     return 0;
 }
 

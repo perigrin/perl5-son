@@ -44,7 +44,7 @@ for my $f (@files) {
 }
 $reap->() while keys %pid;
 say "files $done, no counts $missing";
-for my $b (qw(call list iter)) {
+for my $b (qw(arg call record list iter)) {
     my ( $p, $v ) = ( $sum{"$b-place"} // 0, $sum{"$b-value"} // 0 );
     my $t = $p + $v;
     say sprintf '%-5s value %6d  place %6d  proof fails %5.1f%%', $b, $v, $p, $t ? 100 * $p / $t : 0;

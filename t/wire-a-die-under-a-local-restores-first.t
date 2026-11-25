@@ -22,9 +22,14 @@ my $before = $by{ $die->{control_in} };
 is $before->{op}, 'EntryWrite', 'what the die follows is a store';
 is( ( $by{ $before->{inputs}[0] }{fields} // {} )->{symbol}, 'g', '... of $g' );
 my $saved = $by{ $before->{inputs}[1] };
+# (a restore binds the name back to the saved scalar since places-everywhere: `EntryWrite binds [EntryDef, Ref [EntryDef]]` -- the Ref's input is the read)
+$saved = $by{ $saved->{inputs}[0] } if $saved->{op} eq 'Ref';
 is $saved->{op}, 'EntryDef', '... of $g\'s value read before the local';
 my $local = $by{ $before->{mem_in} };
 is $local->{op}, 'EntryWrite', 'the restore follows the local\'s store';
-is $saved->{mem_in}, $local->{mem_in}, '... and puts back what was there before it';
+# (the `local` makes a new scalar, then stores the value into it: the save is read before the new scalar)
+my $fresh = $by{ $local->{mem_in} };
+ok $fresh->{op} eq 'EntryWrite' && $fresh->{fields}{local}, '... which follows the new scalar';
+is $saved->{mem_in}, $fresh->{mem_in}, '... and puts back what was there before it';
 is $die->{mem_in}, $before->{id}, 'the die names the memory after the restore';
 done_testing;

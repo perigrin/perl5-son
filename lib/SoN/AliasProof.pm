@@ -74,7 +74,10 @@ sub src ( $s, $g, $n ) {
         my $c = $s->node( $g, $n->{inputs}[0] );
         return 'P' if $c && $c->{op} eq 'ArgsSource';
         my $cs = $s->_container( $g, $c, $f->{kind} // 'array' );
-        return $cs =~ /\AR:/ ? $cs : "elem:$cs";
+        return $cs if $cs =~ /\AR:/;
+        # (an element at a constant index names it: `$a[1] = 9` is not `$a[0]`)
+        my $ix = $s->node( $g, $n->{inputs}[1] );
+        return $ix && $ix->{op} eq 'Constant' && defined _f($ix)->{value} ? "elem:$cs#" . _f($ix)->{value} : "elem:$cs";
     }
     if ( $op eq 'PostfixDeref' ) {
         my $r = $s->node( $g, $n->{inputs}[0] );
@@ -112,7 +115,7 @@ sub referenced ( $s, $source ) {
         }
         \%r;
     };
-    return $s->{refd}{ $source =~ s/\Aelem://r } ? 1 : 0;
+    return $s->{refd}{ $source =~ s/\Aelem://r =~ s/#.*\z//r } ? 1 : 0;
 }
 
 # effects($g, $n) -> what the memory version $n may store: [sources], or ['any'].
@@ -125,6 +128,22 @@ sub effects ( $s, $g, $n ) {
         return [ keys %w ];
     }
     my $op = $n->{op};
+    # (A `local` BINDS THE NAME TO A NEW SCALAR, and its restore binds the old
+    # one back: neither stores a scalar's value. A store by the name after a
+    # `local` of it, on one chain with no restore between, stores the new one.)
+    return [] if $op eq 'EntryWrite' && ( _f($n)->{local} || _f($n)->{binds} );
+    if ( $op eq 'EntryWrite' && ( my $k = $s->src( $g, $s->node( $g, $n->{inputs}[0] ) ) ) ) {
+        for ( my ( $v, $i ) = ( $n->{mem_in}, 0 ); defined $v && $i < 100000; $i++ ) {
+            my $vn = $s->node( $g, $v ) or last;
+            last if $vn->{op} =~ /\A(?:Phi|MemStart)\z/ || is_sub_call($vn);
+            if ( $vn->{op} eq 'EntryWrite' && ( _f($vn)->{local} || _f($vn)->{binds} )
+                && ( $s->src( $g, $s->node( $g, $vn->{inputs}[0] ) ) // '' ) eq $k ) {
+                return [] if _f($vn)->{local};
+                last;
+            }
+            $v = $vn->{mem_in};
+        }
+    }
     # (a LocalAlias binds `$_` to an element: a store of $_ only)
     return [ '$main::' . ( _f($n)->{name} // '_' ) ] if $op eq 'LocalAlias';
     my @t = $op eq 'Assign' ? ( _f($n)->{record} ? () : $n->{inputs}->@[ 0 .. ( _f($n)->{targets} // 1 ) - 1 ] )
@@ -152,8 +171,12 @@ sub effects ( $s, $g, $n ) {
             return ['any'];
         }
         push @e, $k;
-        # (a store into an aggregate as a whole reaches its elements)
-        push @e, "elem:$k" if $k =~ /\Aagg:/;
+        # (a store into an aggregate as a whole reaches its elements -- not a
+        # push or unshift: an element perl pushed is the scalar it was, its
+        # value untouched. A pop, shift, splice or `$#a =` frees what it
+        # removes -- perl reads undef through the alias -- so they do.)
+        push @e, "elem:$k" if $k =~ /\Aagg:/
+            && !( $op eq 'Call' && ( _f($n)->{name} // '' ) =~ /\A(?:push|unshift)\z/ );
     }
     return \@e;
 }
@@ -192,7 +215,19 @@ sub writes ( $s, $h, $seen = {} ) {
 
 # conflict($source, $effect) -> may a store to $effect reach $source?
 sub conflict ( $s, $src, $e ) {
+    # (a `my` no reference reaches and no closure captures -- it would be a
+    # cell -- is stored only by name: code the wire cannot see cannot name it)
+    return 0 if $e eq 'any' && $src =~ /\Amy\|/ && !$s->referenced($src);
     return 1 if $e eq 'any' || $e eq $src || $e eq 'P';
+    # (two elements of one container at different constant indices)
+    if ( $src =~ /\Aelem:(.*)#(.*)\z/ ) {
+        my ( $c, $i ) = ( $1, $2 );
+        return 0 if $e =~ /\Aelem:\Q$c\E#(.*)\z/ && $1 ne $i;
+        return 1 if $e eq "elem:$c";
+        $src = "elem:$c";
+    }
+    elsif ( $src =~ /\Aelem:/ && $e =~ /\Aelem:(.*)#/ ) { $e = "elem:$1" }
+    return 1 if $e eq $src;
     return 1 if $src =~ /\Acell:/;    # (a captured cell: any store we cannot name)
     my $kind = sub ($k) {
         return 'scalar' if $k =~ /\A(?:\$|my:|cell:|F:\$|R:scalar)/ || $k =~ /\Aelem:/;
@@ -202,7 +237,10 @@ sub conflict ( $s, $src, $e ) {
     # an element: its container stored as a whole, or one through a reference of its kind
     if ( $src =~ /\Aelem:(.*)\z/ ) {
         my $c = $1;
-        return 1 if $e eq $c;
+        # (the container stored as a whole is named with its elements, `elem:`
+        # beside it, where the store reaches them: the name alone is a reshape
+        # that leaves them -- a push)
+        return 0 if $e eq $c;
         return 1 if $c =~ /\AR:(\w+)/ && ( $e =~ /\AR:\Q$1\E/ || $e =~ /\Aelem:/ || $e =~ /\Aagg:/ );
         if ( $e =~ /\AR:(array|hash)\z/ ) {
             my $want = $1;

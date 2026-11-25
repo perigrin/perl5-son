@@ -25936,6 +25936,7 @@ class SoN::FromOptree 0.01 {
             next unless $d->{depth} < $sim->stack_depth && refaddr( $sim->node_at( $d->{depth} ) ) == refaddr( $d->{node} );
             my $old = $d->{node};
             my $new;
+            _elem_alias_refused( $cv, $k, $op ) if $d->{how} eq 'element';
             $mem = $sim->memory;   # (a read made again just now may have been pinned: a version)
             if ( $d->{how} eq 'target' ) {
                 # (a variable in memory is read again only where something
@@ -26005,6 +26006,30 @@ class SoN::FromOptree 0.01 {
             || ( $_->name eq 'sassign' && $_->can('last') && ( $_->flags & 4 ) && ${ $_->last } && $_->last->name eq 'padsv' && $_->last->targ == $targ )
             || ( ( $_->private & B::OPpTARGET_MY() ) && $_->can('targ') && $_->targ == $targ && $_->name ne 'padsv' )
         } _subtree_ops( $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT );   # the program's ops hang off main_root
+    }
+
+    # _elem_alias_refused($cv, $k, $op): dies, by name, where a call in a later
+    # operand of $op may reshape the container of the element operand $k or
+    # cannot be seen into -- perl's alias is then to a scalar the container no
+    # longer holds (freed, or another), which a read by index does not name.
+    # What each callee may store is its MOD set (SoN::FromOptree::ModSets).
+    my %ELEM_REFUSED;   # cv:op address -> the refusal, or '' (the optree does not change)
+    sub _elem_alias_refused ($cv, $k, $op) {
+        my $why = $ELEM_REFUSED{ $$cv . ':' . $$k } //= do {
+            my @later = _later_siblings($k);
+            pop @later if $op->name =~ /\A(?:sassign|multiconcat)\z/;
+            my @eff = map { SoN::FromOptree::ModSets::op_effects($cv, $_) } @later;
+            my $place = @eff ? SoN::FromOptree::ModSets::place($cv, $k) : undef;
+            my $c = !@eff ? '' : $place ? SoN::FromOptree::ModSets::conflict($place, \@eff) : 'unknown';
+            $c eq 'unknown' ? "GAP: an element operand is read by alias and a later operand calls code whose stores"
+                . " cannot be known here (a dynamic method or code ref, a string eval, a sub outside the"
+                . " program) -- not yet lowered\n"
+            : $c eq 'reshape' ? "GAP: an element operand is read by alias and a later operand calls a sub that may"
+                . " reshape its container or replace what holds it -- not yet lowered\n"
+            : '';
+        };
+        die $why if $why;
+        return;
     }
 
     sub _later_siblings ($o) {
