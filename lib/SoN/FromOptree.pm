@@ -770,6 +770,7 @@ class SoN::FromOptree 0.01 {
     # THE ELEMENT AN op= STORED, op address => its Subscript place, for an
     # op= whose target is that op= (design 3). Local to each CV's walk.
     our %ASSIGN_LVALUE;
+    our %ALIAS_OPERAND;   # (see _note_alias_operand)
     # The main walk's closure cells, for the same walkers: a capture read in an
     # arm or loop body is a cell read, and a fresh ctx without them made it a
     # PadAccess naming a slot the closure does not own (`$w` in a recursive
@@ -1988,6 +1989,18 @@ class SoN::FromOptree 0.01 {
                         my $t = _strip_null($k);
                         $taken{ $t->targ } = 1 if $t->name eq 'padsv' && $t->targ && !( $t->private & 128 );
                     }
+                }
+            }
+
+            # AN ASSIGNMENT AS A FOREACH, MAP OR GREP ITEM is its target, aliased
+            # (`for ($x .= "b") { $_ .= "!" }`, audit 3 N6): a `my` target lives
+            # in memory, so the list holds its place (_alias_list_items).
+            if ( $op->name =~ /\A(?:enteriter|mapstart|grepstart)\z/ ) {
+                for my $k ( _alias_list_item_ops($op) ) {
+                    my $s = _strip_null($k);
+                    my $t = _assign_target($k)
+                        // ( $s->name =~ /\A(?:i_)?pre(?:inc|dec)\z/ && ( $s->flags & B::OPf_KIDS ) ? _strip_null( $s->first ) : undef ) // next;
+                    $taken{ $t->targ } = 1 if $t->targ && ( $t->name =~ /\Apadsv/ || _stores_its_targ($t) );
                 }
             }
 
@@ -5992,9 +6005,48 @@ class SoN::FromOptree 0.01 {
     # place -- the alias IS it, read and written where the body does (final
     # audit class E: the list held an EntryDef of no version, read as 0). An
     # element's place makes it exist (perl's binder does: `for ($a[2]) {}`).
-    sub _alias_list_items ($items, $factory) {
+    # _alias_list_item_ops($op) -> the ops of a foreach's (enteriter), map's or
+    # grep's (mapstart, grepstart) list items, in order.
+    sub _alias_list_item_ops ($op) {
+        my @k; for ( my $k = $op->first; $k && $$k; $k = $k->sibling ) { push @k, $k }
+        if ( $op->name eq 'enteriter' ) {
+            my ($list) = grep { $_->name =~ /\A(?:null|list)\z/ && ( $_->flags & B::OPf_KIDS ) && ${ $_->first } && $_->first->name eq 'pushmark' } @k;
+            return () unless $list;
+            my @i; for ( my $k = $list->first->sibling; $k && $$k; $k = $k->sibling ) { push @i, $k }
+            return @i;
+        }
+        return @k[ 2 .. $#k ];
+    }
+    # _assignment_item_place($cv, $op, $node, $factory, $ctx) -> where the item
+    # op $op is an assignment (or ++, op=) whose value $node is: its target's
+    # place -- perl's alias is the variable it stored, not the value (audit 3,
+    # N6). undef for any other item. Dies by name for a target with no place.
+    sub _assignment_item_place ($cv, $op, $node, $factory, $ctx) {
+        my $p = _strip_null($op);
+        return undef if $p->name eq 'padsv';
+        my $d = $ALIAS_OPERAND{$$p} or return undef;
+        return undef unless $d->{how} eq 'target' && refaddr( $d->{node} ) == refaddr($node);
+        if ( defined $d->{targ} ) {
+            my $t = $d->{targ};
+            if ( my $cell = $ctx->{cell_params}{$t} // $ctx->{cells}{$t} ) { return $factory->make('CellRead', inputs => [$cell], place => 1) }
+            die "GAP: an assignment to a `my` scalar kept in no memory, as a foreach, map or grep item, is not yet lowered\n"
+                unless $ctx->{addr_taken}{$t};
+            my ( $sg, $sy ) = _padparts( $cv, $t );
+            return $factory->make('PadAccess', targ => $t, sigil => $sg, symbol => $sy,
+                ( $ctx->{shared_lexicals}{$t} ? ( shared => 1 ) : () ), place => 1);
+        }
+        my $lv = $d->{lv};
+        return _alias_place( $lv, $factory, vivify => $lv isa SoN::IR::Node::Subscript ) // die
+            "GAP: an assignment through a reference as a foreach, map or grep item is not yet lowered -- its target has no place on the wire\n";
+    }
+    sub _alias_list_items ($items, $factory, $ops = undef, $cv = undef, $ctx = undef) {
+        my @ops = $ops ? @$ops : ();
+        my $i = -1;
         return [ map {
             my $n = $_;
+            $i++;
+            if ( @ops == @$items && ( my $pl = _assignment_item_place( $cv, $ops[$i], $n, $factory, $ctx ) ) ) { $pl }
+            else {
             my $p = $n isa SoN::IR::Node::Access && !$n->place
                 && ( $n->operation eq 'EntryDef' && $n->sigil eq '$'
                      || $n->operation eq 'Subscript'
@@ -6002,6 +6054,7 @@ class SoN::FromOptree 0.01 {
                 ? _alias_place($n, $factory, vivify => $n->operation eq 'Subscript') : undef;
             $ALIAS_STATS{ 'list-' . ( $p ? 'place' : 'value' ) }++ if $n isa SoN::IR::Node::Access;
             $p // $n
+            }
         } $items->@* ];
     }
     sub _handle_entersub ($cv, $op, $sim, $factory, $ctx) {
@@ -10101,7 +10154,7 @@ class SoN::FromOptree 0.01 {
             # "a List is not an Array" miscompile from the other direction.
             my $input = ($items->@* == 1 && _is_aggregate_node($items->[0]))
                 ? $items->[0]
-                : $factory->make('ArrayLiteral', inputs => _alias_list_items($items, $factory),
+                : $factory->make('ArrayLiteral', inputs => _alias_list_items($items, $factory, [ _alias_list_item_ops($op) ], $cv, $ctx),
                     stamp => SoN::IR::Stamp->new(type => 'List'));
 
             my $while_op = $op->next;
@@ -11759,7 +11812,7 @@ class SoN::FromOptree 0.01 {
                 # Subscript and stores back into it for an iterator write --
                 # so it is not a reference and must not read as one.
                 my $arr = $factory->make('ArrayLiteral',
-                    inputs => _alias_list_items($bounds, $factory),
+                    inputs => _alias_list_items($bounds, $factory, [ _alias_list_item_ops($op) ], $cv, $ctx),
                     stamp  => SoN::IR::Stamp->new(type => 'Array'));
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $arr, $iter_key);
@@ -12398,6 +12451,26 @@ class SoN::FromOptree 0.01 {
             # pushmark RHS... pushmark LHS..., so popping to the last mark yields
             # the LHS, then popping to the prior mark yields the RHS.
             my $lhs = $sim->pop_to_mark;
+            # AN ASSIGNMENT AS A TARGET is the variable it stored: `($x = $y)
+            # = 7` stores 7 into $x (audit 3, N6). Its value on the stack is
+            # no lvalue, and a store into it went nowhere.
+            {
+                my @lops = grep { $_->name ne 'pushmark' } _operand_kids_of_list( $op->last );
+                # (its value as lvalues is each of its targets: not on the wire)
+                die "GAP: a list assignment as the target of a list assignment is not yet lowered -- its"
+                  . " value as an lvalue is each of its targets, which the wire does not carry\n"
+                    if grep { _strip_null($_)->name eq 'aassign' } @lops;
+                if ( @lops == $lhs->@* ) {
+                    for my $i ( 0 .. $#lops ) {
+                        my $p = _strip_null( $lops[$i] );
+                        next if $p->name eq 'padsv';
+                        my $d = $ALIAS_OPERAND{$$p};
+                        next unless $d && $d->{how} eq 'target' && refaddr( $d->{node} ) == refaddr( $lhs->[$i] );
+                        my $t = $d->{targ};
+                        $lhs->[$i] = defined $t ? ( $ctx->{cell_params}{$t} // $ctx->{cells}{$t} // _make_pad_or_field( $cv, $t, $factory ) ) : $d->{lv};
+                    }
+                }
+            }
 
             # `my (...) = @_` with a padrange-bound LHS leaves an empty mark and
             # no RHS; emit nothing (the bind already happened).
@@ -25372,7 +25445,7 @@ class SoN::FromOptree 0.01 {
     # A branch condition is consumed before its arm (a LOGOP is no consumer);
     # a call's arguments are its places (_handle_entersub); a postincrement's
     # value is a copy; a store's own target (OPf_MOD) is not read.
-    my %ALIAS_OPERAND;   # pushing op address -> { depth, node, how, targ | lv }
+    # %ALIAS_OPERAND: pushing op address -> { depth, node, how, targ | lv }
 
     # _alias_result_target($op, $sim) -> before an op that stores and pushes
     # its target runs: how to read that target again (a pad slot, or the
@@ -25393,6 +25466,14 @@ class SoN::FromOptree 0.01 {
         }
         if ( $op->isa('B::BINOP') && ( $op->flags & B::OPf_STACKED ) && $n !~ /\A(?:sassign|sort)\z/ ) {
             return $pad->( $op->first ) // $node_at->( $sim->stack_depth - 2 );
+        }
+        # (a string op= or `= "..$x.."` perl folded into a multiconcat: its
+        # target is the first kid when it appends, else the last; each kid
+        # but a folded constant pushed one value, the target first)
+        if ( $n eq 'multiconcat' && ( $op->flags & B::OPf_STACKED ) && ( $op->flags & B::OPf_KIDS ) ) {
+            my @k; for ( my $k = $op->first; $k && $$k; $k = $k->sibling ) { push @k, $k }
+            my $pushes = grep { !( $_->name eq 'null' && !( $_->flags & B::OPf_KIDS ) ) } @k;
+            return ( $op->private & 64 ) ? $pad->( $k[0] ) // $node_at->( $sim->stack_depth - $pushes ) : $pad->( $k[-1] ) // $node_at->( $sim->stack_depth - 1 );
         }
         return undef;
     }
@@ -25474,6 +25555,13 @@ class SoN::FromOptree 0.01 {
             }
             push @k, $k;
         }
+        return @k;
+    }
+
+    # _operand_kids_of_list($list) -> an ex-list's item ops (its pushmark too)
+    sub _operand_kids_of_list ($l) {
+        return () unless $l && $$l && ( $l->flags & B::OPf_KIDS );
+        my @k; for ( my $k = $l->first; $k && $$k; $k = $k->sibling ) { push @k, $k }
         return @k;
     }
 
