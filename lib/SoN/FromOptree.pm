@@ -24316,7 +24316,8 @@ class SoN::FromOptree 0.01 {
             && $value->stamp->type ne 'Unknown') {
             my $cur = $pad_node->stamp;
             if (!$cur || $cur->type eq 'Unknown'
-                || $value->stamp->is_subtype_of($cur)) {
+                || ($value->stamp->type ne $cur->type    # strict: is_subtype_of is reflexive
+                    && $value->stamp->is_subtype_of($cur))) {
                 $pad_node->set_stamp($value->stamp);
             }
         }

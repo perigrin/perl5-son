@@ -63,6 +63,13 @@ class SoN::IR::Stamp 0.01 {
         Unknown   => [],
     );
 
+    # lattice_parents() -> { type => [direct parents] }, a copy: every name in
+    # the lattice and its parents. chalk's TypeLibrary::lattice_parents gives
+    # the same shape; t/lattice-agrees-with-chalk.t compares the two.
+    sub lattice_parents () {
+        return { map { $_ => [ sort $PARENTS{$_}->@* ] } keys %PARENTS };
+    }
+
     # Precompute the full set of ancestors for each type
     my %ANCESTORS;
     sub _ancestors ($type) {
@@ -133,9 +140,11 @@ class SoN::IR::Stamp 0.01 {
         return "Maybe[$t]";
     }
 
+    # REFLEXIVE, as chalk's TypeLibrary::is_subtype is: T <: T. A caller that
+    # wants "strictly below" adds `ne` itself.
     method is_subtype_of ($other) {
         my $other_type = $other->type;
-        return false if $type eq $other_type;
+        return true if $type eq $other_type;
 
         # None is below everything; nothing but None is below None.
         return true  if $type eq 'None';
