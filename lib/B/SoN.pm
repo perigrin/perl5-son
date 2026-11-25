@@ -309,7 +309,7 @@ sub compile {
                 _graph_modules($graphs), \%REFUSED, \%switch );
             # (tools/alias-fastpath.pl: how often the alias fast path held;
             # shortcut: a sub walked again inside one translation counts twice)
-            print STDERR 'ALIAS_STATS ' . join( ' ', map { "$_=$SoN::FromOptree::ALIAS_STATS{$_}" } sort keys %SoN::FromOptree::ALIAS_STATS ) . "\n"
+            print STDERR 'ALIAS_STATS ' . do { my %st = ( %SoN::FromOptree::ALIAS_STATS, %SoN::Promote::STATS ); join( ' ', map { "$_=$st{$_}" } sort keys %st ) } . "\n"
                 if $ENV{SON_ALIAS_STATS};
         }
         else {

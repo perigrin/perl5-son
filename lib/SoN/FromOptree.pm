@@ -6189,8 +6189,7 @@ class SoN::FromOptree 0.01 {
         die "GAP: an element handed to a sub as its \$_[N] where that sub localizes it is not yet lowered -- "
           . "perl's alias keeps the saved element, and chalk's element alias is the aggregate and key\n"
             if SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, 1, 1);
-        $ALIAS_STATS{ 'call-' . ( $ARGS_ARE_PLACES ? 'place' : 'value' ) }++
-            if grep { _strip_null($_)->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|aelemfast(?:_lex)?)\z/ } _entersub_args_and_invocant($op);
+        # (how often the place is promoted: SoN::Promote's %STATS)
         _handle_entersub_call($cv, $op, $sim, $factory, $ctx);
         return;
     }
