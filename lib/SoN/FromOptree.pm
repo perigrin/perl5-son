@@ -6093,6 +6093,10 @@ class SoN::FromOptree 0.01 {
         my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @body;
         return unless @eff;
         for my $k ( _alias_list_item_ops($op) ) {
+            # (`values %h` is the hash's own scalars, aliased each by the
+            # consumer -- chalk's alias_list; an array's values are not yet)
+            next if _strip_null($k)->name eq 'values' && ( _operand_kids_of_list( _strip_null($k) ) )[0]
+                && _strip_null( ( _operand_kids_of_list( _strip_null($k) ) )[0] )->name =~ /hv\z/;
             next unless _strip_null($k)->name =~ /\A(?:values|avalues|reverse|sort|grepwhile|cond_expr)\z/;
             for my $src ( _alias_list_sources( $cv, $k, 1 ) ) {
                 my $pl = SoN::FromOptree::ModSets::aggregate_place( $cv, $src );
@@ -19848,8 +19852,12 @@ class SoN::FromOptree 0.01 {
                 # A PAD READ THAT IS NOT THE SLOT is the subject's value, as
                 # in the main walker: `(my $t = $s) =~ s///` pinned here was
                 # spelled `$s =~ s///`, writing $s.
+                # (AND A `my` SCALAR'S VALUE, whatever node it is bound to: a
+                # parameter copied from @_ is a read of `$_[0]`, and pinned
+                # the substitution was spelled into `$_[0]` -- design B, N1)
                 unless ($target->isa('SoN::IR::Node::PadAccess')
-                        && ($target->targ // q{}) ne $scope_key) {
+                        && ($target->targ // q{}) ne $scope_key
+                        || $scope_key =~ /\A\d+\z/ && !( $target->isa('SoN::IR::Node::PadAccess') && ( $target->targ // q{} ) eq $scope_key )) {
                     _place($sim, $node);
                 }
 
@@ -25885,6 +25893,8 @@ class SoN::FromOptree 0.01 {
         return unless $op->flags & B::OPf_KIDS;
         return if $op->isa('B::LOGOP');
         return if $op->name =~ /\A(?:leave|enter|lineseq|scope|entersub|pushmark|refgen|srefgen|null|list)/;
+        # (an op that stores into its operand takes it as its target, not a value)
+        return if $op->name =~ /\A(?:subst|trans|transr|chomp|chop|schomp|schop|undef|pos|substr|vec|local)\z/;
         my $mem = $sim->memory;
         my $stacked = ( $op->flags & B::OPf_STACKED ) && $op->name ne 'sassign';
         my @kids = _operand_kids($op);
