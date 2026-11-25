@@ -753,3 +753,25 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [33m44
 ```
 
 (The probes gate's one change is l/lw25, REFUSED -> SAME: its read of `@a` is made through memory now, and chalk prints perl's `1,2 1x,2x`. The run on the old base, 152a6be, was stopped when alias-places merged; none ran on it to the end.)
+
+## 27. The second final audit's wrong answers lowered or refused by name (branch `audit2`)
+
+Heads: producer `audit2` from 8257e66, chalk `audit2` from f1d9aa74. The second final audit (docs/research/2026-11-25-memory-model-final-audit-2.md) found 57 silent wrong answers in 828 new probes (probes/z), nine classes. Each is lowered or refused by name; the z probes are in chalk's `t/data/audit-probes` as `z<name>` with BASELINE rows (pa79 and un75 out of `z/unverified/`, which is gone).
+
+| class (n) | outcome | how |
+|---|---|---|
+| K1 (13) | SAME 13 | `my ($p, $q) = @_` binds each target to `$_[i]` read where it stands, where a caller may hand the sub places (`ModSets::args_may_be_places`: it stores through `$_[N]`, reads `@_` after a store, or a call no walk sees into may be its call); `my @l = @_` is a pinned copy and a slurpy bind is placed where the sub's MOD set is not empty (T2 hands `@_` as aliases). Elsewhere the parameter record stays. SoN::Verify: a record is used where its target is, and a used record of `@_` in a graph that stores into an element of `@_` is `read-unversioned:args` |
+| K2 (5) | REFUSED 5 | `GAP: a variable handed to a sub as its $_[N] where that sub localizes it` (`ModSets::arg_localized_by_call`: a place, or a reference to `$_[N]`; a call no walk sees into only where code the scan read localizes that variable, `%PKG_LOCALIZED`) |
+| K3 (5) | SAME 2, REFUSED 3 | a lexical iterator over one array whose body calls a sub that may store it (MOD set) is aliased by reference; refused: `$_` (foreach, map, grep) or a package iterator read after such a call, and a list of several items or one a call returns, read after it (`keys` is copies; a list of variables, elements and constants is a list of places) |
+| K4 (8) | SAME 3, REFUSED 5 | the op= refusal takes a fused store (TARGMY) for a target; `x=` of a list; an assignment as an item of an alias list whose body may write it; a TARGMY op (`$x .= "b"`) passed to a sub storing `$_[N]` is `$x`'s place |
+| K5 (6) | REFUSED 6 | `GAP: an assignment's element is read by alias and a later operand stores into its container` |
+| K6 (2) | SAME 2 | chalk `arg_alias`: a package scalar read at an older version than its call's, not a place, is a copy of the value; producer: a postincrement's value is no place |
+| K7 (3) | REFUSED 3 | `GAP: an aggregate flattened into a list is read by alias and a later item may store into its elements` (an array; a hash only by a call's store; a reshape or a new key is no such store) |
+| K8 (4) | SAME 4 | not a pre-scan miss: scan and walk both said "written"; `store_at_write` skipped any loop Phi as the iterator's own, and `$y`'s was what `$x` was set to (`%LOOP_PHI_KEY`) |
+| K9 (11) | SAME 11 | B::SoN reads, at CHECK, each followed module's package variables some graph names and puts them on the wire as a BEGIN block of literal stores after the program's own BEGIN blocks; refused by name: an object, code, a glob, or one a program BEGIN block reads |
+
+Clause gaps: st3 is refused in perl's words (the harness: perl does not compile it); pa79's lvalue substr reads `$_[0]` at a version; V10 counts a local put back before the thrower as closed (un75, with a mutation test); V12's alias-list half (a foreach/map/grep's own item, used after a store that may reach its list; mutation test and the base's pa69 wire); `as_v1` takes the producer's `mem_operand` mark (`marks.mem_operand` on the wire); t/pre-scan-agrees-with-the-walk.t compares the iterator write and the slots, scan against walk, over corpus and probes (eleven named disagreements: ten safe-side Phis, one refused miss).
+
+Shortcuts named in the code: a call no walk sees into is not counted by K3's and K7's refusals (as the call-argument rule does not); a sub a BEGIN block calls reads a followed module's variable as the wire has it then, unset; an import that is not followed code stores no followed module's variable.
+
+Design question left open (K2): a place is the variable's storage, so under `local` it names the new scalar where perl's alias keeps the saved one. Either `local` on the wire makes a new place -- the save holds the old place, the name is rebound, and a place taken before keeps the old one (HHVM's box) -- or the refusal stands.
