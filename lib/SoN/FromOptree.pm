@@ -8973,6 +8973,13 @@ class SoN::FromOptree 0.01 {
             }
             my $count = $sim->pop_node;
             my $elems = $sim->pop_to_mark;
+            # IN SCALAR CONTEXT it repeats the list's last element as a string
+            # (perlop: `(1,2) x 2` is "22"); the list was taken whole -- audit 3, N12.
+            if ( ( $op->flags & 3 ) == 2 && @$elems && !grep { _is_aggregate_node($_) } @$elems ) {
+                $sim->push_node($factory->make('Repeat', inputs => [ $elems->[-1], $count ],
+                    stamp => SoN::IR::Stamp->new(type => 'Str')));
+                return ($op->next, 'handled');
+            }
             my $list  = $factory->make('ArrayLiteral', inputs => [@$elems],
                 stamp => SoN::IR::Stamp->new(type => 'List'));
             $sim->push_node($factory->make('Repeat', inputs => [$list, $count],
