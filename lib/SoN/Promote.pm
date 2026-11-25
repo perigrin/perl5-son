@@ -17,6 +17,9 @@ use SoN::AliasProof ();
 # How often each proof held ('<kind>-value') or failed ('<kind>-place'), for
 # tools/alias-fastpath.pl (B::SoN prints them under SON_ALIAS_STATS).
 our %STATS;
+# Sub name -> code the wire cannot see may call it (B::SoN sets it): such a
+# sub may be handed places by none of the wire's calls (P2).
+our %CALLED_UNKNOWN;
 
 my %PLACE_OP = map { ( $_ => 1 ) } qw(EntryDef PadAccess Subscript FieldAccess CellRead);
 
@@ -48,6 +51,62 @@ sub promote ($data) {
             }
             $STATS{ 'call-' . ( $all ? 'value' : 'place' ) }++;
         }
+    }
+    # P2: A SUB'S COPY OF @_ AS A RECORD. `my ($p, $q) = @_` is built as each
+    # target read at the version where it stands (audit 3, N1). Where no call
+    # the wire holds hands the sub a place (after P1), no code the wire cannot
+    # see may call it, the reads are at its start and it neither hands @_ on
+    # nor stores through it, the reads are its arguments as passed: the
+    # parameter record (`Assign record [targets, ArgsSource]`), which binds
+    # each target positionally.
+    my %placed;    # sub name -> some call hands it a place
+    for my $g ( $p->graphs ) {
+        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
+            next unless grep { my $a = $p->node( $g, $_ ); $a && ( $a->{fields} // {} )->{place} } ( $c->{inputs} // [] )->@*;
+            my $t = $p->callees( $g, $c ) or next;
+            $placed{$_} = 1 for @$t;
+        }
+    }
+    my %repl;    # graph -> { read id => target id }
+    for my $h ( grep { $p->{g}{$_} && exists $CALLED_UNKNOWN{$_} } $p->graphs ) {
+        next if $CALLED_UNKNOWN{$h} || $placed{$h} || $p->args_escape($h);
+        my ($start) = grep { $_->{op} eq 'MemStart' } $p->nodes($h);
+        for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} } $p->nodes($h) ) {
+            my $k = ( $as->{fields} // {} )->{targets} // next;
+            my @in = ( $as->{inputs} // [] )->@*;
+            my @t = @in[ 0 .. $k - 1 ];
+            my @r = map { $p->node( $h, $_ ) } @in[ $k .. $#in ];
+            next unless @r == $k && $start;
+            my ( $args, $ok ) = ( undef, 1 );
+            for my $i ( 0 .. $#r ) {
+                my $r = $r[$i];
+                my $ix = $r && $r->{op} eq 'Subscript' ? $p->node( $h, $r->{inputs}[1] ) : undef;
+                my $src = $r ? $p->node( $h, $r->{inputs}[0] ) : undef;
+                $ok = 0, last unless $src && $src->{op} eq 'ArgsSource' && ( $r->{mem_in} // -1 ) == $start->{id}
+                    && $ix && $ix->{op} eq 'Constant' && ( $ix->{fields}{value} // '' ) eq "$i";
+                $args = $src->{id};
+            }
+            next unless $ok && defined $args;
+            $repl{$h}{ $r[$_]{id} } = $t[$_] for 0 .. $#r;
+            $as->{inputs} = [ @t, $args ];
+            $as->{fields}{promoted} = JSON::PP::true();
+            $STATS{'record-value'}++;
+        }
+    }
+    for my $h ( keys %repl ) {
+        my $m = $repl{$h};
+        for my $n ( ( $p->{g}{$h}{nodes} // [] )->@* ) {
+            next if $n->{op} eq 'Assign' && ( $n->{fields} // {} )->{record};
+            $n->{inputs} = [ map { defined && !ref && exists $m->{$_} ? $m->{$_} : $_ } ( $n->{inputs} // [] )->@* ];
+        }
+        my %used = map { ( $_ => 1 ) } map { grep { defined && !ref } ( $_->{inputs} // [] )->@* } ( $p->{g}{$h}{nodes} // [] )->@*;
+        $p->{g}{$h}{nodes} = [ grep { !exists $m->{ $_->{id} } || $used{ $_->{id} } } $p->{g}{$h}{nodes}->@* ];
+        # (the targets, which have no inputs, now named by the reads' uses:
+        # moved to the front, so that no use comes before them)
+        my %t = map { ( $_ => 1 ) } values %$m;
+        my @n = $p->{g}{$h}{nodes}->@*;
+        $p->{g}{$h}{nodes} = [ ( grep { $_->{op} eq 'Start' } @n ), ( grep { $t{ $_->{id} } } @n ), ( grep { $_->{op} ne 'Start' && !$t{ $_->{id} } } @n ) ];
+        $new{$h} //= [];
     }
     for my $g ( keys %new ) {
         # (a place still handed to another call stays)

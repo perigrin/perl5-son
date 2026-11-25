@@ -25834,6 +25834,7 @@ class SoN::FromOptree 0.01 {
                     my $src = pop @in;
                     if ( !grep { !( $_ isa SoN::IR::Node::Constant ) } @in ) {
                         my $kind = $p->name eq 'hslice' ? 'hash' : 'array';
+                        local $SoN::IR::NodeFactory::ON_VALUE = undef;   # (reads at the old version: not pinned here)
                         my @el = map {
                             my $at_v = $factory->make('Subscript', kind => $kind, inputs => [ $src, $_ ], mem => $old->mem_in);
                             my $now  = $factory->make('Subscript', kind => $kind, inputs => [ $src, $_ ], mem => $sim->memory);
@@ -25901,8 +25902,10 @@ class SoN::FromOptree 0.01 {
                 $new = _at_memory( $factory, $old, $mem );
                 if ( $new && $d->{how} eq 'element' ) {
                     # (perl pushed the element only if it existed: else undef)
-                    my $ex = $factory->make('Exists', kind => $old->kind, inputs => [ $old->v1_inputs->@[ 0, 1 ] ],
-                        mem => $old->mem_in, stamp => SoN::IR::Stamp->new(type => 'Boolean'));
+                    # (made at the old version, not where this op stands: never pinned here)
+                    my $ex = do { local $SoN::IR::NodeFactory::ON_VALUE = undef;
+                        $factory->make('Exists', kind => $old->kind, inputs => [ $old->v1_inputs->@[ 0, 1 ] ],
+                        mem => $old->mem_in, stamp => SoN::IR::Stamp->new(type => 'Boolean')) };
                     { local $PIN_OP = $p; _pin_tied_read( $sim, $new ) }
                     $new = _make_ternary( $factory, $ex, $new, $old );
                 }

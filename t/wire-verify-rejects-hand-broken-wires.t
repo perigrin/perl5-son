@@ -232,4 +232,15 @@ for my $case (
     promote( $a, $c->{mem_in} );
     rejected( $case->[0], $w, qr/\Apromoted-not-private\z/ );
 }
+# P2: a promoted parameter record, in a sub a call then hands a place.
+{   my $w = wire( 'my $x=1; sub f { my ($p) = @_; $p } print f($x), "\n";' );
+    my @f = $w->{methods}{'main::f'}{nodes}->@*;
+    my ($rec) = grep { $_->{op} eq 'Assign' && $_->{fields}{record} } @f;
+    ok( $rec && $rec->{fields}{promoted}, 't13: the pass promoted the parameter record of a sub no call hands a place' );
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
+    delete $a->{fields}{promoted}; delete $a->{mem_in}; delete $a->{mem_operand};
+    $a->{fields}{place} = JSON::PP::true;
+    rejected( 'M24 a promoted parameter record of a sub a call hands a place', $w, qr/\Apromoted-not-private\z/ );
+}
 done_testing;

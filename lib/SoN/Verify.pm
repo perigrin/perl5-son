@@ -252,6 +252,24 @@ sub _promoted_private ( $wire, $res ) {
             }
         }
     }
+    # P2: a promoted parameter record binds a sub's arguments as passed: no
+    # call the wire holds may hand that sub a place, and the sub neither hands
+    # @_ on nor stores through it.
+    my %placed;
+    for my $g ( $p->graphs ) {
+        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
+            next unless grep { my $a = $p->node( $g, $_ ); $a && ( $a->{fields} // {} )->{place} } ( $c->{inputs} // [] )->@*;
+            my $t = $p->callees( $g, $c ) or next;
+            $placed{$_} = "$g Call#$c->{id}" for @$t;
+        }
+    }
+    for my $h ( $p->graphs ) {
+        for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} && ( $_->{fields} // {} )->{promoted} } $p->nodes($h) ) {
+            my $why = $placed{$h} ? "$placed{$h} hands it a place" : $p->args_escape($h) ? 'it hands @_ on or stores through it' : undef;
+            push $res->{violations}->@*, { graph => $h, node => $as->{id}, op => 'Assign', rule => 'promoted-not-private',
+                detail => "a parameter record: $why" } if defined $why;
+        }
+    }
     return;
 }
 

@@ -2,6 +2,7 @@
 # ABOUTME: node and each sub (through its calls) may store. Shared by SoN::Promote and SoN::Verify.
 package SoN::AliasProof;
 use v5.42.0;
+use B::SoN::EffectTable ();
 
 # WHY ONE MODULE. The promotion pass (SoN::Promote) rewrites a place into a
 # value where this says the alias is private, and the verifier (SoN::Verify,
@@ -130,6 +131,12 @@ sub effects ( $s, $g, $n ) {
           : $op =~ /\A(?:Ref|MakeCell|Transliterate|RegexSubst|RegexMatch|Bless|Exc|Unwind|Return|MemStart|Phi|Loop|Region|Start|Subscript|PostfixDeref|Exists|Count|EntryDef|PadAccess|FieldAccess|CellRead|RefType|Coerce|Slice|Keys)\z/ ? ()   # (a read pinned where it stands is a version that stores nothing)
           : $op eq 'ArrayLiteral' ? ()
           : $op eq 'Call' && ( _f($n)->{name} // '' ) =~ /\A(?:bless|print|say|prtf|warn|die)\z/ ? ()
+          # (a container op stores its container; a builtin the effect table
+          # says stores its operands, those -- B::SoN::EffectTable)
+          : $op eq 'Call' && ( _f($n)->{name} // '' ) =~ /\A(?:push|unshift|pop|shift|splice|set_arylen)\z/ ? ( $n->{inputs}[0] )
+          : $op eq 'Call' && B::SoN::EffectTable::stores_operands( _f($n)->{name} )
+            ? do { my $which = B::SoN::EffectTable::stores_operands( _f($n)->{name} );
+                   $which eq 'all' ? ( $n->{inputs} // [] )->@* : $which eq 'first' ? $n->{inputs}[0] : $n->{inputs}[1] }
           : grep { defined && !ref } ( $n->{inputs} // [] )->@*;
     my @e;
     for my $t ( grep { defined && !ref } @t ) {

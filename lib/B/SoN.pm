@@ -303,6 +303,15 @@ sub compile {
 
         if ( $format eq 'json' ) {
             my $mods = _followed_modules();
+            # (WHICH SUBS CODE THE WIRE CANNOT SEE MAY CALL -- a code value, a
+            # dynamic method -- for the promotion pass's P2: such a sub may be
+            # handed places by no call on the wire)
+            local %SoN::Promote::CALLED_UNKNOWN = map {
+                my $name = $_;
+                no strict 'refs';
+                ( $name => ( $name =~ /__ANON__|__PROGRAM__|__SORTCMP__/ || !defined &{$name} ) ? 1
+                    : SoN::FromOptree::ModSets::may_be_called_unknown( B::svref_2object( \&{$name} ) ) ? 1 : 0 )
+            } keys %$graphs;
             print to_json( $graphs, $classes, _data_section(),
                 $phases,
                 [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
