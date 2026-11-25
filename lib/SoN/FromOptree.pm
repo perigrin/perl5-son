@@ -6039,23 +6039,54 @@ class SoN::FromOptree 0.01 {
         return _alias_place( $lv, $factory, vivify => $lv isa SoN::IR::Node::Subscript ) // die
             "GAP: an assignment through a reference as a foreach, map or grep item is not yet lowered -- its target has no place on the wire\n";
     }
+    # _refuse_aliased_call_list($cv, $op): A FOREACH, MAP OR GREP OVER WHAT A
+    # CALL RETURNS AS ALIASES -- `values`, `reverse`, `sort`, a grep's -- whose
+    # body may store into the aggregate under it is refused by name: perl's
+    # item is that aggregate's element, and the wire has no alias list of a
+    # call's result (audit 3, N3). The body's MOD set says (a call by its subs,
+    # one nothing can be said of by everything).
+    sub _refuse_aliased_call_list ($cv, $op) {
+        my @body = $op->name eq 'enteriter' ? grep { $$_ } $op->sibling : do { my $b = $op->first->sibling; $b && $$b ? ($b) : () };
+        return unless @body;
+        my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @body;
+        return unless @eff;
+        for my $k ( _alias_list_item_ops($op) ) {
+            next unless _strip_null($k)->name =~ /\A(?:values|avalues|reverse|sort|grepwhile|cond_expr)\z/;
+            for my $src ( _alias_list_sources( $cv, $k, 1 ) ) {
+                my $pl = SoN::FromOptree::ModSets::aggregate_place( $cv, $src );
+                die "GAP: a foreach, map or grep over what a call returns as aliases (values, reverse, sort, grep, a ?:)"
+                  . " whose body may store into it is not yet lowered -- the wire has no alias list of a call's result\n"
+                    if !$pl || SoN::FromOptree::ModSets::conflict( $pl, \@eff );
+            }
+        }
+        return;
+    }
     sub _alias_list_items ($items, $factory, $ops = undef, $cv = undef, $ctx = undef) {
         my @ops = $ops ? @$ops : ();
-        my $i = -1;
-        return [ map {
-            my $n = $_;
-            $i++;
-            if ( @ops == @$items && ( my $pl = _assignment_item_place( $cv, $ops[$i], $n, $factory, $ctx ) ) ) { $pl }
-            else {
+        my @out;
+        for my $i ( 0 .. $#$items ) {
+            my $n = $items->[$i];
+            if ( @ops == @$items && ( my $pl = _assignment_item_place( $cv, $ops[$i], $n, $factory, $ctx ) ) ) { push @out, $pl; next }
+            # AN ARRAY IN THE LIST is its elements, each aliased (audit 3, N3):
+            # a copy made at the loop's entry missed an earlier pass's store
+            # into a later element. Its place: the consumer aliases each.
+            if ( $n isa SoN::IR::Node::Access && !$n->place && ( $n->operation eq 'PadAccess' || $n->operation eq 'EntryDef' )
+                    && $n->sigil eq '@' ) {
+                $ALIAS_STATS{'list-place'}++;
+                push @out, $n->operation eq 'PadAccess'
+                    ? $factory->make('PadAccess', targ => $n->targ, sigil => '@', symbol => $n->symbol, ( $n->shared ? ( shared => 1 ) : () ), place => 1)
+                    : $factory->make('EntryDef', package => $n->package, sigil => '@', symbol => $n->symbol, place => 1);
+                next;
+            }
             my $p = $n isa SoN::IR::Node::Access && !$n->place
                 && ( $n->operation eq 'EntryDef' && $n->sigil eq '$'
                      || $n->operation eq 'Subscript'
                      || $n->operation eq 'PadAccess' && $n->sigil eq '$' && ( $n->shared || defined $n->mem_in ) )
                 ? _alias_place($n, $factory, vivify => $n->operation eq 'Subscript') : undef;
             $ALIAS_STATS{ 'list-' . ( $p ? 'place' : 'value' ) }++ if $n isa SoN::IR::Node::Access;
-            $p // $n
-            }
-        } $items->@* ];
+            push @out, $p // $n;
+        }
+        return \@out;
     }
     sub _handle_entersub ($cv, $op, $sim, $factory, $ctx) {
         # AN ARGUMENT THAT IS AN ASSIGNMENT passes the variable it stores,
@@ -10154,8 +10185,8 @@ class SoN::FromOptree 0.01 {
             # "a List is not an Array" miscompile from the other direction.
             my $input = ($items->@* == 1 && _is_aggregate_node($items->[0]))
                 ? $items->[0]
-                : $factory->make('ArrayLiteral', inputs => _alias_list_items($items, $factory, [ _alias_list_item_ops($op) ], $cv, $ctx),
-                    stamp => SoN::IR::Stamp->new(type => 'List'));
+                : do { _refuse_aliased_call_list($cv, $op); $factory->make('ArrayLiteral', inputs => _alias_list_items($items, $factory, [ _alias_list_item_ops($op) ], $cv, $ctx),
+                    stamp => SoN::IR::Stamp->new(type => 'List')) };
 
             my $while_op = $op->next;
             die "GAP: $word without a ${word}while op\n"
@@ -11811,6 +11842,7 @@ class SoN::FromOptree 0.01 {
                 # wrapper is a plain ARRAY -- the loop indexes it with
                 # Subscript and stores back into it for an iterator write --
                 # so it is not a reference and must not read as one.
+                _refuse_aliased_call_list($cv, $op);
                 my $arr = $factory->make('ArrayLiteral',
                     inputs => _alias_list_items($bounds, $factory, [ _alias_list_item_ops($op) ], $cv, $ctx),
                     stamp  => SoN::IR::Stamp->new(type => 'Array'));
