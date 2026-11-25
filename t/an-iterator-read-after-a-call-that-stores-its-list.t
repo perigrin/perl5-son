@@ -26,5 +26,6 @@ unlike compile($_), qr/GAP/, "lowered: $_" for
     'my @a=(1,2); sub z { $a[0]=7 } for my $x (@a) { z(); print $x } print "\n";',
     'my @a=(1,2); sub z { $a[0]=7 } for my $x (@a) { print $x; z() } print "\n";',
     'sub apply { my ($f,@l)=@_; map { $f->($_) } @l } my @r=apply(sub { $_[0]*2 }, 1,2); print "@r\n";',
-    'my $v=1; my @subs=(sub { $v+=1 }, sub { $v*=3 }); for my $s (@subs, reverse @subs) { $s->() } print "$v\n";';
+    'my $v=1; my @subs=(sub { $v+=1 }, sub { $v*=3 }); for my $s (@subs, reverse @subs) { $s->() } print "$v\n";',
+    'my %h=(a=>1); sub z { $h{a}=7 } for my $v ($h{a}, 2) { z(); print $v } print "\n";';
 done_testing;

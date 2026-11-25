@@ -17490,7 +17490,13 @@ class SoN::FromOptree 0.01 {
               . " a call in its body may store is not yet lowered -- perl's alias is the aggregate's"
               . " element, the pass reads a copy\n"
                 if !defined $targ && $named
-                && do { my @i = _foreach_list_items($enteriter); @i != 1 || _strip_null($i[0])->name !~ /\A(?:padav|rv2av)\z/ }
+                # (a list of variables, elements and constants is a list of
+                # places, _alias_list_items: read where they stand)
+                && do {
+                    my @i = map { _strip_null($_) } _foreach_list_items($enteriter);
+                    !( @i == 1 && $i[0]->name =~ /\A(?:padav|rv2av)\z/ )
+                        && grep { $_->name !~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|aelemfast(?:_lex)?|multideref|const)\z/ } @i
+                }
                 && _topic_read_after_a_call($cv, $enteriter, $x_targ)
                 && _body_calls_store_array($cv, $enteriter, undef, 1);
             # NOT WHEN THE BODY TAKES `\$x`: that is a reference to the
@@ -25598,6 +25604,10 @@ class SoN::FromOptree 0.01 {
                 # in perl, and the list took the elements as they were -- audit
                 # 2, K7. A later item that may store one -- its own store, a
                 # map or foreach writing its alias, a call -- is refused.
+                # (A HASH flattened so is read where the list is used, and the
+                # list's own stores are seen -- `(%h, $h{a} = 9)` lowers to
+                # perl's `a 9 9`; a call's are not: `(%h, f())`)
+                my $hash = $s->name =~ /hv\z/;
                 if ( $s->name =~ /\A(?:pad|rv2)[ah]v\z/ && ( $k->flags & 3 ) == 3   # OPf_WANT_LIST
                         && !( $k->flags & ( B::OPf_MOD | B::OPf_REF ) ) && ( my @later = _later_siblings($k) ) ) {
                     my $pl = SoN::FromOptree::ModSets::aggregate_place( $cv, $s );
@@ -25623,7 +25633,8 @@ class SoN::FromOptree 0.01 {
                     };
                     die "GAP: an aggregate flattened into a list is read by alias and a later item"
                       . " may store into its elements -- not yet lowered\n"
-                        if !$pl || grep { SoN::FromOptree::ModSets::conflict( $pl, [ grep { $touches->($_) } SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) ] ) } @later;
+                        if !$pl || grep { SoN::FromOptree::ModSets::conflict( $pl, [ grep { $touches->($_) }
+                            $hash ? SoN::FromOptree::ModSets::op_effects( $cv, $_ ) : SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) ] ) } @later;
                 }
             }
             next if $k->flags & B::OPf_MOD;                           # a store's own target
