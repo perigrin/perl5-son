@@ -9180,6 +9180,14 @@ class SoN::FromOptree 0.01 {
                      . " backedge is a sanctioned forward reference); outside"
                      . " a replacement, a capture with no preceding match in"
                      . " scope is not yet lowered\n";
+                # A CAPTURE READ IN A LOOP OF A MATCH MADE BEFORE IT, where the
+                # loop itself matches: a later pass reads the match an earlier
+                # pass made (perl: `121`), which the wire carries no Phi of
+                # (audit 3, N12 yl06). Refused by name.
+                die "GAP: a capture variable read in a loop, of a match made before the loop, where the loop"
+                  . " matches too, is not yet lowered -- a later pass reads an earlier pass's match\n"
+                    if grep { defined $_->{entry_match} && $_->{entry_match} == $match && $_->{loop_root}
+                              && grep { $_->name =~ /\A(?:match|subst|qr)\z/ } _subtree_ops( $_->{loop_root} ) } @LOOP_STACK;
                 my $node = $factory->make('RegexCapture',
                     inputs => [$match],
                     n      => 0 + $gv_name,
@@ -16573,7 +16581,9 @@ class SoN::FromOptree 0.01 {
         # nexts from creation: the walk records this loop's own `next` edges,
         # merged at the latch.
         my $frame = { label => $STMT_LABEL, nexts => [],
-                      ( $BARE_LOOP ? ( bare => 1, bare_leave => ${ $BARE_LOOP->parent } ) : () ) };
+                      ( $BARE_LOOP ? ( bare => 1, bare_leave => ${ $BARE_LOOP->parent } ) : () ),
+                      entry_match => $sim->last_match, loop_root => do { my $o = $cond_start; my $n = 0;
+                          $o = $o->parent while $o && $$o && $o->name ne 'leaveloop' && ${ $o->parent } && $n++ < 50; $o && $$o && $o->name eq 'leaveloop' ? $o : undef } };
         local $BARE_LOOP;   # (a loop inside it is not the bare block)
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         _refuse_condition_store($cond_start);
@@ -16779,7 +16789,7 @@ class SoN::FromOptree 0.01 {
     sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high, $iter_key = undef) {
         # nexts from creation: the walk records this loop's own `next` edges,
         # merged at the latch.
-        my $frame = { label => $STMT_LABEL, nexts => [] };
+        my $frame = { label => $STMT_LABEL, nexts => [], entry_match => $sim->last_match, loop_root => $enteriter->parent };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         # A RANGE OF STRINGS STEPS BY THE MAGIC INCREMENT ("a".."c", "aa".."ad"),
         # which the count below does not: it coerces each bound to a number
@@ -17599,7 +17609,7 @@ class SoN::FromOptree 0.01 {
     sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef, $body_start = undef, $collect = undef, $collect_op = undef) {
         # A map or grep is not a loop `next`/`last` can name, whatever label
         # its statement carries.
-        my $frame = { label => ($collect ? undef : $STMT_LABEL), nexts => [] };
+        my $frame = { label => ($collect ? undef : $STMT_LABEL), nexts => [], entry_match => $sim->last_match, loop_root => $enteriter->parent };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         my $x_targ = $iter_key // $enteriter->targ;
 
