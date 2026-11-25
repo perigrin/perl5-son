@@ -25499,6 +25499,10 @@ class SoN::FromOptree 0.01 {
             $ALIAS_OPERAND{$$op} = { %d, how => 'target', targ => $op->targ };
             return;
         }
+        if ( $n =~ /\A[ah]slice\z/ && $top isa SoN::IR::Node::Slice ) {
+            $ALIAS_OPERAND{$$op} = { %d, how => 'slice' };
+            return;
+        }
         my $sv = $n =~ /\A(?:gvsv|rv2sv)\z/;
         my $el = $n =~ /\A(?:aelem|helem|multideref|aelemfast_lex)\z/;
         return unless $sv || $el;
@@ -25558,6 +25562,76 @@ class SoN::FromOptree 0.01 {
         return @k;
     }
 
+    # A LIST ITEM PERL ALIASES ELEMENT BY ELEMENT -- an aggregate flattened, a
+    # slice, `values`, `reverse`, `sort`, `grep`, a ?: of them -- pushes the
+    # elements themselves, read when the list is used (audit 3, N5; audit 2,
+    # K7). A slice of constant indices is read again element by element, each
+    # guarded by whether it existed where it was pushed (perl pushed undef
+    # for one that did not). Any other, where a later item may store into or
+    # reshape what it holds (its MOD set: a call by every sub it may run, one
+    # nothing can be said of by everything), is refused by name: the wire has
+    # no alias list that keeps perl's elements across a reshape -- chalk's
+    # element alias is the aggregate and an index.
+    sub _alias_list_sources ($cv, $o, $item = 0) {
+        $o = _strip_null($o);
+        my $n = $o->name;
+        # (a grep's or foreach's own item is OPf_MOD: its alias may be written)
+        return ($o) if $n =~ /\A(?:pad|rv2)[ah]v\z/ && ( $o->flags & 3 ) == 3 && !( $o->flags & ( $item ? B::OPf_REF : B::OPf_MOD | B::OPf_REF ) );
+        my @k = _operand_kids_of_list($o);
+        return _strip_null( $k[-1] ) if $n =~ /\A(?:aslice|hslice|kvaslice|kvhslice)\z/ && @k;
+        return _strip_null( $k[0] ) if $n =~ /\A(?:values|avalues)\z/ && @k;
+        return map { _alias_list_sources( $cv, $_ ) } grep { $_->name ne 'pushmark' && !( $_->name eq 'null' && $_->flags & B::OPf_SPECIAL ) } @k
+            if $n =~ /\A(?:reverse|sort)\z/;
+        if ( $n eq 'grepwhile' ) {
+            my ($start) = grep { $_->name eq 'grepstart' } @k;
+            return $start ? map { _alias_list_sources( $cv, $_, 1 ) } _alias_list_item_ops($start) : ();
+        }
+        return map { _alias_list_sources( $cv, $_ ) } @k[ 1 .. $#k ] if $n eq 'cond_expr';
+        return ();
+    }
+    sub _reread_alias_lists ( $cv, $kids, $sim, $factory ) {
+        for my $i ( 0 .. $#$kids - 1 ) {
+            my $k = $kids->[$i];
+            next if ( $k->flags & 3 ) == 1 || ( $k->flags & B::OPf_MOD );
+            my @src = _alias_list_sources( $cv, $k ) or next;
+            my @later = $kids->@[ $i + 1 .. $#$kids ];
+            my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @later;
+            next unless @eff;
+            my $worst = '';
+            for my $s (@src) {
+                my $pl = SoN::FromOptree::ModSets::aggregate_place( $cv, $s );
+                my $c = $pl ? SoN::FromOptree::ModSets::conflict( $pl, \@eff ) : 'unknown';
+                $worst = $c if $c && ( !$worst || $c ne 'store' );
+            }
+            next unless $worst;
+            my $p = _strip_null($k);
+            if ( $worst eq 'store' && $p->name =~ /\A[ah]slice\z/ && ( my $d = $ALIAS_OPERAND{$$p} ) ) {
+                my $old = $d->{node};
+                if ( $d->{depth} < $sim->stack_depth && refaddr( $sim->node_at( $d->{depth} ) ) == refaddr($old)
+                        && $old isa SoN::IR::Node::Slice && defined $old->mem_in && defined $sim->memory ) {
+                    my @in = $old->inputs->@*;
+                    my $src = pop @in;
+                    if ( !grep { !( $_ isa SoN::IR::Node::Constant ) } @in ) {
+                        my $kind = $p->name eq 'hslice' ? 'hash' : 'array';
+                        my @el = map {
+                            my $at_v = $factory->make('Subscript', kind => $kind, inputs => [ $src, $_ ], mem => $old->mem_in);
+                            my $now  = $factory->make('Subscript', kind => $kind, inputs => [ $src, $_ ], mem => $sim->memory);
+                            my $ex   = $factory->make('Exists', kind => $kind, inputs => [ $src, $_ ], mem => $old->mem_in,
+                                stamp => SoN::IR::Stamp->new(type => 'Boolean'));
+                            _make_ternary( $factory, $ex, $now, $at_v );
+                        } @in;
+                        $sim->replace_at( $d->{depth}, $factory->make('ArrayLiteral', inputs => \@el, stamp => SoN::IR::Stamp->new(type => 'List')) );
+                        next;
+                    }
+                }
+            }
+            die "GAP: a list item perl aliases element by element (an aggregate, a slice, values, reverse, sort,"
+              . " grep, or a ?: of them) is read when its list is used, and a later item may store into or reshape"
+              . " it -- not yet lowered: the wire has no alias list that keeps perl's elements across a reshape\n";
+        }
+        return;
+    }
+
     # _operand_kids_of_list($list) -> an ex-list's item ops (its pushmark too)
     sub _operand_kids_of_list ($l) {
         return () unless $l && $$l && ( $l->flags & B::OPf_KIDS );
@@ -25572,6 +25646,7 @@ class SoN::FromOptree 0.01 {
         my $mem = $sim->memory;
         my $stacked = ( $op->flags & B::OPf_STACKED ) && $op->name ne 'sassign';
         my @kids = _operand_kids($op);
+        _reread_alias_lists( $cv, \@kids, $sim, $factory );
         for my $i ( 0 .. $#kids ) {
             my $k = $kids[$i];
             next if ( $k->flags & 3 ) == 1;                       # (a statement, not an operand)
