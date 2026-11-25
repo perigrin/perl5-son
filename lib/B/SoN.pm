@@ -398,6 +398,9 @@ sub _start_up_refusal {
             }
             elsif ( $n->isa('SoN::IR::Node::Call') && ( $n->dispatch_kind // '' ) ne 'builtin' ) {
                 my $name = $n->name // next;
+                # (a method by its name, any class's -- but `import`, which a
+                # class of the program's own may define and call by hand)
+                next if $name =~ /\A(?:un)?import\z/;
                 my @hit  = grep { $_ eq $name || /::\Q$name\E\z/ } keys %$graphs;
                 for my $h (@hit) { $reads{ $gm->{$h} } = 1 if defined $gm->{$h}; push @q, $graphs->{$h} }
             }
@@ -420,7 +423,7 @@ sub _start_up_refusal {
             my $cv = eval { B::svref_2object( \&{"${m}::$sub"} ) } or next;
             next unless $$cv && !$cv->isa('B::SPECIAL') && ( eval { $cv->FILE } // '' ) eq $f && ${ $cv->ROOT };
             $why = "the $sub of a followed module ($m) storing into another package"
-                if grep { $_->[0] eq 'store' && $_->[1] ne $m } _foreign_stores($cv);
+                if grep { $_->[0] eq 'store' && $_->[1] ne $m && !$mods->{ $_->[1] } } _foreign_stores($cv);
         }
     }
     unless ($why) {
@@ -467,8 +470,11 @@ sub _foreign_stores {
             # (its place: the ex-rv2sv over a gvsv, the rv2Xv over a gv)
             my $place = eval { $o->parent };
             $place = $o if $o->name eq 'gvsv' && !( $place && $$place && $place->name eq 'null' );
+            # (a variable of a name: `@_` and `$_` are main's by spelling, the
+            # call's and the topic; a `local` saves and puts back)
             push @out, [ 'store', eval { $gv->STASH->NAME } // '' ]
-                if $gv && $place && $$place && ( ( $o->flags | $place->flags ) & B::OPf_MOD() );
+                if $gv && $place && $$place && ( ( $o->flags | $place->flags ) & B::OPf_MOD() )
+                && ( eval { $gv->NAME } // '' ) =~ /\A[A-Za-z]/ && !( ( $o->private | $place->private ) & B::OPpLVAL_INTRO() );
         }
         if ( $o->flags & B::OPf_KIDS() ) { for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { push @q, $k } }
     }

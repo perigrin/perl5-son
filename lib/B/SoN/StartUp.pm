@@ -36,6 +36,17 @@ sub compile {
     return sub {
         my %seen;
         my $pkg = 'main';
+        # (the packages the file declares are its own: POSIX.pm stores
+        # %POSIX::... under `package POSIX::SigRt`)
+        my %own;
+        my $scan;
+        $scan = sub ($o) {
+            return unless $o && $$o;
+            $own{ $pkg_of->($o) } = 1 if $o->name =~ /\A(?:next|db)state\z/;
+            if ( $o->flags & B::OPf_KIDS() ) { for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { $scan->($k) } }
+        };
+        $scan->( B::main_root() );
+        undef $scan;
         my $walk;
         $walk = sub ($o) {
             return unless $o && $$o;
@@ -50,7 +61,10 @@ sub compile {
                 my $place = $o->parent;
                 $place = $o if $n eq 'gvsv' && !( $$place && $place->name eq 'null' );
                 my $mod = ( $o->flags | $place->flags ) & B::OPf_MOD();
-                $seen{"effect store-into-$stash"} = 1 if $mod && length $stash && $stash ne $pkg;
+                # (a variable of a name: `@_` and `$_` are main's by spelling;
+                # a `local` saves and puts back)
+                $seen{"effect store-into-$stash"} = 1 if $mod && length $stash && $stash ne $pkg && !$own{$stash}
+                    && ( eval { $gv->NAME } // '' ) =~ /\A[A-Za-z]/ && !( ( $o->private | $place->private ) & B::OPpLVAL_INTRO() );
             }
             elsif ( $n eq 'srefgen' || $n eq 'refgen' ) { $seen{'code reference'} = 1 }
             elsif ( !$DATA{$n} ) { $seen{"code $n"} = 1 }

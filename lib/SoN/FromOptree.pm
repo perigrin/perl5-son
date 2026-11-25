@@ -17027,7 +17027,7 @@ class SoN::FromOptree 0.01 {
             # `for ($x += 5) { $_++ }` left 6 for perl's 7, audit 2, K4)
             return "GAP: an assignment as an item of a foreach, map or grep list whose body may write"
                  . " its alias is not yet lowered -- the store would be lost\n"
-                if $stores && _returns_its_target($t);
+                if $stores && _returns_its_target($t) && !_assigns_one_array($t);
             # (a package scalar or an element is its place: _alias_list_items)
             my $slice = $n =~ /\A(?:aslice|hslice)\z/;
             next unless $slice;
@@ -17163,6 +17163,15 @@ class SoN::FromOptree 0.01 {
         return 1 if $n eq 'multiconcat' && ( $o->flags & B::OPf_STACKED );
         return 1 if $n eq 'aassign';
         return 0;
+    }
+    # _assigns_one_array($op) -> true for a list assignment into one array,
+    # `my @l = LIST`: as an alias list's item it is that array, which the
+    # walk aliases (POSIX's `s/^/:/ for my @list = @_`).
+    sub _assigns_one_array ($o) {
+        $o = _strip_null($o);
+        return 0 unless $o->name eq 'aassign';
+        my @t = grep { $_->name ne 'pushmark' } _list_kids( $o->last );
+        return @t == 1 && _strip_null( $t[0] )->name =~ /\A(?:padav|rv2av)\z/ ? 1 : 0;
     }
     # _store_through_ternary($sim, $factory, $cond_expr, $target, $new_of) ->
     # true when `($c ? $a : $b) OP ...` stored: each arm a `my` scalar the walk

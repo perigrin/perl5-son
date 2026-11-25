@@ -53,6 +53,9 @@ for my $src (
     'my $x=1; for (++$x) { print $_ } print "\n";',
     'my $x="a"; for my $v ($x .= "b") { print $v } print "$x\n";',
     'my $x=1; my @l = map { $_ * 2 } ($x += 1); print "@l\n";',
+    # (a list assignment into one array, as an item, is that array: POSIX's
+    # `s/^(?=\w+_h$)/:/ for my @list = @_`, which the walk aliases)
+    'sub f { s/^/:/ for my @list = @_; "@list" } print f("x", "y"), "\n";',
 ) {
     unlike compile($src), qr/GAP/, "not refused: $src";
 }

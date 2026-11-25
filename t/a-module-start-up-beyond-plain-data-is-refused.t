@@ -26,6 +26,9 @@ module( 'MImp',    'sub import { $main::imp .= "i"; return }' );
 module( 'MInit',   'our $n = 1; INIT { $n = 9 } sub get { $n }' );
 module( 'MCode',   'our $n = 0; $n += $_ for 1 .. 3; sub get { $n }' );
 module( 'MUnread', 'our $n = 0; $n += $_ for 1 .. 3; sub get { $n }' );
+# (a store into a package the same file declares is the module's own:
+# POSIX.pm sets %POSIX::... under `package POSIX::SigRt`)
+module( 'MOwn',    'our %h; package MOwn::Sub; $MOwn::h{a} = 1; package MOwn; sub get { $h{a} }' );
 
 my $n = 0;
 sub compile ($src) {
@@ -55,6 +58,10 @@ for my $case (
 for my $src (
     'use MPlain; print MPlain::get(), "@MPlain::l $MPlain::h{a}\n";',
     'use MUnread; print "x\n";',
+    'use MOwn; print "x\n";',
+    # (a class of the program calling its own import by hand reads no
+    # followed module's: chalk's corpus adjacency-12)
+    'use MPlain; package G; sub import { print "imp\n" } package main; G->import("t"); print MPlain::get(), "\n";',
 ) {
     is compile($src), '', "not refused: $src";
 }
