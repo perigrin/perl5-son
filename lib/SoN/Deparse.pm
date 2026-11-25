@@ -104,6 +104,7 @@ class SoN::Deparse 0.01 {
     field %closure_var;
     # A CALL IN THE CALLER'S CONTEXT that the Return after it returns, by id:
     # spelled inside that `return`, never bound -- see _emit_control_chain.
+    # (And an :lvalue call an Assign stores through: spelled as its target.)
     field %inline_return;
 
     # Demoted pad variables this graph has already declared: the first store
@@ -1547,6 +1548,19 @@ class SoN::Deparse 0.01 {
                 if (@readers && !grep { !( ( ($_->{op} // '') eq 'Return'
                             && ($_->{control_in} // -1) == $id )
                         || $exit_merge->($_) ) } @readers) {
+                    $inline_return{$id} = 1;
+                    next;
+                }
+            }
+            # AN :lvalue CALL A STORE IS THROUGH -- `slot() = 42` -- is spelled
+            # where that Assign stands, its target, as perl runs it: bound to
+            # a temporary, the store went into the temporary (audit 3: the
+            # call is on the chain now, corpus 398). It is the Assign's only
+            # reader, and the Assign follows it.
+            if ($is_call && (($n->{fields} // {})->{dispatch_kind} // '') eq 'direct') {
+                my @readers = grep { grep { defined && $_ == $id } ($_->{inputs} // [])->@* } $self->_nodes_in_order;
+                if (@readers == 1 && ($readers[0]{op} // '') eq 'Assign' && ($readers[0]{inputs}[0] // -1) == $id
+                        && ($readers[0]{control_in} // -1) == $id) {
                     $inline_return{$id} = 1;
                     next;
                 }
