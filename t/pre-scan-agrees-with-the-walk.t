@@ -20,8 +20,26 @@ use PvmCorpus qw(read_cases);
 # after a flattening read are refused where the walk meets them, and not
 # compared here; upgrade when one is found disagreeing.
 
-my %known;    # file => [ lines ]: disagreements a probe was written to show, refused by name
-%known = (
+# THE DISAGREEMENTS THERE ARE, each by name (any other fails). All but one
+# are the scan's safe side -- a Phi for a slot the body may rebind and, on
+# this program, does not; forwarded at the sealing, it is the value before
+# the loop again (_braun_seal) -- where the scan reads an op as a write the
+# walk does not make one: `$#a = 0` (the array resized, the binding kept), an
+# inner `while` or foreach over the slot, a list assign of the iterator, a
+# grep over the slot. The one the walk found and the scan did not, z/ps12 (an
+# s/// in a postfix `if` on the iterator), is refused by name where it is
+# found (_check_writes) -- the audit's own probe of it.
+my %known = (
+    '159.pl'    => [ ('SLOTS main::f missed=- extra=12') x 2 ],
+    'a/aun38.pl' => ['SLOTS ? missed=- extra=1,2'],
+    'l/lw22.pl'  => ['SLOTS ? missed=- extra=1'],
+    'l/lw31.pl'  => ['SLOTS ? missed=- extra=1'],
+    'l/lw35.pl'  => ['SLOTS ? missed=- extra=1'],
+    'r/l13.pl'   => ['SLOTS ? missed=- extra=1'],
+    'z/pa65.pl'  => ['SLOTS ? missed=- extra=3'],
+    'z/ps12.pl'  => ['ITER ? 3 scan=0 walk=1'],
+    'z/ps32.pl'  => ['SLOTS ? missed=- extra=1'],
+    'z/qf05.pl'  => ['SLOTS ? missed=- extra=3'],
 );
 
 SKIP: {
