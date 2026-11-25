@@ -718,3 +718,38 @@ ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [61m52
 ```
 
 (gates1 stopped: two producer tests over Carp's `for ($::{$p})` -- as_v1 took a placed alias list's mem_in for an operand. gates2 stopped: clause3 merged, rebased. gates3: V12 counted a `local` as a store to the alias's source (f/h11), and the fast path called a foreach over @_ private (f/h14: now a place); chalk's grammar refused `grep( { } LIST )`; an interval-oracle row renamed (node ids moved). gates4: chalk's Analysis typed an element of `my @c = @$r` as an Array, which Test::Chalk's isa_ok now read through its iterator.)
+
+## 26. A sub is walked once (branch `single-walk`)
+
+Heads: producer `single-walk` 896bca7 (from ce5f564: 07a1858, 3e4b6e7, 46f2641, f7ea4b1, 896bca7), chalk `single-walk` f1d9aa74 (unchanged). Clause 3's last caveat: "built Braun-style without the double walk" held only while every guess held -- a wrong one walked the sub again (`%LOOP_HINTS`). Design (c), approved: a pre-scan of the ops decides each fact, exactly or conservatively, before the walk; the walk never guesses.
+
+| fact the header needed | pre-scan | where a miss is refused |
+|---|---|---|
+| the body writes the foreach iterator | `_body_writes`, `_op_writes_key` (every op of the body; an inner loop aliasing the same name left out; a name in an inner loop's list written only where that loop writes its alias; a demoted iterator by `_demoted_rebinds`) | `_check_writes` |
+| a Phi keeps its init's stamp | `_loop_stamp_scan` (a fixpoint over the slots the pass writes: stamped, element read, unknown; `_patch_loop_phi`'s recurrence) | `_patch_loop_phi` ("loses its stamp") |
+| the slots that get a Phi | `_may_write_targs` (+ package scalars and aggregates; a body that never goes round: all its ops; `next` through the continue block; an inner loop's `last` goes on round) | `_braun_seal` ("its header's scan missed") |
+| an aggregate written after a read flattened it | `_loop_aggregates_written` (the header marks the literal) | `_braun_seal` |
+
+Deleted: `%LOOP_HINTS`, `$DIRTY`, `_loop_hint`, `_writes_guess`, `_backedge_loses_stamp`, the retry that wrapped `_translate_from_once` (now `_translate_from`), and B::SoN's settle pass (`_translate_until_settled`, now `_translate_program`, one pass). B::SoN also translated each class method twice (`_extract_class` for its return type, the stash walk for its graph); `_translate_once` keeps the first.
+
+THE SETTLE PASS (perigrin's choice "B", 2026-11-25). B::SoN translated the whole program again when a walk met a writer of a package scalar the first scan had not read (p/w1lib4: a method of a class from a file it does not follow). Now a package scalar counts as written unless the first scan read every sub of its package (`%PKG_UNREAD`, `_scalar_written`), and a writer met later of a scalar some graph was told is unwritten is refused by name (`_scan_run_set_cv`). Its cost, package-scalar reads through memory (EntryDef with mem_in) at ce5f564 -> 896bca7: corpus 368 -> 368, probes 2748 -> 2748, chalk's lib 422 -> 422. None.
+
+Sub walks repeated (t/lib/WalkCount.pm: a loop body walked twice in one process), at ce5f564: corpus 11 files -- 8 loop guesses (013 316 317 POSIX::import's iterator write, 190 the iterator write, 106 169 203 208 a stamp), 3 a class method (126 164 231); probes 142 files (at 152a6be, of 117: the iterator write 103, a stamp 14, an aggregate 23, a missed slot 1 -- r/o16; clause 3's note that "the other two never fired" held for the corpus only; w1lib1 a class method, w1lib4 the settle pass). At 896bca7: none. t/loop-body-is-walked-once.t sweeps corpus and probes and holds nothing by name.
+
+Exactness, by wire identity (`tools/wire-verify.pl --wires`, both producers, paths and refusal locations normalised): corpus and probes 2786 of 2787 byte-identical to ce5f564's, #graphs equal (1082, 3323); the one is probes l/lw25 (`$_ .= "x" for @a[0,1]` after a read of `@a` in the loop), where the header marks `@a` and the read is made through memory -- base flattened it; chalk refused it there and prints perl's answer now (the probes gate's one change). chalk's lib: 221 wires, #graphs equal (25134); ten differ from the base's in eval numbering only (the base's second walks had numbered a sub's evals twice). The scans were wrong, on the way, in ways only those diffs showed: B::SoN compiles without the peephole (`$_` is `rv2sv(gv)`); a gvsv carries no lvalue flag; "written" for a demoted iterator skipped its pass-end write-back (f/n03 printed `1 2` for `1! 2!`); and chalk's lib alone held an s/// in an arm, a name in an inner foreach's list, an inner loop's `last`, an s/// by targ, a count, and a capture (eight graphs refused, then none) -- docs/memory/a-sub-is-walked-once.md.
+
+Tests: t/loop-body-is-walked-once.t (a nest; each guess's program -- corpus case, probe or chalk shape -- walked once, translated whole, and through the deparser against perl where the base renders it; each scan made to miss and refused by name; the corpus and probes swept), t/package-scalar-of-an-unscanned-package-is-written.t; t/lib/MayWriteCheck.pm reads the refusal for t/loop-may-write-scan-covers-the-walk.t.
+
+`tools/gates.sh` at producer 896bca7, chalk f1d9aa74:
+
+```
+producer-suite  PASS  815 files, 0 failing [14m06s]
+chalk-suite     PASS  941 files, 0 failing [64m07s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m40s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [4m53s]
+probes          PASS  LOUD=15 REFUSED=476 SAME=1860; WRONG 0, SAME lost 0, changed 1 [6m06s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [33m44s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m00s]
+```
+
+(The probes gate's one change is l/lw25, REFUSED -> SAME: its read of `@a` is made through memory now, and chalk prints perl's `1,2 1x,2x`. The run on the old base, 152a6be, was stopped when alias-places merged; none ran on it to the end.)

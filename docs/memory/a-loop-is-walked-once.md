@@ -102,3 +102,9 @@ slot's mark first). What the scouts' walk left in shared state, the header
 must know where it decides a value (`$ctx->{mutated_aggregate}` for an
 array passed to a call); where it decides only a shape (`$REFERENCED_SLOTS`:
 an If or a select for `@c = ... if C`) the walk-once answer is the precise one.
+
+ADDENDUM (2026-11-25, branch `single-walk`, baseline section 26). The
+guesses and their second walk are gone: a pre-scan of the ops decides each
+fact before the header is built, and a fact it misses is refused by name at
+sealing ([[a-sub-is-walked-once]]). `%LOOP_HINTS`, `_writes_guess` and the
+retry around `_translate_from_once` are deleted.
