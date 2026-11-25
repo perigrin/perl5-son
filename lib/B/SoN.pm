@@ -54,6 +54,7 @@ our %LOADED_INC = %INC;
 our %BUILTIN_MODULE = map { $_ => 1 } qw(File::Glob Errno Tie::Hash::NamedCapture);
 our %REFUSED;    # { sub name => GAP } for every refused sub, the program's and a followed module's
 our $START_UP;   # "GAP: ..." when what runs before the main line is not on the wire (_start_up_refusal)
+our %START_UP_PKGS;   # packages a followed module's file-level code stores into: their variables are start state too
 our $FOLLOWED;   # set at CHECK, before the walk can load anything (B::Op_private)
 sub _followed_modules {
     return $FOLLOWED if $FOLLOWED;
@@ -298,6 +299,7 @@ sub compile {
         _recompile_preloaded($FOLLOWED);
         local %REFUSED;
         local $START_UP;
+        local %START_UP_PKGS;
         # At CHECK the program has compiled: these are its keys, imports and all.
         local %SoN::Serialize::JSON::STASH_KEYS =
             map { $_ => ( $LOADED_KEYS{$_} ? undef : 1 ) } keys %main::;
@@ -412,6 +414,14 @@ sub _start_up_refusal {
         my $f = $mods->{$m};
         next unless defined $f && -f $f && $f =~ /\.pm\z/;
         my @seen = _start_up_of($f);
+        # (A STORE INTO ANOTHER PACKAGE'S VARIABLE is state the start state
+        # reads at CHECK, as a followed module's own is -- `$Test::Builder::Level
+        # = 1` in Test::Chalk -- but for the program's package, main, whose
+        # variables its own main line sets.)
+        for ( grep { /\Aeffect store-into-(.+)\z/s && $1 ne 'main' } @seen ) {
+            $START_UP_PKGS{ s/\Aeffect store-into-//r } = 1;
+        }
+        @seen = grep { !( /\Aeffect store-into-(.+)\z/s && $1 ne 'main' ) } @seen;
         my ($effect) = grep { /\Aeffect / } @seen;
         my ($code)   = grep { /\Acode / } @seen;
         $why = "a followed module's file-level code ($m: " . ( $effect =~ s/\Aeffect //r ) . ')' if $effect;
@@ -503,7 +513,7 @@ sub _module_start_state {
             next unless ref($n) && $n->isa('SoN::IR::Node::EntryDef');
             my ( $pkg, $sym, $sig ) = map { scalar eval { $n->$_ } } qw(package symbol sigil);
             next unless defined $pkg && defined $sym && $pkg ne 'main' && $sym =~ /\A\w+\z/;
-            next unless _stash_is_followed( $pkg, \%{"${pkg}::"} );
+            next unless _stash_is_followed( $pkg, \%{"${pkg}::"} ) || $START_UP_PKGS{$pkg};
             my $k = join ' ', $sig // '$', $pkg, $sym;
             push $named{$k}->@*, $g unless grep { $_ eq $g } ( $named{$k} // [] )->@*;
         }

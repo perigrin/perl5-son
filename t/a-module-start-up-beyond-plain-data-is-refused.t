@@ -24,10 +24,16 @@ module( 'MPrint',  'print "loading "; our $v = 1; sub v { $v }' );
 module( 'MMain',   '$main::g = 7; sub x { 1 }' );
 module( 'MImp',    'sub import { $main::imp .= "i"; return }' );
 module( 'MInit',   'our $n = 1; INIT { $n = 9 } sub get { $n }' );
-module( 'MCode',   'our $n = 0; $n += $_ for 1 .. 3; sub get { $n }' );
-module( 'MUnread', 'our $n = 0; $n += $_ for 1 .. 3; sub get { $n }' );
+module( 'MCode',   'our $n = compute(); sub compute { 6 } sub get { $n }' );
+module( 'MUnread', 'our $n = compute(); sub compute { 6 } sub get { $n }' );
+# (package data computed, and nothing else: what CHECK reads is all of it --
+# Test::Chalk's `$Test::Builder::Level = 1 unless defined ...`)
+module( 'MCalc',   'our $n = 0; $n += $_ for 1 .. 3; our %h; $h{$_} = 1 for qw(a b); sub get { $n }' );
 # (a store into a package the same file declares is the module's own:
 # POSIX.pm sets %POSIX::... under `package POSIX::SigRt`)
+# (a store into another package's variable, not main's, is start state the
+# wire carries: Test::Chalk's `$Test::Builder::Level = 1`)
+module( 'MOther',  '$Other::lvl = 1 unless defined $Other::lvl; sub x { 1 }' );
 module( 'MOwn',    'our %h; package MOwn::Sub; $MOwn::h{a} = 1; package MOwn; sub get { $h{a} }' );
 
 my $n = 0;
@@ -59,6 +65,8 @@ for my $src (
     'use MPlain; print MPlain::get(), "@MPlain::l $MPlain::h{a}\n";',
     'use MUnread; print "x\n";',
     'use MOwn; print "x\n";',
+    'use MOther; print "$Other::lvl\n";',
+    'use MCalc; print MCalc::get(), join(",", sort keys %MCalc::h), "\n";',
     # (a class of the program calling its own import by hand reads no
     # followed module's: chalk's corpus adjacency-12)
     'use MPlain; package G; sub import { print "imp\n" } package main; G->import("t"); print MPlain::get(), "\n";',

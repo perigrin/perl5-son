@@ -19,15 +19,20 @@ use B ();
 #
 # <kind>: `effect` (output, a die or an exit, a store into a variable of
 # another package: seen whether or not the program reads the module) or
-# `code` (anything else beyond `our` data of literals: a call, a `my`, a
-# reference, a require -- what the module's own state may depend on).
+# `code` (state beyond plain package data: a file lexical, a reference, a
+# call, code made or loaded, an object -- %CODE).
 
-# Ops of plain package data: structure, literals, fresh aggregates of them,
-# and the package's own variables assigned them.
-my %DATA = map { $_ => 1 } qw(
-    leave enter nextstate dbstate null pushmark list lineseq stub const
-    sassign aassign anonlist anonhash negate undef gv gvsv rv2sv rv2av rv2hv
-    srefgen refgen
+# WHAT IS NOT PLAIN PACKAGE DATA: state the start state read at CHECK does
+# not hold, or holds as a copy. A file lexical (any pad op: a sub may close
+# over it), a reference (two variables sharing one thing; srefgen/refgen
+# below), code made or run (a sub, a call, a method, a string eval, a require
+# of a file), an object, a tie, a glob. Pure computation of package data --
+# `$Test::Builder::Level = 1 unless defined $Test::Builder::Level`, a loop
+# filling a package hash -- leaves exactly what CHECK reads, and is not here.
+my %CODE = map { $_ => 1 } qw(
+    padsv padav padhv padany padrange padsv_store padcv introcv clonecv aelemfast_lex aelemfastlex_store
+    entersub entereval require dofile anoncode method method_named method_super method_redir method_redir_super
+    bless tie untie rv2gv
 );
 my %EFFECT = map { $_ => 1 } qw(print say prtf syswrite send warn die exit);
 
@@ -67,7 +72,7 @@ sub compile {
                     && ( eval { $gv->NAME } // '' ) =~ /\A[A-Za-z]/ && !( ( $o->private | $place->private ) & B::OPpLVAL_INTRO() );
             }
             elsif ( $n eq 'srefgen' || $n eq 'refgen' ) { $seen{'code reference'} = 1 }
-            elsif ( !$DATA{$n} ) { $seen{"code $n"} = 1 }
+            elsif ( $CODE{$n} ) { $seen{"code $n"} = 1 }
             if ( $o->flags & B::OPf_KIDS() ) { for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { $walk->($k) } }
         };
         $walk->( B::main_root() );
