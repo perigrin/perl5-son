@@ -1,0 +1,110 @@
+ya10                           SAME     
+ya32                           SAME     
+ya41                           SAME     
+ya49                           SAME     
+ya57                           WRONG    got=[21 2 ] want=[2 2 ]
+yb41                           REFUSED  load: from_json failed: GAP: wire invariant L11: main::__PROGRAM__: Subscript#25 is the per-pass item of elem:my:@a, carried as a value, and Subscript#28 uses it afte
+yb46                           SAME     
+yc107                          SAME     
+yc108                          SAME     
+yc122                          SAME     
+yc125                          SAME     
+yc126                          SAME     
+yc142                          SAME     
+yc147                          WRONG    got=[1 9 ] want=[9 9 ]
+yc160                          SAME     
+ye20                           SAME     
+ye49                           REFUSED  load: from_json failed: GAP: wire invariant L11: main::__PROGRAM__: Call#10 hands argument 1 ($main::g) as a value, and main::f reads it after EntryWrite#6 may store
+ye53                           REFUSED  GAP: T2: out of its slices (a reference to what is not an array)
+yf81                           SAME     
+yg60                           SAME     
+yh26                           SAME     
+yh48                           SAME     
+yi23                           REFUSED  B::SoN: GAP: substr or $#a handed to a sub that may store through $_[N] is not yet lowered -- perl's alias is a magic lvalue, and the wire has no such place
+yi24                           REFUSED  B::SoN: GAP: substr or $#a handed to a sub that may store through $_[N] is not yet lowered -- perl's alias is a magic lvalue, and the wire has no such place
+yl06                           REFUSED  B::SoN: GAP: a capture variable read in a loop, of a match made before the loop, where the loop matches too, is not yet lowered -- a later pass reads an earlier pass's
+yl24                           SAME     
+yl26                           SAME     
+yn20                           SAME     
+yn26                           REFUSED  load: from_json failed: GAP: wire invariant L4: main::__PROGRAM__: EntryWrite#28 is a memory version no Return or Unwind reaches backwards
+yo15                           REFUSED  GAP: T2: out of its slices (main::sum is XS: there is no Perl source to compile)
+yo17                           REFUSED  load: from_json failed: GAP: Data::Dumper::Dumpperl, which the program calls, is refused in its module: GAP: a `local` inside a block or loop nested in a loop body is
+yo22                           SAME     
+yo23                           REFUSED  load: from_json failed: GAP: a followed module's file-level code (Config: die) runs before the main line and is not on the wire -- not yet lowered
+yo24                           REFUSED  B::SoN: GAP: a package scalar with two names or a tie at compile time ($main::PROGRAM_NAME is another variable's name too (a glob alias: use English)) is not yet lowere
+yo27                           REFUSED  load: from_json failed: GAP: a followed module's file-level code beyond plain `our` data (Carp: padsv) runs before the main line and is not on the wire -- not yet low
+yo30                           REFUSED  load: from_json failed: GAP: wire invariant L4: Benchmark::import: EntryWrite#57 is a memory version no Return or Unwind reaches backwards
+yo33                           REFUSED  load: from_json failed: GAP: Text::Balanced::extract_bracketed, which the program calls, is refused in its module: GAP: a consumed ternary arm stores an element and y
+yp01                           SAME     
+yp04                           SAME     
+yp05                           SAME     
+yp06                           SAME     
+yp07                           SAME     
+yp09                           REFUSED  B::SoN: GAP: an element operand is read by alias and a later operand calls code whose stores cannot be known here (a dynamic method or code ref, a string eval, a sub ou
+yp100                          WRONG    got=[1 2 9 ] want=[9 2 9 ]
+yp101                          REFUSED  B::SoN: GAP: a list item perl aliases element by element (an aggregate, a slice, values, reverse, sort, grep, or a ?: of them) is read when its list is used, and a late
+yp102                          REFUSED  B::SoN: GAP: a list item perl aliases element by element (an aggregate, a slice, values, reverse, sort, grep, or a ?: of them) is read when its list is used, and a late
+yp103                          REFUSED  B::SoN: GAP: a list item perl aliases element by element (an aggregate, a slice, values, reverse, sort, grep, or a ?: of them) is read when its list is used, and a late
+yp104                          SAME     
+yp105                          SAME     
+yp108                          REFUSED  B::SoN: GAP: a list item perl aliases element by element (an aggregate, a slice, values, reverse, sort, grep, or a ?: of them) is read when its list is used, and a late
+yp110                          SAME     
+yp111                          SAME     
+yp113                          SAME     
+yp114                          WRONG    got=[1,9 ] want=[9,9 ]
+yp115                          REFUSED  B::SoN: GAP: a list item perl aliases element by element (an aggregate, a slice, values, reverse, sort, grep, or a ?: of them) is read when its list is used, and a late
+yp116                          SAME     
+yp119                          SAME     
+yp13                           WRONG    got=[8 ] want=[9 ]
+yp147                          SAME     
+yp151                          SAME     
+yp152                          SAME     
+yp155                          SAME     
+yp158                          REFUSED  GAP: T2: out of its slices (a package scalar read of no one version)
+yp16                           SAME     
+yp18                           REFUSED  load: from_json failed: GAP: wire invariant L11: main::__PROGRAM__: Subscript#28 is the per-pass item of elem:agg:@a, carried as a value, and Phi#5 uses it after Assi
+yp19                           SAME     
+yp197                          SAME     
+yp198                          SAME     
+yp199                          SAME     
+yp204                          SAME     
+yp21                           SAME     
+yp22                           SAME     
+yp25                           SAME     
+yp31                           SAME     
+yp47                           SAME     
+yp48                           SAME     
+yp55                           SAME     
+yp56                           SAME     
+yp57                           SAME     
+yp58                           SAME     
+yp59                           SAME     
+yp61                           SAME     
+yp62                           SAME     
+yp65                           SAME     
+yp66                           SAME     
+yp68                           SAME     
+yp69                           SAME     
+yp79                           SAME     
+yp80                           SAME     
+yp81                           SAME     
+yp82                           SAME     
+yp83                           SAME     
+yp84                           SAME     
+yp85                           SAME     
+yp90                           SAME     
+yp91                           SAME     
+yp94                           SAME     
+yp95                           SAME     
+yp97                           SAME     
+yp99                           SAME     
+yq22                           SAME     
+yq23                           SAME     
+yq24                           SAME     
+yq25                           SAME     
+yq27                           SAME     
+yq31                           SAME     
+yq33                           REFUSED  B::SoN: GAP: substr or $#a handed to a sub that may store through $_[N] is not yet lowered -- perl's alias is a magic lvalue, and the wire has no such place
+yq34                           REFUSED  B::SoN: GAP: substr or $#a handed to a sub that may store through $_[N] is not yet lowered -- perl's alias is a magic lvalue, and the wire has no such place
+yq35                           REFUSED  B::SoN: GAP: substr or $#a as a foreach, map or grep item is not yet lowered -- perl's alias is a magic lvalue, and the wire has no such place
+yq37                           REFUSED  B::SoN: GAP: substr or $#a as a foreach, map or grep item is not yet lowered -- perl's alias is a magic lvalue, and the wire has no such place

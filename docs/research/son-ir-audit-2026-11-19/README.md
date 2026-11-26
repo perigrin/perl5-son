@@ -40,6 +40,14 @@
   not counted). `ylib/` holds the modules the `yd` probes load. The 39 in
   `unverified/` break a verifier rule (30) or the pre-scan agreement test (9). Not in chalk's
   `t/data/audit-probes` yet.
+  `probes/x/`: the 825 probes of the 2026-11-26 fourth final audit
+  (../2026-11-26-memory-model-final-audit-4.md, section 4); `_run1.log` is their
+  sweep at producer 7656d8ef, chalk 07111727 (72 WRONG). `min/` holds the
+  minimized program of each class, `_nopromote.log` the 69 wires with a promoted
+  node run again with `SON_NO_PROMOTE=1`, `_y_left_out.log` the 110 audit-3
+  probes chalk's `BASELINE.tsv` leaves out, `_verify.log` SoN::Verify over the
+  new wires. The 8 in `unverified/` break a verifier rule (1) or the pre-scan
+  agreement test (7). Not in chalk's `t/data/audit-probes` yet.
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),

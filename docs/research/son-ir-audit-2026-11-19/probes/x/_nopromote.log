@@ -1,0 +1,69 @@
+xa06                           SAME     
+xa35                           SAME     
+xa49                           SAME     
+xa51                           SAME     
+xa53                           SAME     
+xa54                           SAME     
+xc20                           SAME     
+xf20                           SAME     
+xh01                           SAME     
+xh04                           SAME     
+xh05                           SAME     
+xh09                           SAME     
+xh10                           SAME     
+xh15                           SAME     
+xh16                           REFUSED  GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+xh17                           REFUSED  GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+xh21                           REFUSED  GAP: T2: out of its slices (a direct call with no sub)
+xh22                           SAME     
+xh23                           SAME     
+xh31                           SAME     
+xh32                           REFUSED  GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it)
+xh33                           SAME     
+xh36                           SAME     
+xh37                           SAME     
+xh40                           SAME     
+xh44                           SAME     
+xh45                           SAME     
+xh46                           SAME     
+xh47                           SAME     
+xh48                           SAME     
+xh49                           SAME     
+xh50                           SAME     
+xh52                           SAME     
+xl37                           SAME     
+xl38                           SAME     
+xl39                           SAME     
+xr01                           SAME     
+xr02                           SAME     
+xr03                           SAME     
+xr07                           SAME     
+xr08                           SAME     
+xr09                           SAME     
+xr10                           SAME     
+xr12                           SAME     
+xr18                           SAME     
+xr19                           SAME     
+xr20                           SAME     
+xr21                           SAME     
+xr22                           SAME     
+xr23                           SAME     
+xr27                           SAME     
+xr29                           SAME     
+xr30                           SAME     
+xr31                           REFUSED  GAP: T2: out of its slices (a captured variable that is not one kept in memory)
+xr32                           REFUSED  GAP: T2: out of its slices (a sort comparator reading @_)
+xr35                           SAME     
+xr36                           SAME     
+xr37                           SAME     
+xr38                           SAME     
+xr39                           SAME     
+xr40                           SAME     
+xr41                           SAME     
+xr42                           SAME     
+xr43                           SAME     
+xr45                           SAME     
+xu106                          SAME     
+xu24                           SAME     
+xu26                           SAME     
+xv11                           SAME     

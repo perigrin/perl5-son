@@ -1,0 +1,88 @@
+P xa06
+P xa35
+P xa49
+P xa51
+P xa53
+P xa54
+P xc20
+P xf20
+P xh01
+P xh04
+P xh05
+P xh09
+P xh10
+P xh15
+P xh16
+P xh17
+P xh21
+P xh22
+P xh23
+P xh31
+P xh32
+P xh33
+P xh36
+P xh37
+P xh40
+P xh44
+P xh45
+P xh46
+P xh47
+P xh48
+P xh49
+P xh50
+P xh52
+P xl37
+P xl38
+P xl39
+P xr01
+P xr02
+P xr03
+P xr07
+P xr08
+P xr09
+P xr10
+P xr12
+P xr18
+P xr19
+P xr20
+P xr21
+P xr22
+P xr23
+P xr27
+P xr29
+P xr30
+P xr31
+P xr32
+P xr35
+P xr36
+P xr37
+P xr38
+P xr39
+P xr40
+P xr41
+P xr42
+P xr43
+P xr45
+V xt24 main::__PROGRAM__::__ANON__:1:5#7 Assign store-into-value: its target is a CellParam
+V xt24 main::__PROGRAM__::__ANON__:1:5#7 Assign store-into-value: its target is a CellParam
+P xu106
+P xu24
+P xu26
+P xv11
+wires 825 graphs 1280 nowire 0
+  Assign record 123
+  Assign store 614
+  Call sub 599
+  CellWrite 68
+  Delete 6
+  EntryWrite 792
+  Exc 46
+  Loop 233
+  MemStart 1280
+  Phi memory 419
+  Return 1280
+  Unwind 41
+  place 157
+  promoted 99
+  version=2 825
+  rule store-into-value 2
