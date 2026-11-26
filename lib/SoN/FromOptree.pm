@@ -12709,10 +12709,24 @@ class SoN::FromOptree 0.01 {
                     && ( eval { _op_gv( $cv, _strip_null( $o->first ) )->NAME } // '' ) eq '_' };
                 if ( @r == 1 && $is_args->( $r[0] ) && grep { _strip_null($_)->name =~ /\A(?:padav|rv2av)\z/ } @l ) {
                     my $root = $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT;
+                    # (in the sub's text order: depth first)
+                    my @all;
+                    my $dfs; $dfs = sub ($o) { return unless $o && $$o; push @all, $o; return unless $o->flags & B::OPf_KIDS;
+                        for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { $dfs->($k) } };
+                    $dfs->($root);
+                    my ($at) = grep { ${ $all[$_] } == $$op } 0 .. $#all;
+                    # (after it in the sub's text, or anywhere in a loop around it)
+                    my $looped = 0;
+                    # (in a loop's body: its list -- `s/// for my @l = @_` -- runs once)
+                    my $in_body = 0;
+                    for ( my $q = eval { $op->parent }; $q && $$q; $q = eval { $q->parent } ) {
+                        $in_body = 1 if $q->name =~ /\A(?:lineseq|scope|leave)\z/;
+                        if ( $q->name eq 'leaveloop' ) { $looped = 1 if $in_body; last }
+                    }
                     die "GAP: a copy of \@_ into an array in a sub that changes \@_ after it is not yet lowered --"
                       . " the wire binds the array to \@_ itself\n"
                         if grep { $_->name =~ /\A(?:shift|pop|splice|push|unshift)\z/
-                                  && ( !( $_->flags & B::OPf_KIDS ) || $is_args->( $_->first ) ) } _subtree_ops($root);
+                                  && ( !( $_->flags & B::OPf_KIDS ) || $is_args->( $_->first ) ) } $looped || !defined $at ? @all : @all[ $at + 1 .. $#all ];
                 }
             }
             # The LHS list is the most recent mark; the RHS list (if present) is

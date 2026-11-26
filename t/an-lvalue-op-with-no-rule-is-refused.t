@@ -26,13 +26,18 @@ for (
     [ 'my $x=3; ($x = $x + 1) *= $x; print "$x\n";',                         qr/GAP: an assignment used as the target of an op=/ ],
     [ 'my $x=3; my $y=1; ($x = $y + 1) *= 3; print "$x\n";',                 qr/GAP: an assignment used as the target of an op=/ ],
     [ 'my ($a1,$b1)=(1,2); my $c=1; ($c ? $a1 : $b1) x= 3; print "$a1 $b1\n";', qr/GAP: a \?: used as the target of an op=/ ],
-    [ 'my $x=1; for ($x += 5) { $_++ } print "$x\n";',                       qr/GAP: an assignment as an item of a foreach, map or grep list/ ],
-    [ 'my $x=1; for ($x = 5) { $_++ } print "$x\n";',                        qr/GAP: an assignment as an item of a foreach, map or grep list/ ],
-    [ 'my $x=1; $_++ for ($x .= 5); print "$x\n";',                          qr/GAP: an assignment as an item of a foreach, map or grep list/ ],
 ) {
     my ( $src, $gap ) = @$_;
     like compile($src), $gap, "refused: $src";
 }
+
+# AN ASSIGNMENT AS AN ALIAS LIST'S ITEM is the variable it stored, its place
+# (places-everywhere, audit 3 N6: was refused here): perl's answer through
+# chalk, promotion on and off -- probes/pe/pt13-pt15.
+unlike compile($_), qr/GAP/, "placed: $_" for
+    'my $x=1; for ($x += 5) { $_++ } print "$x\n";',
+    'my $x=1; for ($x = 5) { $_++ } print "$x\n";',
+    'my $x=1; $_++ for ($x .= 5); print "$x\n";';
 
 # A FUSED STORE AS AN ARGUMENT passes its variable's place, as `inc($x += 1)` does.
 for my $src (
