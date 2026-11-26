@@ -558,6 +558,23 @@ sub _module_start_state {
     # name in each graph that names one (`$PROGRAM_NAME` read "" for "-e").
     {
         my %seen;
+        # (each scalar the wire names, by the SV it is: an import shares one
+        # SV between two names, refused only where the wire names both --
+        # `$TODO` a test imports and its module reads by a name made at run
+        # time is one name on the wire)
+        my %names_of;
+        for my $g ( keys %$graphs ) {
+            for my $n ( grep { ref($_) && $_->isa('SoN::IR::Node::EntryDef') && ( eval { $_->sigil } // '' ) eq '$' } $graphs->{$g}->nodes->@* ) {
+                my ( $pkg, $sym ) = map { scalar eval { $n->$_ } } qw(package symbol);
+                next unless defined $pkg && defined $sym && $sym =~ /\A[A-Za-z_]\w*\z/;
+                my $stash = \%{"${pkg}::"};
+                next unless exists $stash->{$sym};
+                my $gv = B::svref_2object( \$stash->{$sym} );
+                next unless $gv->isa('B::GV');
+                my $sv = $gv->SV;
+                $names_of{ $$sv }{"$pkg\0$sym"} = 1 if $sv && $$sv;
+            }
+        }
         for my $g ( sort keys %$graphs ) {
             for my $n ( $graphs->{$g}->nodes->@* ) {
                 next unless ref($n) && $n->isa('SoN::IR::Node::EntryDef') && ( eval { $n->sigil } // '' ) eq '$';
@@ -573,7 +590,7 @@ sub _module_start_state {
                         for ( my $mg = $sv && $$sv ? eval { $sv->MAGIC } : undef; $mg; $mg = $mg->MOREMAGIC ) { $tied = 1 if $mg->TYPE eq 'q' }
                         $w = $tied ? "\$${pkg}::$sym is tied (use Env, a tie at compile time)"
                            : $gv->GvREFCNT > 1 && $sym =~ /\A[A-Za-z_]\w*\z/ && $sym ne 'ARGV' ? "\$${pkg}::$sym is another variable's name too (a glob alias: use English)"
-                           : $sv && $$sv && $sv->REFCNT > 1 && $sym =~ /\A[A-Za-z_]\w*\z/ ? "\$${pkg}::$sym is one scalar with another package's (an import)"
+                           : $sv && $$sv && $sv->REFCNT > 1 && $sym =~ /\A[A-Za-z_]\w*\z/ && keys( ( $names_of{$$sv} // {} )->%* ) > 1 ? "\$${pkg}::$sym is one scalar with another package's (an import)"
                            : '';
                     }
                     $w;

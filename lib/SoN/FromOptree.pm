@@ -2218,6 +2218,11 @@ class SoN::FromOptree 0.01 {
     # element of a lexical aggregate. %PKG_TAKEN_UNLOCALIZED: the answers
     # "never localized" given (_localized_anywhere), held as the writes are.
     my ( %PKG_LOCALIZED, %PKG_TAKEN_UNLOCALIZED );
+    # A SCALAR NAMED BY A STRING somewhere the scan read (`${"${pkg}::TODO"}`,
+    # no strict refs): such a read finds the name's global, not a binding, so
+    # every `local` of a package scalar keeps the value save and restore.
+    my $PKG_SYMBOLIC = 0;
+    sub _symbolic_scalars () { _package_scalars_written(); return $PKG_SYMBOLIC }
 
     # _localized_anywhere($loc) -> whether code the scan read, or a package it
     # did not read whole, may `local` the variable ModSets's $loc names (audit
@@ -2293,6 +2298,9 @@ class SoN::FromOptree 0.01 {
     sub _scan_op_package_writes ($op, $cv, $mod) {
         return unless ref($op) && $$op;
         my $name = $op->name;
+        # (a scalar deref of what is no gv, strict refs off: a name made at run time)
+        $PKG_SYMBOLIC = 1 if $name eq 'rv2sv' && ( $op->flags & B::OPf_KIDS ) && _strip_null( $op->first )->name ne 'gv'
+            && !( $op->private & 2 );   # OPpHINT_STRICT_REFS
         $mod ||= ($op->flags & 32) ? 1 : 0;   # OPf_MOD
         # (A `local`: of what -- a package variable, or an element of one or
         # of a lexical aggregate)
@@ -6206,8 +6214,9 @@ class SoN::FromOptree 0.01 {
         # before reading @_, the scalar perl pushed is unchanged when read:
         # its value, read where pushed, is the argument (no place).
         local $TOPIC_ARG_VALUE = 0;
-        if ( SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, 1, 0, 'N:$main::_') ) {
-            die "GAP: \$_ handed to a sub as its \$_[N] where that sub localizes \$_ and may store it is not yet lowered -- "
+        # (and every package scalar where a name made at run time may read one)
+        if ( SoN::FromOptree::ModSets::arg_localized_by_call($cv, $op, 1, 0, _symbolic_scalars() ? qr/\AN:\$/ : 'N:$main::_') ) {
+            die "GAP: \$_ (or a package scalar a name made at run time may read) handed to a sub as its \$_[N] where that sub localizes it and may store it is not yet lowered -- "
               . "perl's alias keeps the saved scalar, and `local \$_` saves and restores the value\n"
                 if SoN::FromOptree::ModSets::call_stores_through_args($cv, $op) || SoN::FromOptree::ModSets::arg_stored_by_call($cv, $op);
             $TOPIC_ARG_VALUE = 1;
@@ -6242,8 +6251,8 @@ class SoN::FromOptree 0.01 {
                 }
                 next if %LOCALIZED_LATER && blessed( $args->[$i] ) && $args->[$i] isa SoN::IR::Node::EntryDef
                     && $LOCALIZED_LATER{ ( $args->[$i]->package // 'main' ) . '::' . $args->[$i]->symbol };
-                next if $TOPIC_ARG_VALUE && blessed( $args->[$i] ) && $args->[$i] isa SoN::IR::Node::EntryDef
-                    && $args->[$i]->symbol eq '_' && ( $args->[$i]->sigil // '' ) eq '$' && ( $args->[$i]->package // 'main' ) eq 'main';
+                next if $TOPIC_ARG_VALUE && blessed( $args->[$i] ) && $args->[$i] isa SoN::IR::Node::EntryDef && ( $args->[$i]->sigil // '' ) eq '$'
+                    && ( _symbolic_scalars() || $args->[$i]->symbol eq '_' && ( $args->[$i]->package // 'main' ) eq 'main' );
                 # (AN ASSIGNMENT TO AN ELEMENT passes the element it stored:
                 # `f($a[0] = 5, $a[0] = 7)` hands f $a[0] twice -- audit 3, yyc112)
                 if ( !$t && @ops == $n && ( my $d = $ALIAS_OPERAND{ ${ _strip_null( $ops[$i] ) } } ) ) {
@@ -9392,7 +9401,7 @@ class SoN::FromOptree 0.01 {
                     # (`$_` TOO keeps the value save and restore: the topic is
                     # aliased by foreach, map and grep through its own binding,
                     # which a new scalar under the name would not follow)
-                    if ( $gv->NAME =~ /\A[A-Za-z_]\w*\z/ && $gv->NAME ne '_' && defined $sim->memory ) {
+                    if ( $gv->NAME =~ /\A[A-Za-z_]\w*\z/ && $gv->NAME ne '_' && defined $sim->memory && !_symbolic_scalars() ) {
                         my $prior = $factory->make('EntryDef', package => $gv->STASH->NAME, sigil => '$',
                             symbol => $gv->NAME, mem => $sim->memory);
                         push $ctx->{local_saves}->@*,

@@ -508,7 +508,7 @@ sub arg_stored_by_call ( $cv, $call ) {
 sub arg_localized_by_call ( $cv, $call, $places, $elems = 0, $only = undef ) {
     # ($elems: only an element argument, and only an element's `local`;
     # $only: only that loc, `N:$main::_`)
-    my %locs = map { $_->{loc} => 1 } grep { $_->{loc} =~ /\A[NL]:/ && ( !defined $only || $_->{loc} eq $only ) } map { _target_effects( $cv, $_ ) }
+    my %locs = map { $_->{loc} => 1 } grep { $_->{loc} =~ /\A[NL]:/ && ( !defined $only || ( ref $only ? $_->{loc} =~ $only : $_->{loc} eq $only ) ) } map { _target_effects( $cv, $_ ) }
         grep { !$elems || _strip($_)->name =~ /\A(?:aelem|helem|multideref|aelemfast(?:_lex)?)\z/ } _call_args($call);
     return 0 unless %locs;
     my @todo = _site( $cv, $call );
