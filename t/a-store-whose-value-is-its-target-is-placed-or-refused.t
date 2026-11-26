@@ -1,5 +1,5 @@
 # ABOUTME: A store whose value is its target (`$x = $y`, `$x .= "b"`, `++$x`) where a place is
-# ABOUTME: needed -- a list assignment's target, an alias list's item -- is refused by name, not dropped.
+# ABOUTME: needed -- a list assignment's target, an alias list's item -- is that variable's place, not dropped.
 use v5.42.0;
 use Test2::V0;
 use File::Temp qw(tempdir);
@@ -25,25 +25,30 @@ sub compile ($src) {
     return scalar qx($^X -Ilib -MO=-q,SoN,json $f 2>&1);
 }
 
-my $list_gap  = qr/GAP: an assignment, op= or increment used as the target of a list assignment/;
-my $alias_gap = qr/GAP: an assignment as an item of a foreach, map or grep list whose body may write its alias/;
-for my $case (
-    [ 'my ($x,$y)=(1,2); ($x = $y) = 7; print "$x $y\n";',                  $list_gap ],
-    [ 'my $y=2; (my $z = $y) = 7; print "$z $y\n";',                         $list_gap ],
-    [ 'my ($x,$y)=(1,2); (($x = $y)) = (7); print "$x $y\n";',               $list_gap ],
-    [ 'my @a=(1); my $y=2; ($a[0] = $y) = 7; print "@a $y\n";',              $list_gap ],
-    [ 'our ($x,$y)=(1,2); ($x = $y) = 7; print "$x $y\n";',                  $list_gap ],
-    [ 'my ($x,$y)=(1,2); (($x, $y) = (5,6)) = (7); print "$x\n";',          $list_gap ],
-    [ 'my $x="a"; $_ .= "!" for ($x .= "b"); print "$x\n";',                 $alias_gap ],
-    [ 'my @a=("a"); for ($a[0] .= "b") { $_ .= "!" } print "@a\n";',         $alias_gap ],
-    [ 'my $x="a"; for ($x x= 2) { $_ .= "!" } print "$x\n";',                $alias_gap ],
-    [ 'my $x=1; for (++$x) { $_++ } print "$x\n";',                          $alias_gap ],
-    [ 'my $x="a"; my @t = map { $_ .= "!" } ($x .= "b"); print "$x\n";',     $alias_gap ],
-    [ 'my $x="a"; s/a/z/ for ($x .= "a"); print "$x\n";',                    $alias_gap ],
-    [ 'my $x="a"; my @t = grep { s/a/z/ } ($x .= "a"); print "$x\n";',       $alias_gap ],
+# PLACED, since places-everywhere: an assignment's value is the variable it
+# stored, and a list assignment's target or an alias list's item is that
+# variable's place (audit 3, N6; was refused here by name). Each prints perl's
+# answer through chalk, promotion on and off: probes/pe/pt01-pt12 (chalk's
+# audit probes pept01-pept12). A list assignment as a list assignment's target
+# stays refused: its value as an lvalue is each of its targets.
+for my $src (
+    'my ($x,$y)=(1,2); ($x = $y) = 7; print "$x $y\n";',
+    'my $y=2; (my $z = $y) = 7; print "$z $y\n";',
+    'my ($x,$y)=(1,2); (($x = $y)) = (7); print "$x $y\n";',
+    'my @a=(1); my $y=2; ($a[0] = $y) = 7; print "@a $y\n";',
+    'our ($x,$y)=(1,2); ($x = $y) = 7; print "$x $y\n";',
+    'my $x="a"; $_ .= "!" for ($x .= "b"); print "$x\n";',
+    'my @a=("a"); for ($a[0] .= "b") { $_ .= "!" } print "@a\n";',
+    'my $x="a"; for ($x x= 2) { $_ .= "!" } print "$x\n";',
+    'my $x=1; for (++$x) { $_++ } print "$x\n";',
+    'my $x="a"; my @t = map { $_ .= "!" } ($x .= "b"); print "$x\n";',
+    'my $x="a"; s/a/z/ for ($x .= "a"); print "$x\n";',
+    'my $x="a"; my @t = grep { s/a/z/ } ($x .= "a"); print "$x\n";',
 ) {
-    like compile( $case->[0] ), $case->[1], "refused: $case->[0]";
+    unlike compile($src), qr/GAP/, "placed: $src";
 }
+like compile('my ($x,$y)=(1,2); (($x, $y) = (5,6)) = (7); print "$x\n";'),
+    qr/GAP: a list assignment as the target of a list assignment/, 'refused: a list assignment as a target';
 
 # (a value that is no store, or a body that stores no alias: lowered as before)
 for my $src (

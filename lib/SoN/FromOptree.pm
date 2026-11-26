@@ -12679,14 +12679,6 @@ class SoN::FromOptree 0.01 {
         # than a stray, dead Assign node. Real list-assigns with values on the
         # stack fall through to the generic dispatch below.
         if ($name eq 'aassign') {
-            # A TARGET THAT IS A STORE (`($x = $y) = 7`) is that store's
-            # target in perl; the walk took its value and stored into the
-            # value -- a record of nothing, the store lost (audit 3, N6).
-            for my $t ( grep { $_->name ne 'pushmark' } _list_kids( $op->last ) ) {
-                die "GAP: an assignment, op= or increment used as the target of a list assignment is not"
-                  . " yet lowered -- its store would be lost\n"
-                    if _returns_its_target($t);
-            }
             # The LHS list is the most recent mark; the RHS list (if present) is
             # the mark before it. Perl lays out aassign as
             # pushmark RHS... pushmark LHS..., so popping to the last mark yields
@@ -17366,12 +17358,9 @@ class SoN::FromOptree 0.01 {
         };
         for my $t (@items) {
             my $n = $t->name;
-            # (AN ASSIGNMENT is perl's alias of the variable it stored, and the
-            # list holds its value: a write through the alias was lost --
-            # `for ($x += 5) { $_++ }` left 6 for perl's 7, audit 2, K4)
-            return "GAP: an assignment as an item of a foreach, map or grep list whose body may write"
-                 . " its alias is not yet lowered -- the store would be lost\n"
-                if $stores && _returns_its_target($t) && !_assigns_one_array($t);
+            # (AN ASSIGNMENT is perl's alias of the variable it stored: the
+            # item is that variable's place, _assignment_item_place -- audit
+            # 3, N6; was refused here, audit 2 K4)
             # (a package scalar or an element is its place: _alias_list_items)
             my $slice = $n =~ /\A(?:aslice|hslice)\z/;
             next unless $slice;
