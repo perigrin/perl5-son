@@ -1,5 +1,5 @@
 # ABOUTME: A store's result is the variable itself: an append whose value reads its own
-# ABOUTME: target declares first, and a store result a later operand stores again refuses.
+# ABOUTME: target declares first, and a store result a later operand stores again is read again (design B).
 
 use v5.42.0;
 use Test2::V0;
@@ -62,7 +62,9 @@ round_trips($_) for
 
 # A STORE'S RESULT IS THE VARIABLE, not a copy: a later operand that stores
 # it again shows through. perl prints `abcabc`; the snapshot printed `ababc`.
-refuses($_) for
+# (Refused by name until design B: each such operand is read when its
+# consumer runs -- FromOptree's _reread_alias_operand_stored_later.)
+round_trips($_) for
     'use v5.36; my $s = "a"; my $f = sub { print(($s .= "b"), ($s .= "c"), "\n") }; $f->();',
     'use v5.36; my $s = "a"; my $f = sub { my @x = ($s .= "b", $s .= "c"); print "@x\n" }; $f->();',
     'use v5.36; my $s = "a"; my $r = \$s; my @x = ($s .= "b", $s .= "c"); print "@x\n";',

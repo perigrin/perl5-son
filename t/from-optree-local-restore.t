@@ -86,6 +86,10 @@ subtest 'the read after the scope sees the restored binding' => sub {
         # (it was the constant this graph had last bound, which a call made
         # in between left stale). That read's version is the `our $g = 1`.
         my $saved = $by{ $mem->{inputs}[1] };
+        # (SINCE places-everywhere `local` binds the name to a new scalar and
+        # the restore binds it back: the restore's value is a Ref of the
+        # scalar as read before the local -- `EntryWrite binds [EntryDef, Ref]`)
+        $saved = $by{ $saved->{inputs}[0] } if ( $saved->{op} // q() ) eq q(Ref);
         $saved = $by{ $saved->{mem_in} } if ( $saved->{op} // q() ) eq q(EntryDef);
         $saved = $by{ $saved->{inputs}[1] } if ( $saved->{op} // '' ) eq 'EntryWrite';
         is $saved->{fields}{value}, 1,

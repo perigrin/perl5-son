@@ -123,7 +123,9 @@ my %SIGNATURES = (
     StrLe      => { operands => ['Str', 'Str'], result => 'Boolean' },
     StrGe      => { operands => ['Str', 'Str'], result => 'Boolean' },
     StrCmp     => { operands => ['Str', 'Str'], result => 'Int' },
-    Length     => { operands => ['Str'],        result => 'Int' },
+    # (length(undef) is undef, perl 5.12 on: no Str coercion of the operand,
+    # which made it "" and the length 0 -- audit 3, N12)
+    Length     => { operands => [],             result => 'Maybe[Int]' },
     # A COUNT IS NOT A LENGTH. Length measures a string; Count counts an
     # aggregate's elements, so its operand is `List` -- the lattice parent
     # covering both Array and Hash. Sharing one entry made every array count

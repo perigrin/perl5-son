@@ -1627,11 +1627,12 @@ class SoN::Deparse 0.01 {
             # needs binding; without this the restore emitted
             # `*main::v = \($main::v)`, which re-reads the slot the local just
             # replaced and rebinds it to itself.
+            my $ref;
             if ( ( $val->{op} // '' ) eq 'Ref' ) {
                 my $inner = $nodes->{ ( $val->{inputs} // [] )->[0] // -1 };
                 # AN AGGREGATE'S SAVE is taken at its swap (see EntryWrite).
                 next if $inner && ( ( $inner->{fields} // {} )->{sigil} // '' ) =~ /\A[\@%]\z/;
-                $val = $inner if $inner;
+                ( $ref, $val ) = ( $val, $inner ) if $inner;
             }
             next unless ( $val->{op} // '' ) eq 'EntryDef';
 
@@ -1653,6 +1654,18 @@ class SoN::Deparse 0.01 {
             # undeclared. A `local` save reads the value ON ENTRY, so the top
             # of the sub is exactly where it belongs.
             next if exists $bound{ $val->{id} };
+            # A SCALAR'S `local` (a new scalar bound to the name) SAVES THE
+            # SCALAR ITSELF, by reference: an alias to it (`f($x)`'s `$_[0]`)
+            # keeps it, and a copy put back would be another scalar -- and the
+            # old one, its last reference the glob's, freed under the alias.
+            if ( $ref && ( $n->{fields} // {} )->{binds}
+                && !defined( ( $nodes->{ ( $val->{inputs} // [] )->[-1] } // {} )->{control_in} )
+                && ( ( $nodes->{ ( $val->{inputs} // [] )->[-1] } // {} )->{op} // '' ) ne 'Phi' ) {
+                $bound{ $ref->{id} } = sprintf( '$saved%d', $ref->{id} );
+                $bound{ $val->{id} } = sprintf( '${$saved%d}', $ref->{id} );
+                push @local_saves, [ $ref->{id}, $val->{id} ];
+                next;
+            }
             $bound{ $val->{id} } = sprintf( '$saved%d', $val->{id} );
             # UNLESS AN EFFECT CAME FIRST: a call may have written the name,
             # and the save reads what it left. `g(); local $c = 5` saved $c
@@ -1672,8 +1685,8 @@ class SoN::Deparse 0.01 {
         # which is not even legal (`my` on a package name). The value being
         # saved is the variable, and _slot_name is what spells a variable.
         my $save_prologue = join '', map {
-            sprintf( "my %s = %s;\n", $bound{$_},
-                $self->_slot_name( $nodes->{$_} ) )
+            ref $_ ? sprintf( "my %s = \\%s;\n", $bound{ $_->[0] }, $self->_slot_name( $nodes->{ $_->[1] } ) )
+                   : sprintf( "my %s = %s;\n", $bound{$_}, $self->_slot_name( $nodes->{$_} ) )
         } @local_saves;
 
         # A READ PINNED BEFORE A STORE TO THE SAME NAME NEEDS A TEMPORARY.
@@ -3340,7 +3353,12 @@ class SoN::Deparse 0.01 {
                     last;
                 }
                 my @in = ( $c->{inputs} // [] )->@*;
-                push @queue, $in[-1] if @in && $self->_is_memory( $in[-1] );
+                my $has_mem = @in && $self->_is_memory( $in[-1] );
+                push @queue, $in[-1] if $has_mem;
+                # (A STORE THAT ONLY FOLLOWS MEMORY -- an Assign, `$_[0] = 7` --
+                # carries no memory input on v1: what it follows is its control)
+                push @queue, $c->{control_in}
+                    if !$has_mem && ( $c->{op} // '' ) eq 'Assign' && defined $c->{control_in};
                 push @queue, ( $c->{inputs} // [] )->@*
                     if ( $c->{op} // '' ) eq 'Phi';
             }
@@ -3436,6 +3454,13 @@ class SoN::Deparse 0.01 {
             # The literal must follow EVERY binding it reads, so the latest one
             # is the only safe anchor.
             my $defer = $self->_last_bound_input($n);
+            # NOR BEFORE A LATER STORE IT READS: `my @l = ($a[0], $a[0]++)`
+            # holds the element read after the increment's store and the
+            # bound copy read before it; anchored at the copy, the list was
+            # spelled above the store and read 1 for perl's 2.
+            if ( defined $defer && defined( my $st = $self->_latest_store_read($n) ) ) {
+                $defer = $st if $st > $defer && !defined $self->_outermost_loop($st);
+            }
             # UNLESS A LOOP OR BRANCH IT HOLDS SETTLES LATER: `@in[grep {...}
             # 0 .. $#in]` in an elsif reads the grep's Phi, and placed after
             # the bound `inputs()` call the slice named it above its loop
@@ -6825,6 +6850,16 @@ class SoN::Deparse 0.01 {
                     return sprintf("my %s = (%s =~ s{%s}{%s}%s);\n",
                         $var, $lv, $pat, $rep, $flags);
                 }
+            }
+
+            # A `local` OF A NAMED SCALAR (design B, section 4) binds the name
+            # to a new scalar holding the value: a glob assignment of a
+            # reference to a fresh one, so the scalar it was bound to -- which
+            # an alias or a saved reference holds -- keeps its value.
+            if ( $n->{fields} && $n->{fields}{local} && $slot && ( $slot->{op} // '' ) eq 'EntryDef' ) {
+                my $name = $self->_slot_name($slot);
+                $name =~ s/\A[\$\@\%\&\*]//;
+                return sprintf( "*%s = \\do { my \$l = %s };\n", $name, $self->_expr( $n->{inputs}[1] ) );
             }
 
             # A BINDING IS RENDERED AS A GLOB ASSIGNMENT, because that is the

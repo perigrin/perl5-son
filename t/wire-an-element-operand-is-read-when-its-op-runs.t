@@ -1,8 +1,10 @@
 # ABOUTME: An element operand is the element itself, not a copy: a store a later operand
-# ABOUTME: makes to it is what the op reads. The wire cannot say so; it is refused by name.
+# ABOUTME: makes to it is what the op reads: read again when its op runs (perl's answer).
 use v5.42.0;
 use Test2::V0;
 use File::Temp qw(tempdir);
+use lib 't/lib';
+use PerlAnswer;
 
 # THE DEFECT (audit 2026-11-19, probe vp5 -- one of the three whose wire was
 # byte-identical to a right program's). perl pushes `$a[0]` as the element,
@@ -13,13 +15,11 @@ use File::Temp qw(tempdir);
 # The walk read the element where its op stood -- a Subscript at the memory
 # before the store -- and the wire said 1 + 10 + 10 = 21.
 #
-# REFUSED, NOT RE-READ. A scalar variable read this way is read again once
-# the later operands have run (_reread_alias_operand_stored_later). An
-# element is the element only if it EXISTED when it was read: `$h{new} .
-# ($h{new} = "q")` pushes undef, not an alias, and reads "" where a second
-# read would see "q". The wire has no place to say which, so the shape --
-# a direct element read still on the stack when a store into the same
-# container is made -- is a GAP, as the package-scalar form already is.
+# READ WHEN ITS OP RUNS, since places-everywhere (audit 3, N4/N7): the
+# element is read again at the version its consumer runs at, where it
+# EXISTED when it was pushed -- `$h{new} . ($h{new} = "q")` pushes undef, not
+# an alias, and the guard (an Exists made where it was pushed) says which.
+# Was a refusal by name; each form now prints perl's answer, the pass on or off.
 
 my $dir = tempdir( CLEANUP => 1 );
 my $n   = 0;
@@ -32,14 +32,12 @@ sub translate ($src) {
     return scalar qx($^X -Ilib -MO=SoN,json,not_package=SoN $f 2>&1 >/dev/null);
 }
 
-my $gap = qr/GAP: an element operand is read by alias and a later operand stores into its container/;
-
-like translate('my @a = (1,2); my $x = $a[0] + ($a[0] = 10) + $a[0]; print "$x\n";'),  $gap, 'an array element, added';
-like translate('my %h = (a => "p"); my $x = $h{a} . ($h{a} = "q"); print "$x\n";'),    $gap, 'a hash element, joined';
-like translate('my $r = [1,2]; my $x = $r->[0] + ($r->[0] = 10); print "$x\n";'),      $gap, 'through a reference';
-like translate('my @a = (1,2); my $x = $a[0] + ($a[0] += 10); print "$x\n";'),         $gap, 'a compound store';
-like translate('my @a = (1,2); my $x = $a[0] + ($a[0]++); print "$x\n";'),             $gap, 'an increment';
-like translate('my @a = (1,2); my @l = ($a[1], $a[0] = 10); print "@l\n";'),           $gap, 'another element of it, in a list';
+answers_like_perl('my @a = (1,2); my $x = $a[0] + ($a[0] = 10) + $a[0]; print "$x\n";', 'an array element, added');
+answers_like_perl('my %h = (a => "p"); my $x = $h{a} . ($h{a} = "q"); print "$x\n";', 'a hash element, joined');
+answers_like_perl('my $r = [1,2]; my $x = $r->[0] + ($r->[0] = 10); print "$x\n";', 'through a reference');
+answers_like_perl('my @a = (1,2); my $x = $a[0] + ($a[0] += 10); print "$x\n";', 'a compound store');
+answers_like_perl('my @a = (1,2); my $x = $a[0] + ($a[0]++); print "$x\n";', 'an increment');
+answers_like_perl('my @a = (1,2); my @l = ($a[1], $a[0] = 10); print "@l\n";', 'another element of it, in a list');
 
 # A VALUE COMPUTED FROM THE ELEMENT is a copy, and what it read stands.
 unlike translate('my @a = (1,2); my $x = ($a[0] + 1) + ($a[0] = 10); print "$x\n";'), qr/GAP/, 'a sum made before the store';
@@ -56,7 +54,7 @@ unlike translate('sub st { $_[0][$_[1]] = "$_[2]!" } my @o = ([]); st($o[0], 0, 
 # AN ARGUMENT IS MARKED AS AN LVALUE AND IS NOT STORED: perl flags it OPf_MOD
 # because it is passed by alias.
 unlike translate('sub f { $_[0] } my @r = (1,2); print $r[0], f($r[0]) ? "b" : "-", "\n";'), qr/GAP/, 'an element also passed to a call';
-like translate('my @a = (1,2); my @l = ($a[0], $a[0]++); print "@l\n";'), $gap, 'a post-increment in a list';
+answers_like_perl('my @a = (1,2); my @l = ($a[0], $a[0]++); print "@l\n";', 'a post-increment in a list');
 
 # A CALL IN A LATER OPERAND may store the element too. Since 2026-11-21 the
 # element is read again where the callee's MOD set says it may store into the
@@ -77,7 +75,8 @@ like translate('our @a = (1); sub f { @a = (7); "" } print $a[0], f(), "\n";'), 
 like translate('my $r = [1]; sub f { $r = [7]; "" } print $r->[0], f(), "\n";'), $reshape, 'the reference replaced';
 like translate('my $r = {a => {b => 1}}; sub f { $r->{a} = {}; "" } print $r->{a}{b}, f(), "\n";'), $reshape, 'an inner reference replaced';
 like translate('my $r = [1]; sub f { 0 } my $c = $ARGV[0] ? \&f : sub { 1 }; print $r->[0], $c->(), "\n";'), $unknown, 'a code ref of two subs';
-like translate('my $r = [1]; print $r->[0], eval "2", "\n";'), $unknown, 'a string eval';
+# (refused earlier, by the string eval's own name: one in list context)
+like translate('my $r = [1]; print $r->[0], eval "2", "\n";'), qr/GAP: a string eval/, 'a string eval';
 like translate('my $r = [1]; my $m = "x"; print $r->[0], main->$m(), "\n";'), $unknown, 'a dynamic method';
 
 done_testing;

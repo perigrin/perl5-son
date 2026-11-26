@@ -82,7 +82,7 @@ subtest 'chr is Str and sqrt is Num' => sub {
 # them: these carry types inferred from their inputs, not from a builtin entry.
 subtest 'the already-typed neighbours are undisturbed' => sub {
     is printed_stamp('my $s = shift(@ARGV) // "hi"; print length($s);',
-                     'sb-length'), 'Int', 'length stays Int';
+                     'sb-length'), 'Maybe[Int]', 'length is Maybe[Int]';   # (length(undef) is undef: audit 3 N12)
     is printed_stamp('my $s = shift(@ARGV) // "hi"; print index($s,"i");',
                      'sb-index'), 'Int', 'index stays Int';
     is printed_stamp('my $s = shift(@ARGV) // "hi"; print quotemeta($s);',

@@ -11,6 +11,7 @@ our @EXPORT_OK = qw(to_json);
 
 use JSON::PP ();
 use Scalar::Util qw(blessed);
+use SoN::Promote ();
 
 # THE WIRE IS VERSION 2 (docs/plans/2026-11-20-wire-v2.md, section 3): `inputs`
 # are values only, and `mem_in` / `mem_out` name the memory edges; an eval's
@@ -60,6 +61,12 @@ sub _extract_fields ($node, $id_remap) {
         return {
             dispatch_kind => $node->dispatch_kind,
             name          => $node->name,
+            # (FOR THE PROMOTION PASS ONLY, which takes it off the wire: where
+            # each place argument's variable was read where perl pushed it --
+            # the version a promoted value is read at, where nothing between
+            # stores it. SoN::FromOptree's %ARG_READ_AT.)
+            ( do { my $r = $SoN::FromOptree::ARG_READ_AT{ Scalar::Util::refaddr($node) };
+                   $r ? ( arg_read_at => [ map { blessed($_) && defined $id_remap->{ $_->id } ? $id_remap->{ $_->id } : undef } @$r ] ) : () } ),
             # WHAT A FOLDED `sort` COMPARES. Emitted only for sort, where perl
             # folded the comparator into flags and the block is therefore
             # absent -- without these, `sort {$a<=>$b}`, `sort {$b<=>$a}` and a
@@ -277,7 +284,8 @@ sub _extract_fields ($node, $id_remap) {
     # reference. Emitted only when true, so an ordinary store is unchanged on
     # the wire.
     if ($op eq 'EntryWrite') {
-        return $node->binds ? { binds => JSON::PP::true } : undef;
+        return undef unless $node->binds || $node->local;
+        return { ( $node->binds ? ( binds => JSON::PP::true ) : () ), ( $node->local ? ( local => JSON::PP::true ) : () ) };
     }
     # WHEN THE LOOP'S BOUND IS EVALUATED -- see SoN::IR::Node::Loop. Emitted
     # only for the 'entry' form, so a consumer that does not know the field
@@ -807,6 +815,10 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
         { phase => $_->[0], _serialize_graph( $_->[1] )->%*,
           ( defined $_->[2] ? ( package => $_->[2] ) : () ) }
     } $phase_blocks->@* ] if $phase_blocks && $phase_blocks->@*;
+
+    # THE PROMOTION PASS (design B): every graph is here; turn each place the
+    # wire proves private back into a value, marked for the verifier.
+    SoN::Promote::promote($data);
 
     # ->utf8 BECAUSE THE WIRE IS BYTES AND THE VALUES ARE CHARACTERS.
     # Without it `encode` returns a character string, and printing that to a

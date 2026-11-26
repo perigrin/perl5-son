@@ -54,7 +54,15 @@ for my $src (
     is [ grep { $writes{$_} > 1 } sort keys %writes ], [], 'no two stores share a target';
 }
 
-my ($w) = undef_stores( graphs('our $g=1; sub t { local $g = 5; $g } print t(), $g, "\n";')->{'main::t'} );
-is $w, 0, '`local $g = 5` stores no undef first';
+# (a named scalar's `local` MAKES a new scalar, undef, and the assignment
+# stores 5 into it (places-everywhere, design B section 4): that EntryWrite is
+# marked `local`; no other store of undef comes first)
+{
+    my $g = graphs('our $g=1; sub t { local $g = 5; $g } print t(), $g, "\n";')->{'main::t'};
+    my %by = map { ( $_->{id} => $_ ) } $g->{nodes}->@*;
+    my @undef = grep { $_->{op} eq 'EntryWrite' && !$_->{fields}{local}
+        && do { my $v = $by{ $_->{inputs}[1] }; $v->{op} eq 'Constant' && $v->{fields}{const_type} eq 'undef' } } $g->{nodes}->@*;
+    is scalar(@undef), 0, '`local $g = 5` stores no undef first (but the new scalar it makes)';
+}
 
 done_testing;

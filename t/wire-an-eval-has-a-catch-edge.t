@@ -43,10 +43,15 @@ my $restore = $after[0];
 is $restore->{op}, 'EntryWrite', '... a store';
 ok is_g( $by->{ $restore->{inputs}[0] }, 'g' ), '... of $g';
 my $saved = $by->{ $restore->{inputs}[1] };
+# (a restore binds the name back to the saved scalar since places-everywhere: `EntryWrite binds [EntryDef, Ref [EntryDef]]` -- the Ref's input is the read)
+$saved = $by->{ $saved->{inputs}[0] } if $saved->{op} eq 'Ref';
 ok is_g( $saved, 'g' ), '... of $g\'s value read';
 my ($local) = grep { $_->{op} eq 'EntryWrite' && $_->{id} == $die->{mem_in} } @$nodes;
 ok $local && is_g( $by->{ $local->{inputs}[0] }, 'g' ), 'the die follows the local\'s store';
-is $saved->{mem_in}, $local->{mem_in}, '... and the value put back is read where the local stores over it';
+# (the `local` makes a new scalar, then stores the value into it: the save is read before the new scalar)
+my $fresh = $by->{ $local->{mem_in} };
+ok $fresh->{op} eq 'EntryWrite' && $fresh->{fields}{local}, '... which follows the new scalar';
+is $saved->{mem_in}, $fresh->{mem_in}, '... and the value put back is read where the local makes its new scalar';
 is $restore->{mem_in}, $die->{mem_in}, 'the edge\'s memory is the die\'s';
 ok $restore->{mem_out}, 'the restore is a version';
 

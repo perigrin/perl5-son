@@ -64,8 +64,13 @@ subtest 'a `last` after the local puts it back on its way out' => sub {
     my @restore = grep { $_->{id} != $local->{id} } stores_back( \%by, $break[0], $local->{id} );
     is scalar(@restore), 1, 'a store to $g stands between the local and the exit';
     my $saved = $by{ $restore[0]{inputs}[1] };
+    # (a restore binds the name back to the saved scalar since places-everywhere: `EntryWrite binds [EntryDef, Ref [EntryDef]]` -- the Ref's input is the read)
+    $saved = $by{ $saved->{inputs}[0] } if $saved->{op} eq 'Ref';
     is $saved->{op}, 'EntryDef', 'it stores a read of $g';
-    is $saved->{mem_in}, $local->{mem_in}, '...made at the version the local\'s store follows';
+    # (the `local` makes a new scalar, then stores the value into it: the save is read before the new scalar)
+    my $fresh = $by{ $local->{mem_in} };
+    ok $fresh->{op} eq 'EntryWrite' && $fresh->{fields}{local}, 'the local\'s store follows the new scalar';
+    is $saved->{mem_in}, $fresh->{mem_in}, '...made at the version the new scalar follows';
 };
 
 subtest 'the pass that runs on puts it back too, past a guarded `last`' => sub {
@@ -76,13 +81,16 @@ subtest 'the pass that runs on puts it back too, past a guarded `last`' => sub {
     ok $mem, 'the loop carries memory' or return;
     my $back = $by{ $mem->{inputs}[1] };
     is $back->{op}, 'EntryWrite', 'the version that goes round is a store';
-    is $by{ $back->{inputs}[1] }{op}, 'EntryDef', '...of the value saved at the local, not the local\'s own';
+    my $v = $by{ $back->{inputs}[1] };
+    $v = $by{ $v->{inputs}[0] } if $v->{op} eq 'Ref';    # (a restore binds the saved scalar back)
+    is $v->{op}, 'EntryDef', '...of the value saved at the local, not the local\'s own';
 };
 
 subtest 'a `next` after the local puts it back on its edge' => sub {
     my @n = nodes('our $g = 1; for my $i (1..2) { local $g = $g + $i; next if $i == 1; print "more $g\n"; } print "$g\n";');
     my %by = map { $_->{id} => $_ } @n;
-    my @restores = grep { $_->{op} eq 'EntryWrite' && $by{ $_->{inputs}[1] }{op} eq 'EntryDef' } @n;
+    # (a restore binds the saved scalar back: a Ref of the read)
+    my @restores = grep { $_->{op} eq 'EntryWrite' && $by{ $_->{inputs}[1] }{op} eq 'Ref' && $by{ $by{ $_->{inputs}[1] }{inputs}[0] }{op} eq 'EntryDef' } @n;
     is scalar(@restores), 2, 'two restores: the `next` edge and the pass that runs on';
 };
 
@@ -93,6 +101,7 @@ subtest 'what is put back is what the scalar held at the local' => sub {
     my @writes = grep { $_->{op} eq 'EntryWrite' && $by{ $_->{inputs}[0] }{fields}{symbol} eq 'g' } @n;
     my $restore = $writes[-1];
     my $saved   = $by{ $restore->{inputs}[1] };
+    $saved = $by{ $saved->{inputs}[0] } if $saved->{op} eq 'Ref';    # (a restore binds the saved scalar back)
     is $saved->{op}, 'EntryDef', 'the restore stores a read of $g' or return;
     is $saved->{mem_in}, $call->{id}, '...at the version the call left, not the constant bound before it';
 };

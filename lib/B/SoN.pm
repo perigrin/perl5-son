@@ -307,13 +307,22 @@ sub compile {
 
         if ( $format eq 'json' ) {
             my $mods = _followed_modules();
+            # (WHICH SUBS CODE THE WIRE CANNOT SEE MAY CALL -- a code value, a
+            # dynamic method -- for the promotion pass's P2: such a sub may be
+            # handed places by no call on the wire)
+            local %SoN::Promote::CALLED_UNKNOWN = map {
+                my $name = $_;
+                no strict 'refs';
+                ( $name => ( $name =~ /__ANON__|__PROGRAM__|__SORTCMP__/ || !defined &{$name} ) ? 1
+                    : SoN::FromOptree::ModSets::may_be_called_unknown( B::svref_2object( \&{$name} ) ) ? 1 : 0 )
+            } keys %$graphs;
             print to_json( $graphs, $classes, _data_section(),
                 $phases,
                 [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
                 _graph_modules($graphs), \%REFUSED, \%switch, $START_UP );
             # (tools/alias-fastpath.pl: how often the alias fast path held;
             # shortcut: a sub walked again inside one translation counts twice)
-            print STDERR 'ALIAS_STATS ' . join( ' ', map { "$_=$SoN::FromOptree::ALIAS_STATS{$_}" } sort keys %SoN::FromOptree::ALIAS_STATS ) . "\n"
+            print STDERR 'ALIAS_STATS ' . do { my %st = ( %SoN::FromOptree::ALIAS_STATS, %SoN::Promote::STATS ); join( ' ', map { "$_=$st{$_}" } sort keys %st ) } . "\n"
                 if $ENV{SON_ALIAS_STATS};
         }
         else {
@@ -542,6 +551,42 @@ sub _module_start_state {
         return undef;
     };
     my ( @lines, %refuse );
+    # A PACKAGE SCALAR WITH TWO NAMES, OR TIED, AT CHECK (audit 3, N12): `use
+    # English` aliases $PROGRAM_NAME to $0 by a glob, an exporter shares one
+    # scalar between two packages, `use Env` ties $HOME to %ENV. The wire
+    # names each by its own name, and a tie's FETCH is not on it: refused by
+    # name in each graph that names one (`$PROGRAM_NAME` read "" for "-e").
+    {
+        my %seen;
+        for my $g ( sort keys %$graphs ) {
+            for my $n ( $graphs->{$g}->nodes->@* ) {
+                next unless ref($n) && $n->isa('SoN::IR::Node::EntryDef') && ( eval { $n->sigil } // '' ) eq '$';
+                my ( $pkg, $sym ) = map { scalar eval { $n->$_ } } qw(package symbol);
+                next unless defined $pkg && defined $sym && length $sym;
+                my $why = $seen{"$pkg\0$sym"} //= do {
+                    my $stash = \%{"${pkg}::"};
+                    my $gv = exists $stash->{$sym} ? B::svref_2object( \$stash->{$sym} ) : undef;
+                    my $w = '';
+                    if ( $gv && $gv->isa('B::GV') ) {
+                        my $sv = $gv->SV;
+                        my $tied = 0;
+                        for ( my $mg = $sv && $$sv ? eval { $sv->MAGIC } : undef; $mg; $mg = $mg->MOREMAGIC ) { $tied = 1 if $mg->TYPE eq 'q' }
+                        $w = $tied ? "\$${pkg}::$sym is tied (use Env, a tie at compile time)"
+                           : $gv->GvREFCNT > 1 && $sym =~ /\A[A-Za-z_]\w*\z/ && $sym ne 'ARGV' ? "\$${pkg}::$sym is another variable's name too (a glob alias: use English)"
+                           : $sv && $$sv && $sv->REFCNT > 1 && $sym =~ /\A[A-Za-z_]\w*\z/ ? "\$${pkg}::$sym is one scalar with another package's (an import)"
+                           : '';
+                    }
+                    $w;
+                };
+                next unless length $why;
+                next if exists $REFUSED{$g};
+                delete $graphs->{$g};
+                $REFUSED{$g} = "GAP: a package scalar with two names or a tie at compile time ($why) is not yet lowered -- the wire names each by its own name";
+                warn "B::SoN: skipped $g: $REFUSED{$g}\n";
+                last;
+            }
+        }
+    }
     for my $k ( sort keys %named ) {
         my ( $sig, $pkg, $sym ) = split / /, $k;
         my $full = "${pkg}::$sym";
@@ -1161,6 +1206,9 @@ sub _floor_subscripts {
             next unless $node->isa('SoN::IR::Node::Subscript');
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
             my @in = ( $node->v1_inputs // [] )->@*;
+            # (A COPY OF AN ARGUMENT OF @_ stays untyped, as a parameter of the record
+            # the promotion pass may make of it does -- P2)
+            next if $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($node) };
 
             # ARITY IS NOT THE QUESTION. `$x[0] = 'foo'` compiles to a single
             # `aelemfast[*x] sM` with no separate memory operand, so its
@@ -2354,11 +2402,13 @@ sub _infer_backward {
             # ...for a PARAMETER: what a caller passed, which may be undef --
             # a Parameter, or a variable `my (...) = @_` or `shift` binds.
             my %param;       # symbol => 1
+            my %raw_sym;     # symbol => 1: a place of it is taken as it is
             for my $node ( $graph->nodes->@* ) {
                 next unless $node->operation eq 'Assign';
                 my @in = ( $node->v1_inputs // [] )->@*;
                 my $src = $in[-1];
                 my $from_args = Scalar::Util::blessed($src) && ( $src->operation eq 'ArgsSource'
+                    || $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($src) }
                     || ( $src->operation eq 'Call' && ( $src->name // '' ) eq 'shift'
                          && grep { Scalar::Util::blessed($_) && $_->operation eq 'ArgsSource' } ( $src->v1_inputs // [] )->@* ) );
                 next unless $from_args;
@@ -2375,9 +2425,16 @@ sub _infer_backward {
                     my $want = B::SoN::TypeLibrary::operand_type( $op_name, $i );
                     unless (defined $want) {
                         my $raw = $inputs[$i];
+                        # (A PLACE handed on is the variable handed on: every read of
+                        # it may be what the promotion pass hands the call instead)
+                        $raw_sym{ $raw->symbol // '' } = 1
+                            if Scalar::Util::blessed($raw) && $raw->operation eq 'PadAccess' && $raw->can('place') && $raw->place
+                            && $SEES_UNDEF{ $node->operation } && $i >= $targets;
                         $raw{ $raw->id } = 1
                             if Scalar::Util::blessed($raw) && $raw->isa('SoN::IR::Value')
-                            && $SEES_UNDEF{ $node->operation } && $i >= $targets;
+                            && $SEES_UNDEF{ $node->operation } && $i >= $targets
+                            # (the copy `my (...) = @_` itself is not a use of the argument)
+                            && !( $node->operation eq 'Assign' && $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($raw) } );
                         next;
                     }
                     my $operand = $inputs[$i] or next;
@@ -2425,9 +2482,11 @@ sub _infer_backward {
                 next unless $node->isa('SoN::IR::Value');
                 next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
                 next unless _is_backward_inferable($node);
+                next if $node->operation eq 'PadAccess' && $raw_sym{ $node->symbol // '' } && $param{ $node->symbol // '' };
                 next if $raw{ $node->id }
                     && ( $node->operation eq 'Parameter'
-                         || ( $node->operation eq 'PadAccess' && $param{ $node->symbol // '' } ) );
+                         || ( $node->operation eq 'PadAccess' && $param{ $node->symbol // '' } )
+                         || $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($node) } );
                 # AN AGGREGATE'S DECLARATION IS ITS TYPE: nothing sits below
                 # Array or Hash, so no requirement narrows it, and one that
                 # contradicts it (a hash read as a string) is a coercion at
@@ -2486,6 +2545,9 @@ sub _is_backward_inferable {
     return 1 if $op eq 'PadAccess';
     return 1 if $op eq 'FieldAccess';
     return 1 if $op eq 'Parameter';
+    # (a copy of an argument for `my (...) = @_` is the parameter as the walk
+    # leaves it -- the record's target is, once SoN::Promote rewrites it)
+    return 1 if $op eq 'Subscript' && $SoN::FromOptree::ARGS_COPY{ Scalar::Util::refaddr($node) };
     return 0;
 }
 

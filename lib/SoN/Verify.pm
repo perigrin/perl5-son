@@ -50,6 +50,7 @@ sub verify ($wire) {
         _graph_v2( $name, $wire->{methods}{$name}, \%res );
     }
     _alias_private( $wire, \%res );
+    _promoted_private( $wire, \%res );
     return \%res;
 }
 
@@ -105,7 +106,7 @@ sub _alias_private ( $wire, $res ) {
         for my $n ( values $by{$g}->%* ) {
             # (a `local`'s save and its restore make and put back another
             # variable: $_[N] still names the one passed)
-            next if _fields($n)->{local} || _fields($n)->{restore} || $n->{op} eq 'ElemRestore' || $localish{$g}{ $n->{id} };
+            next if _fields($n)->{local} || _fields($n)->{restore} || _fields($n)->{binds} || $n->{op} eq 'ElemRestore' || $localish{$g}{ $n->{id} };
             my @t = $n->{op} eq 'Assign' && !_fields($n)->{record} ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
                   : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
             for my $t ( grep { defined && !ref } @t ) { my $k = $src->( $g, $by{$g}{$t} ); $own{$g}{$k} = 1 if defined $k }
@@ -130,7 +131,7 @@ sub _alias_private ( $wire, $res ) {
             my $t = $callees->( $g, $n ) or return 1;
             return scalar grep { my $w = $writes->($_); $w->{any} || $w->{$key} } $t->@*;
         }
-        return 0 if _fields($n)->{local} || _fields($n)->{restore} || $n->{op} eq 'ElemRestore' || $localish{$g}{$v};
+        return 0 if _fields($n)->{local} || _fields($n)->{restore} || _fields($n)->{binds} || $n->{op} eq 'ElemRestore' || $localish{$g}{$v};
         my @t = $n->{op} eq 'Assign' ? $n->{inputs}->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ]
               : $n->{op} =~ /\A(?:EntryWrite|CellWrite|Delete|ElemRestore)\z/ ? ( $n->{inputs}[0] ) : ();
         return scalar grep { defined && !ref && ( $src->( $g, $by{$g}{$_} ) // '' ) eq $key } @t;
@@ -140,7 +141,8 @@ sub _alias_private ( $wire, $res ) {
             my $t = $callees->( $g, $c ) or next;
             for my $i ( 0 .. $#{ $c->{inputs} } ) {
                 my $a = $by{$g}{ $c->{inputs}[$i] // '' } or next;
-                next if _fields($a)->{place} || !defined $a->{mem_in};
+                # (a promoted one is V14's: re-proved there by the pass's own proof)
+                next if _fields($a)->{place} || _fields($a)->{promoted} || !defined $a->{mem_in};
                 my $key = $src->( $g, $a ) // next;
                 for my $h ( $t->@* ) {
                     my %args = map { $_->{id} => 1 } grep { $_->{op} eq 'ArgsSource' } values $by{$h}->%*;
@@ -227,6 +229,52 @@ sub _alias_private ( $wire, $res ) {
                     push @c, _control_preds($vn);
                 }
             }
+        }
+    }
+    return;
+}
+
+# (V14) A PROMOTED NODE IS PRIVATE (design B, docs/plans/2026-11-25-places-everywhere.md):
+# SoN::Promote made it from a place or a late read, and the proof it made it
+# by is asked again here, of the wire as it left -- the pass is not trusted.
+# P1: a call's argument is private (SoN::AliasProof::arg_private).
+sub _promoted_private ( $wire, $res ) {
+    require SoN::AliasProof;
+    my $p = SoN::AliasProof->new($wire);
+    for my $g ( $p->graphs ) {
+        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
+            for my $i ( 0 .. $#{ $c->{inputs} // [] } ) {
+                my $a = $p->node( $g, $c->{inputs}[$i] ) or next;
+                next unless ( $a->{fields} // {} )->{promoted};
+                # (read at the call's version, or at one before it -- where
+                # perl pushed it -- with nothing on the chain between that may
+                # store what it reads)
+                my $why = !defined $a->{mem_in} || !defined $c->{mem_in} ? "read at no version"
+                    : $a->{mem_in} == $c->{mem_in} ? undef
+                    : !$p->reaches( $g, $c->{mem_in}, $a->{mem_in} ) ? "read at a version its call's does not follow"
+                    : do { my $w = $p->stored_between( $g, $c->{mem_in}, $a->{mem_in}, $p->src( $g, $a ) // '' ); defined $w ? "read before $w" : undef };
+                $why //= $p->arg_private( $g, $c, $i );
+                push $res->{violations}->@*, { graph => $g, node => $c->{id}, op => 'Call', rule => 'promoted-not-private',
+                    detail => "argument $i: $why" } if defined $why;
+            }
+        }
+    }
+    # P2: a promoted parameter record binds a sub's arguments as passed: no
+    # call the wire holds may hand that sub a place, and the sub neither hands
+    # @_ on nor stores through it.
+    my %placed;
+    for my $g ( $p->graphs ) {
+        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
+            next unless grep { my $a = $p->node( $g, $_ ); $a && ( $a->{fields} // {} )->{place} } ( $c->{inputs} // [] )->@*;
+            my $t = $p->callees( $g, $c ) or next;
+            $placed{$_} = "$g Call#$c->{id}" for @$t;
+        }
+    }
+    for my $h ( $p->graphs ) {
+        for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} && ( $_->{fields} // {} )->{promoted} } $p->nodes($h) ) {
+            my $why = $placed{$h} ? "$placed{$h} hands it a place" : $p->args_escape($h) ? 'it hands @_ on or stores through it' : undef;
+            push $res->{violations}->@*, { graph => $h, node => $as->{id}, op => 'Assign', rule => 'promoted-not-private',
+                detail => "a parameter record: $why" } if defined $why;
         }
     }
     return;
@@ -339,6 +387,8 @@ sub _describe ( $n, $by ) {
 #                        Phi at it has one input per input of it.
 #   store-into-value     V13 (audit 3): an Assign whose target is a value, not
 #                        a place: a store the walk had no rule for, dropped.
+#   promoted-not-private V14 (design B): a node SoN::Promote marked `promoted`
+#                        that SoN::AliasProof does not prove private again.
 #   effect-floating      V2b: an effect on no control chain -- a Print, a
 #                        builtin the EffectTable pins, a division that may
 #                        fault, and (audit 3) a sub call, a store's target too.
@@ -738,8 +788,11 @@ sub _graph_v2 ( $name, $g, $res ) {
         my $sym = sub ($x) { my $f = _fields( $x // {} ); join ':', map { $_ // '' } $f->@{qw(package sigil symbol)} };
         # A RESTORE: an EntryWrite storing back the value its target held -- an
         # EntryDef of the same name read at an earlier version (the save).
+        # (or, design B section 4, binding the name back to the scalar it had:
+        # a Ref of that read, the save of a `local` of a named scalar)
+        my $in = sub ($x) { $x && $x->{op} eq 'Ref' ? $by{ $x->{inputs}[0] // '' } : $x };
         my @restores = grep {
-            my $s = $by{ $_->{inputs}[1] // '' };
+            my $s = $in->( $by{ $_->{inputs}[1] // '' } );
             $_->{op} eq 'EntryWrite' && $s && $s->{op} eq 'EntryDef' && defined $s->{mem_in}
                 && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($s)
         } @nodes;
@@ -761,7 +814,7 @@ sub _graph_v2 ( $name, $g, $res ) {
             my @pairs;    # [ local store, its save, its restore ] off every edge
             for my $r ( grep { !$edge_node{ $_->{id} } } @restores ) {
                 my $save = $by{ $r->{inputs}[1] };
-                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $save->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($save) } @nodes;
+                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $in->($save)->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->( $in->($save) ) } @nodes;
                 push @pairs, [ $local, $save, $r ] if $local;
             }
             my $in_eval = sub ($t) { my $e = _fields($t)->{eval_id}; defined $e && $join{$e} };
@@ -795,7 +848,7 @@ sub _graph_v2 ( $name, $g, $res ) {
                 my $p = $x ? $path->( $x->{id}, -1 ) : {};
                 $bad->( $t, 'exc', 'it may die under a live local, outside an eval, and has no way out' ), next unless $x;
                 for my $save (@live) {
-                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->($save) )
+                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->( $in->($save) ) )
                         unless grep { $p->{ $_->{id} } && ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
                 }
             }
@@ -818,7 +871,7 @@ sub _graph_v2 ( $name, $g, $res ) {
             my $body = $path->( $entry, $j->{id} );
             for my $r ( grep { $body->{ $_->{id} } && !$on_exc{ $_->{id} } } @restores ) {
                 my $save = $by{ $r->{inputs}[1] };
-                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $save->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($save) } @nodes;
+                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $in->($save)->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->( $in->($save) ) } @nodes;
                 next unless $local;
                 # (a restore of it met first, going back, put it back: an inner
                 # block's local, closed before the thrower -- audit 2, un75)
@@ -829,7 +882,7 @@ sub _graph_v2 ( $name, $g, $res ) {
                     for ( 1 .. 100000 ) { last if !defined $m || $put_back{$m}; if ( $m == $local->{id} ) { $after = 1; last } $m = ( $by{$m} // {} )->{mem_in} }
                     next unless $after;
                     my $p = $path->( $x->{id}, -1 );
-                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->($save) )
+                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->( $in->($save) ) )
                         unless grep { $p->{ $_->{id} } && ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
                 }
             }

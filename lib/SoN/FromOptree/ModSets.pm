@@ -505,8 +505,11 @@ sub arg_stored_by_call ( $cv, $call ) {
 # the NAME a new scalar; the caller's $_[N] still holds the old one, which
 # the place, a pointer to the name's storage, does not. A call this walk
 # cannot see into may do either.
-sub arg_localized_by_call ( $cv, $call, $places ) {
-    my %locs = map { $_->{loc} => 1 } grep { $_->{loc} =~ /\A[NL]:/ } map { _target_effects( $cv, $_ ) } _call_args($call);
+sub arg_localized_by_call ( $cv, $call, $places, $elems = 0, $only = undef ) {
+    # ($elems: only an element argument, and only an element's `local`;
+    # $only: only that loc, `N:$main::_`)
+    my %locs = map { $_->{loc} => 1 } grep { $_->{loc} =~ /\A[NL]:/ && ( !defined $only || $_->{loc} eq $only ) } map { _target_effects( $cv, $_ ) }
+        grep { !$elems || _strip($_)->name =~ /\A(?:aelem|helem|multideref|aelemfast(?:_lex)?)\z/ } _call_args($call);
     return 0 unless %locs;
     my @todo = _site( $cv, $call );
     my ( %seen, $localized, $aliased );
@@ -520,7 +523,7 @@ sub arg_localized_by_call ( $cv, $call, $places ) {
             next if $seen{$$sub}++;
             my $root = _root($sub) or next;
             for my $o ( _fo('_subtree_ops')->($root) ) {
-                if ( $o->name =~ /\A(?:gvsv|rv2sv|rv2av|rv2hv|helem|aelem)\z/ && ( $o->private & 128 ) ) {   # OPpLVAL_INTRO
+                if ( $o->name =~ ( $elems ? qr/\A(?:helem|aelem|multideref)\z/ : qr/\A(?:gvsv|rv2sv|rv2av|rv2hv|helem|aelem)\z/ ) && ( $o->private & 128 ) ) {   # OPpLVAL_INTRO
                     local $KEEP_OWN = 1;
                     $localized ||= grep { $locs{ $_->{loc} } } _target_effects( $sub, $o );
                 }
@@ -919,7 +922,12 @@ sub conflict ( $place, $effects ) {
     my @levels = $place->{levels}->@*;
     my $last   = $levels[-1];
     for my $e (@$effects) {
-        if ( $e->{loc} eq 'U' ) { $note->('unknown'); next }
+        # (code nothing can be said of cannot name a `my` of this sub that no
+        # reference or closure reaches: its stores are not this place's)
+        if ( $e->{loc} eq 'U' ) {
+            $note->('unknown') unless $levels[0]{loc} =~ /\AL:/ && defined $levels[0]{refd} && !$levels[0]{refd} && !defined $place->{holder};
+            next;
+        }
         # THE SCALAR HOLDING THE FIRST REFERENCE, replaced, frees the container.
         if ( defined $place->{holder} && ( $e->{loc} eq $place->{holder}
             || ( $e->{loc} eq 'R:scalar' && $place->{holder} !~ /\AL:/ ) || $place->{holder} eq 'U' ) ) {
