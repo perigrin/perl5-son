@@ -137,11 +137,13 @@ sub promote ($data) {
     }
     for my $h ( keys %repl ) {
         my $m = $repl{$h};
-        for my $n ( ( $p->{g}{$h}{nodes} // [] )->@* ) {
+        # (P1's new reads too, not yet in the graph's list: theirs name the
+        # copies as the place they read through did -- yyi52's `$t->{l}`)
+        for my $n ( ( $p->{g}{$h}{nodes} // [] )->@*, map { $_->[1] } ( $new{$h} // [] )->@* ) {
             next if $n->{op} eq 'Assign' && ( $n->{fields} // {} )->{record};
             $n->{inputs} = [ map { defined && !ref && exists $m->{$_} ? $m->{$_} : $_ } ( $n->{inputs} // [] )->@* ];
         }
-        my %used = map { ( $_ => 1 ) } map { grep { defined && !ref } ( $_->{inputs} // [] )->@* } ( $p->{g}{$h}{nodes} // [] )->@*;
+        my %used = map { ( $_ => 1 ) } map { grep { defined && !ref } ( $_->{inputs} // [] )->@* } ( $p->{g}{$h}{nodes} // [] )->@*, map { $_->[1] } ( $new{$h} // [] )->@*;
         $p->{g}{$h}{nodes} = [ grep { !exists $m->{ $_->{id} } || $used{ $_->{id} } } $p->{g}{$h}{nodes}->@* ];
         # (the targets, which have no inputs, now named by the reads' uses:
         # moved to the front, so that no use comes before them)

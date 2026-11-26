@@ -775,7 +775,8 @@ class SoN::FromOptree 0.01 {
     # at where perl pushed it, or undef ] (for SoN::Promote: the version a
     # promoted argument is read at, where nothing between stores it).
     our %ARG_READ_AT;
-    our $TOPIC_ARG_VALUE;   # (_handle_entersub: `$_` handed to a sub localizing it, a value)
+    our $TOPIC_ARG_VALUE;
+    our %LOCALIZED_LATER;   # (_handle_entersub: package::name a later argument localizes)   # (_handle_entersub: `$_` handed to a sub localizing it, a value)
     our $PENDING_READ_AT;   # (_handle_entersub_call's %read_at, for the Call it makes)
     # refaddr -> a read of $_[i] made for `my (...) = @_`, left untyped as the
     # parameter record the promotion pass may make of it (B::SoN skips its floor)
@@ -6090,7 +6091,8 @@ class SoN::FromOptree 0.01 {
         for my $k ( _alias_list_item_ops($op) ) {
             # (`values %h` is the hash's own scalars, aliased each by the
             # consumer -- chalk's alias_list; an array's values are not yet)
-            next if _strip_null($k)->name eq 'values' && ( _operand_kids_of_list( _strip_null($k) ) )[0]
+            # (a foreach's: a map's or grep's $_ over them is not -- yyp14)
+            next if $op->name eq 'enteriter' && _strip_null($k)->name eq 'values' && ( _operand_kids_of_list( _strip_null($k) ) )[0]
                 && _strip_null( ( _operand_kids_of_list( _strip_null($k) ) )[0] )->name =~ /hv\z/;
             next unless _strip_null($k)->name =~ /\A(?:values|avalues|reverse|sort|grepwhile|cond_expr)\z/;
             for my $src ( _alias_list_sources( $cv, $k, 1 ) ) {
@@ -6163,6 +6165,9 @@ class SoN::FromOptree 0.01 {
         # A PLACE OF A PACKAGE SCALAR A LATER ARGUMENT LOCALIZES (`f($g, local
         # $g = 5)`): the place is taken where the call is, after the local --
         # perl's is the scalar before it (audit 3, N8 ye54). Refused by name.
+        # Where the sub stores through no argument, the scalar perl pushed
+        # keeps the value it was read with: that value is the argument.
+        local %LOCALIZED_LATER = ();
         {
             my @args = _entersub_args_and_invocant($op);
             my %before;
@@ -6172,12 +6177,14 @@ class SoN::FromOptree 0.01 {
                     next unless $g;
                     my $gv = _op_gv($cv, $g) or next;
                     my $k = $gv->STASH->NAME . '::' . $gv->NAME;
-                    die "GAP: a package scalar handed to a sub where a later argument localizes it is not yet lowered --"
-                      . " perl's alias is the scalar before the local\n" if ( $o->private & 128 ) && $before{$k};
+                    $LOCALIZED_LATER{$k} = 1 if ( $o->private & 128 ) && $before{$k};
                     $before{$k} = 1 unless $o->private & 128;
                 }
             }
         }
+        die "GAP: a package scalar handed to a sub that may store through \$_[N], where a later argument localizes it,"
+          . " is not yet lowered -- perl's alias is the scalar before the local\n"
+            if %LOCALIZED_LATER && ( !( SoN::FromOptree::ModSets::_callees($cv, $op) )[0] || SoN::FromOptree::ModSets::call_stores_through_args($cv, $op) );
         # SUBSTR OR $#a HANDED TO A SUB THAT MAY STORE THROUGH $_[N] (or one
         # nothing can be said of): perl's alias is a magic lvalue -- a store
         # through it splices the string or sets the length (audit 3, N11).
@@ -6233,8 +6240,18 @@ class SoN::FromOptree 0.01 {
                     my $t = $po->targ;
                     next unless $ADDR_TAKEN && $ADDR_TAKEN->{$t} || $CELLS && ( $CELLS->{cells}{$t} || $CELLS->{cell_params}{$t} );
                 }
+                next if %LOCALIZED_LATER && blessed( $args->[$i] ) && $args->[$i] isa SoN::IR::Node::EntryDef
+                    && $LOCALIZED_LATER{ ( $args->[$i]->package // 'main' ) . '::' . $args->[$i]->symbol };
                 next if $TOPIC_ARG_VALUE && blessed( $args->[$i] ) && $args->[$i] isa SoN::IR::Node::EntryDef
                     && $args->[$i]->symbol eq '_' && ( $args->[$i]->sigil // '' ) eq '$' && ( $args->[$i]->package // 'main' ) eq 'main';
+                # (AN ASSIGNMENT TO AN ELEMENT passes the element it stored:
+                # `f($a[0] = 5, $a[0] = 7)` hands f $a[0] twice -- audit 3, yyc112)
+                if ( !$t && @ops == $n && ( my $d = $ALIAS_OPERAND{ ${ _strip_null( $ops[$i] ) } } ) ) {
+                    if ( $d->{how} eq 'target' && blessed( $d->{lv} ) && $d->{lv} isa SoN::IR::Node::Subscript
+                        && refaddr( $d->{node} ) == refaddr( $args->[$i] ) ) {
+                        if ( my $pl = _alias_place( $d->{lv}, $factory, vivify => 1 ) ) { $args->[$i] = $pl; next }
+                    }
+                }
                 my $read_at = blessed( $args->[$i] ) && $args->[$i]->can('mem_in') ? $args->[$i]->mem_in : undef;
                 my $was = $args->[$i];
                 $args->[$i] = ( $t ? _target_place( $cv, $t, $factory ) : undef )
@@ -10380,9 +10397,11 @@ class SoN::FromOptree 0.01 {
             # a value whose type is known right here. Not Array: these elements
             # were never bound to an array, and calling them one repeats the
             # "a List is not an Array" miscompile from the other direction.
+            # (one aggregate operand too: `map { z(); $_ } values %h` -- yyp14)
+            _refuse_aliased_call_list($cv, $op);
             my $input = ($items->@* == 1 && _is_aggregate_node($items->[0]))
                 ? $items->[0]
-                : do { _refuse_aliased_call_list($cv, $op); $factory->make('ArrayLiteral', inputs => _alias_list_items($items, $factory, [ _alias_list_item_ops($op) ], $cv, $ctx),
+                : do { $factory->make('ArrayLiteral', inputs => _alias_list_items($items, $factory, [ _alias_list_item_ops($op) ], $cv, $ctx),
                     stamp => SoN::IR::Stamp->new(type => 'List')) };
 
             my $while_op = $op->next;
@@ -12679,6 +12698,23 @@ class SoN::FromOptree 0.01 {
         # than a stray, dead Assign node. Real list-assigns with values on the
         # stack fall through to the generic dispatch below.
         if ($name eq 'aassign') {
+            # (`my @r = @_` IS A COPY, and the wire binds @r to @_ itself: where
+            # the sub then changes @_ -- a shift, pop, splice, push, unshift
+            # or store into it -- @r would follow. Refused by name, audit 3
+            # yya78: `1 2 3|2 3` printed as `2 3|2 3`.)
+            {
+                my @l = grep { $_->name ne 'pushmark' } _list_kids( $op->last );
+                my @r = grep { $_->name ne 'pushmark' } _list_kids( $op->first );
+                my $is_args = sub ($o) { $o = _strip_null($o); $o->name eq 'rv2av' && ( $o->flags & B::OPf_KIDS ) && _strip_null( $o->first )->name eq 'gv'
+                    && ( eval { _op_gv( $cv, _strip_null( $o->first ) )->NAME } // '' ) eq '_' };
+                if ( @r == 1 && $is_args->( $r[0] ) && grep { _strip_null($_)->name =~ /\A(?:padav|rv2av)\z/ } @l ) {
+                    my $root = $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT;
+                    die "GAP: a copy of \@_ into an array in a sub that changes \@_ after it is not yet lowered --"
+                      . " the wire binds the array to \@_ itself\n"
+                        if grep { $_->name =~ /\A(?:shift|pop|splice|push|unshift)\z/
+                                  && ( !( $_->flags & B::OPf_KIDS ) || $is_args->( $_->first ) ) } _subtree_ops($root);
+                }
+            }
             # The LHS list is the most recent mark; the RHS list (if present) is
             # the mark before it. Perl lays out aassign as
             # pushmark RHS... pushmark LHS..., so popping to the last mark yields

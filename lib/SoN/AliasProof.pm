@@ -259,6 +259,8 @@ sub conflict ( $s, $src, $e ) {
 sub args_escape ( $s, $h ) {
     return $s->{escape}{$h} //= do {
         my $esc = 0;
+        # (`&g;` hands its @_ on as it stands, with no input that says so)
+        $esc = 1 if grep { $_->{op} eq 'Call' && _f($_)->{shares_args} } values $s->{by}{$h}->%*;
         for my $n ( values $s->{by}{$h}->%* ) {
             next unless $n->{op} eq 'ArgsSource';
             for my $u ( $s->consumers( $h, $n ) ) {
