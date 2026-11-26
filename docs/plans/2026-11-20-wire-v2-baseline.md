@@ -791,3 +791,37 @@ probes          PASS  LOUD=20 REFUSED=724 SAME=2435; WRONG 0, SAME lost 0, chang
 ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [52m50s]
                 PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m15s]
 ```
+
+## 28. The third final audit's items that do not wait on the alias design (branch `audit3-base`)
+
+Heads: producer `audit3-base` from f06ba3e, chalk `audit3-base` rebased onto b5dd5571 (#743-#745 over eca706af). The third final audit (docs/research/2026-11-25-memory-model-final-audit-3.md) found 146 WRONG in 1373 probes (probes/y). The user is choosing between A (deny by default), B (places everywhere) and C (keep patching) for the alias classes; this branch does what is needed whichever is chosen, and nothing in N1-N7, N10, N11, N12 beyond it.
+
+| item | outcome | how |
+|---|---|---|
+| 1. no store dropped (clause 2) | N6 13 WRONG -> 13 REFUSED | one predicate, `_returns_its_target` (an assignment, op=, a fused TARGMY op, multiconcat, a pre-increment, a list assign), asked at the two sinks that need a place: a list assignment's target (`GAP: an assignment, op= or increment used as the target of a list assignment`) and an alias list's item whose body may write its alias -- which now asks the one table of stores (`ModSets::stores_var`), not four spellings; a list assign into one array is that array. SoN::Verify V13 `store-into-value`: an Assign's target is a place (0 on corpus and 4518 probe wires). `effect-floating` asks of a sub call too, a store's target included. Mutation: each part off turns 6 or 7 of the 13 WRONG; V13 alone sees 4 of the 6 list-assign drops (not an `our` target, not an alias-list item) |
+| 2. tr/// in the scans | N1 tr 4 + N7 tr 6: SAME 8, REFUSED 2 | `B::SoN::EffectTable::bound_target`: `$x =~ tr///` is null[target, trans], the target the elder sibling (s///'s is its kid); asked by `ModSets::_stores` (MOD sets, `args_may_be_places`, `stores_var`) and the element-operand scan. yp188 stays LOUD (an lli crash, as its s/// twin) |
+| 3. `local $g;` | yj37, yq17 SAME | a local no assignment targets stores undef (an EntryWrite, placed; its target the variable at its version, so no two stores share a target -- z/un19, gates5) |
+| 4. corpus 398 | the call on the chain | the :lvalue call an Assign stores through stays where it was pinned (`_unplace` deleted); chalk's L5 lost its exemption for one off the chains; the deparser spells it as the Assign's target |
+| 5. the loader runs the alias rules | ported, one commit (chalk fe0a2358), to move into one verifier over T1 later | chalk `Chalk::IR::Serialize::WireAliases`, L11: V12's call half and alias-list half over the whole wire; t/bootstrap/ir/loader-refuses-an-alias-that-is-not-private.t holds it to the verifier's answer. The nine wrong wires the verifier saw: 4 now SAME (tr), 5 REFUSED by L11 |
+| 6. `writer: chalk` | limited | let off only when every graph is memory-free (no memory edge, MemStart or memory Phi, store kind, non-record Assign, sub call); six chalk test fixtures (v1-shaped) threaded as v2; chalk's front end is not changed (threading memory there is a later project) |
+| 7. module start state (N9) | 22 WRONG -> REFUSED | B::SoN names a start-up not on the wire as `start_up` on the wire; chalk's loader refuses it in those words (the deparser loads the modules and need not): an INIT or CHECK block, a followed module's END block, a module's file-level effect (output, a store into a package its file does not declare), its own import storing into a package not followed, a program BEGIN block calling a module's sub, and -- for a module the program reaches (a sub its calls reach, a variable it names) -- file-level state CHECK does not hold -- a file lexical, a reference, a call, code made or loaded, an object, a tie, a glob (B::SoN::StartUp compiles the file again in a child: perl freed its main line). Package data computed (`$Test::Builder::Level = 1 unless defined ...`) is plain data; a store into another package's variable (not main's) puts it in the start state |
+| N8, the rest | yi19 ye54 yp167 yp168 SAME; yj33 yq19 yq21 yj41 REFUSED | `local` under a condition and `delete local` refused by name (`_local_shape_gap`); an operand read before `local` of its variable is the old scalar and is not read again |
+| 8. y probes gated | 1263 as y<name> | SAME 745, REFUSED 502, LOUD 16, WRONG 0; ylib copied; six y/unverified probes verify-clean now moved up. Left out and listed in BASELINE.tsv's comments (kept by `write_baseline`): 86 WRONG -- N1 4, N2 9, N3 8, N4 18, N5 16, N7 5, N10 5, N11 6, N12 14, ya57 1 -- and 24 y/unverified probes whose wires still break a verifier rule (t/bootstrap/ir/wire-verify.t holds every probe; 22 REFUSED, 2 SAME). All 1373: SAME 747, REFUSED 524, LOUD 16, WRONG 86 (audit: 789, 421, 16, 147) |
+
+Existing tests changed, and why: producer t/wire-v2-an-lvalue-call-target-is-no-version.t (the call on the chain now), t/placement-one-constructor.t (`_unplace` gone), t/a-followed-modules-start-state.t and t/lib/K9/Mod.pm (the object moves to K9::ModObj: a bless is code beyond data); chalk loader-enforces-the-memory-invariant.t (L5's lvalue case; the narrowed exemption), ir-serialize-json.t, ir-node-unify-control-in.t, ir-subclass-field-audit.t, ir-node-unify-roundtrip.t, a-captured-cell-loads.t (fixtures threaded as v2), t2-args-alias.t (one SAME is REFUSED by L11: the wire was wrong, T2 right by its own rule).
+
+What the gates found first (gates1): the deparser bound the :lvalue call to a temporary (0 for 42); `for my @list = @_` as an alias item refused POSIX::import in three corpus wires (1079 graphs for 1082); Exporter's import and POSIX's own-package stores read as start-up effects (nine chalk tests); gates2: `use Test::Chalk` refused (its `$Test::Builder::Level` default); gates3: 24 verifier-dirty y/unverified probes in the set (wire-verify.t); gates5: z/un19 SAME -> REFUSED (`local $@`'s undef store shared the restore's target). Twice (gates3, gates5) t/wire-a-begin-with-an-endless-loop-is-walked-in-time.t ran past its 300 s and the ratchet past 7200 s with every gate and another session's run on four cores (load 28-32): alone, the walk test took 79 s on this branch and 80 s at the base (load 11), so gates6 ran the gates in three phases (`--only`: the suites, then census, corpus gate and probes, then the ratchet). Also: chalk's own grammar did not recognize two spellings in WireAliases.pm, and a `$#{ }`. Each narrowed to what it is about.
+
+`tools/gates.sh` (gates6, in three phases) at producer c6d946c0, chalk 3617dc88:
+
+```
+producer-suite  PASS  834 files, 0 failing [19m28s]
+chalk-suite     PASS  945 files, 0 failing [56m35s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [2m17s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [3m36s]
+probes          PASS  LOUD=36 REFUSED=1226 SAME=3180; WRONG 0, SAME lost 0, changed 0 [11m39s]
+ratchet         PASS  prove exit 0; chalk's lib compared; held by name: 0 [32m49s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [2m51s]
+```
+
+Probes: all 4442 gated (3179 + 1263 y): SAME 3180, REFUSED 1226, LOUD 36, WRONG 0, SAME lost 0.
