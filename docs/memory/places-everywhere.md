@@ -77,6 +77,17 @@ section 10 "as built"). Producer from f06ba3e, chalk from eca706af.
 - **@_ is not reference counted.** A callee's `@a = (7)`, `shift`, `pop`,
   `splice` or `$#a =` frees the element an alias holds (perl reads "" or
   panics); only `push`/`unshift` leave it. AliasProof keeps those as stores.
+- **Two passes over one wire must share their renames.** P2 rewrote reads to
+  record targets in the graph's node list, not in P1's reads still pending
+  insertion: a promoted `$t->{l}` named a Constant (y/yyi52). No verifier rule
+  saw it; the y sweep did.
+- **A binding is invisible to a name made at run time.** `local $TODO` as a
+  new scalar under bind::NAME: Test::Chalk's `${"${pkg}::TODO"}` read the
+  global and printed no `# TODO` (a silent wrong). Where the scan sees such a
+  read, a package scalar's local keeps the value save.
+- **The rebase onto audit3-base was one squashed commit** (the old history
+  kept at pe-before-rebase2): 42 commits replayed over 12 conflicted in the
+  same four files again and again.
 - **Perl's hash order is per process.** y/yp13 is order-dependent: perl gives
   8 or 9 run to run; chalk's 8 is one of perl's answers.
 
