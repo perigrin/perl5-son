@@ -7089,7 +7089,10 @@ class SoN::FromOptree 0.01 {
                 $target = $sim->pop_node;
             }
             elsif (my $targ = $op->targ) {
-                $target = $sim->lookup($targ) // $factory->make('PadAccess',
+                # (A DEMOTED SLOT is read at the current memory version: the
+                # binding a destructive tr/// left is its Transliterate, which a
+                # consumer reads as the count -- audit 4, X6, `22` for `2cc`)
+                $target = ( $ctx->{addr_taken}{$targ} ? undef : $sim->lookup($targ) ) // $factory->make('PadAccess',
                     targ => $targ,
                     do { my ($sg, $sy) = _padparts($cv, $targ);
                          (sigil => $sg, symbol => $sy) },
@@ -13481,6 +13484,28 @@ class SoN::FromOptree 0.01 {
             }
             if ($all_my_scalars && $want_ctx == 3) {
                 $sim->push_node($sim->lookup($_->targ) // $_) for @targets;
+                return ($op->next, 'handled');
+            }
+            # IN A LIST, TO ELEMENTS OR SLICES: the elements as they are after
+            # it, each read at the store's version -- the Assign pushed as one
+            # item was read as its count (audit 4, X4: `my ($x,$y) = @a[0,1]
+            # = (8,9)` gave 2 for 89). Any other target mix, in a list: refused.
+            if ( $want_ctx == 3 && grep { $_->isa('SoN::IR::Node::Subscript') || $_->isa('SoN::IR::Node::Slice') } @targets ) {
+                die "GAP: the value of a list assignment in list context, to elements or slices among other"
+                  . " targets, is not yet lowered -- it is the targets as they are after it\n"
+                    if grep { !( $_->isa('SoN::IR::Node::Subscript') || $_->isa('SoN::IR::Node::Slice') ) } @targets
+                    or !defined $node->control_in;
+                for my $t (@targets) {
+                    my @in = $t->inputs->@*;
+                    my $src = $t->isa('SoN::IR::Node::Slice') ? pop @in : shift @in;
+                    # (an index that may be several -- `@a[f()]`, `@a[@i]`: one read
+                    # each is not perl's)
+                    die "GAP: the value of a list assignment in list context, to a slice whose indices are a"
+                      . " list, is not yet lowered -- it is the targets as they are after it\n"
+                        if grep { $unsized_v->($_) || _is_aggregate_node($_) || _flattens($_) } @in;
+                    $sim->push_node( $factory->make('Subscript', kind => $t->kind, inputs => [ $src, $_ ], mem => $sim->memory) )
+                        for @in;
+                }
                 return ($op->next, 'handled');
             }
             $sim->push_node($node);
@@ -25353,6 +25378,9 @@ class SoN::FromOptree 0.01 {
         # `$s =~ s/a/z/; $s =~ /z/` matched the string before the s///.
         my $demoted = $targ && !($op->pmflags & PMf_NONDESTRUCT);
         undef $target if $demoted;
+        # (s///r of a demoted slot too: a binding a tr/// left there is its
+        # Transliterate, read as the count -- audit 4, X6)
+        undef $target if $targ && $ADDR_TAKEN && $ADDR_TAKEN->{$targ};
         if (!$target) {
             # A DEMOTED SLOT'S READ CARRIES THE MEMORY IT OBSERVES, the same as
             # every other read of one. `_address_taken` demotes a destructive
