@@ -288,6 +288,51 @@ for my $case (
     local *SoN::AliasProof::args_escape    = sub { 0 };
     rejected( "$what (the pass's proof says private)", $w, qr/\Apromoted-not-private\z/ );
 }
+# V14 ANSWERS THE SAME WHATEVER IT WAS ASKED FIRST (combo2 ratchet: chalk's
+# Earley::_complete, promoted by the pass, rejected by the verifier). Asked
+# about a() first, the recursion b -> a took a() as QUIET while a() was being
+# decided, and kept b() QUIET after a() was found to store $x: f2's argument,
+# asked second, passed. Both calls here are promoted by hand; both must fail.
+{   my $w = wire('our $x = 1; sub a { b() if $_[0]; $x = 2 } sub b { a(0) } sub f1 { a(1); $_[0] } sub f2 { b(); $_[0] } print f1($x), f2($x), "\n";');
+    my @c = sort { $a->{id} <=> $b->{id} } grep { $_->{op} eq 'Call' && fname($_) =~ /\Amain::f[12]\z/ } nodes($w)->@*;
+    is( scalar @c, 2, 'M36: two calls' );
+    for my $c (@c) { my ($a) = grep { $_->{id} == $c->{inputs}[0] } nodes($w)->@*; promote( $a, $c->{mem_in} ) }
+    no warnings 'redefine';
+    local *SoN::AliasProof::conflict       = sub { 0 };
+    local *SoN::AliasProof::arg_private    = sub { undef };
+    local *SoN::AliasProof::stored_between = sub { undef };
+    local *SoN::AliasProof::args_escape    = sub { 0 };
+    my @v = grep { $_->{rule} eq 'promoted-not-private' } SoN::Verify::verify($w)->{violations}->@*;
+    is( [ sort map { $_->{node} } @v ], [ sort map { $_->{id} } @c ], 'M36 a callee that reaches a store through a recursion asked second: both rejected' )
+        or diag join "\n", map { "$_->{node} $_->{detail}" } @v;
+}
+# A `my` READ WHERE PERL PUSHED IT, BEFORE A LATER ARGUMENT'S CALL THAT IS
+# HANDED IT (combo2 ratchet: chalk's `$self->_force($self->_chart_get(...))`,
+# 18 graphs). The pass asked V14 of a wire whose g($s) it had already
+# rewritten to a node V14 did not know (so: harmless), and V14 then took any
+# input that names $s for a store (so: not). A call stores a `my` of the
+# caller only through a place it is handed, where a callee may store @_.
+{   my $w = wire('sub g { $_[0] } sub h { "$_[0]$_[1]" } sub k { my $s = shift; for my $i (1, 2) { $s .= $i } h($s, g($s)) } print k(1), "\n";');
+    my $k = $w->{methods}{'main::k'}{nodes};
+    my ($h) = grep { $_->{op} eq 'Call' && fname($_) eq 'main::h' } @$k;
+    my ($a) = grep { $_->{id} == $h->{inputs}[0] } @$k;
+    ok( $a->{fields}{promoted} && $a->{mem_in} != $h->{mem_in}, 't15: promoted, read where perl pushed it, before g($s)' );
+    is( [ map { "$_->{graph}#$_->{node} $_->{rule}: $_->{detail}" } SoN::Verify::verify($w)->{violations}->@* ], [], 't15: clean' );
+}
+{   my $w = wire('sub g { $_[0] = 9 } sub h { "$_[0]$_[1]" } sub k { my $s = shift; for my $i (1, 2) { $s .= $i } h($s, g($s)) } print k(1), "\n";');
+    my $k = $w->{methods}{'main::k'}{nodes};
+    my ($h) = grep { $_->{op} eq 'Call' && fname($_) eq 'main::h' } @$k;
+    my ($g) = grep { $_->{op} eq 'Call' && fname($_) eq 'main::g' } @$k;
+    my ($a) = grep { $_->{id} == $h->{inputs}[0] } @$k;
+    ok( !$a->{fields}{promoted} || $a->{mem_in} == $h->{mem_in}, 'M37: not read before g($s), which stores it through $_[0]' );
+    promote( $a, $g->{mem_in} );
+    no warnings 'redefine';
+    local *SoN::AliasProof::conflict       = sub { 0 };
+    local *SoN::AliasProof::arg_private    = sub { undef };
+    local *SoN::AliasProof::stored_between = sub { undef };
+    local *SoN::AliasProof::args_escape    = sub { 0 };
+    rejected( 'M37 a promoted `my` read before a call it is handed as a place, which stores @_', $w, qr/\Apromoted-not-private\z/ );
+}
 # P2: a promoted parameter record, in a sub a call then hands a place.
 {   my $w = wire( 'my $x=1; sub f { my ($p) = @_; $p } print f($x), "\n";' );
     my @f = $w->{methods}{'main::f'}{nodes}->@*;

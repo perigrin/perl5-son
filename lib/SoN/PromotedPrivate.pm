@@ -23,7 +23,8 @@ sub _fields ($n) { $n->{fields} // {} }
 #     handed to another call is a place, or is checked at that call);
 #   - the argument is read at the call's version, or at one the call follows
 #     with nothing between that may store it (a `my` of the caller: nothing
-#     between that names it; anything else: every version between QUIET);
+#     between that names it, but a call handed it as a value or as a place
+#     its callees only read; anything else: every version between QUIET);
 #   - it is a `my` scalar of the caller no Ref, closure or other sub reaches
 #     (only its own graph can name it), or every version on every way from
 #     each callee's start to each of its reads of @_ is QUIET for it.
@@ -39,10 +40,11 @@ my %QUIET_OP = map { ( $_ => 1 ) } qw(Subscript PostfixDeref PadAccess EntryDef 
 my %QUIET_BUILTIN = map { ( $_ => 1 ) } qw(print say prtf warn);
 my $STORE_OP = qr/\A(?:EntryWrite|CellWrite|Delete|ElemRestore|LocalAlias|Unwind)\z/;
 
-# private_checker($wire) -> ( $private, $args_read_only ):
+# private_checker($wire) -> ( $private, $args_read_only, $add ):
 #   $private->($g, $call, $i): undef where the call's input $i, a value, is
 #     private by V14's rule, else why not;
-#   $args_read_only->($sub): the sub's @_ is only read.
+#   $args_read_only->($sub): the sub's @_ is only read;
+#   $add->($g, $node): a node made after the checker was (SoN::Promote's).
 sub private_checker ($wire) {
     my $m = all_graphs($wire);
     my %by = map { my $g = $_; ( $g => { map { ( $_->{id} => $_ ) } ( $m->{$g}{nodes} // [] )->@* } ) } keys $m->%*;
@@ -212,7 +214,17 @@ sub private_checker ($wire) {
             $v = ( $by{$g}{$v} // {} )->{mem_in} while defined $v && $v != $at && $k++ < 100000;
             return 'read at a version its call does not follow' unless defined $v;
             my $why = $between->( $g, $c->{mem_in}, $at, $mine
-                ? sub ($vn) { !grep { my $x = $by{$g}{$_}; $x && $x->{op} eq 'PadAccess' && ( _fields($x)->{symbol} // '' ) eq $sym } grep { defined && !ref } ( $vn->{inputs} // [] )->@* }
+                ? sub ($vn) {
+                    my @named = grep { my $x = $by{$g}{$_}; !$x || $x->{op} eq 'PadAccess' && ( _fields($x)->{symbol} // '' ) eq $sym }
+                        grep { defined && !ref } ( $vn->{inputs} // [] )->@*;
+                    return 1 unless @named;
+                    # (a sub call stores it only through a place it is handed,
+                    # where a callee may store @_; a value handed is a copy)
+                    return 0 unless $sub_call->($vn);
+                    return 1 unless grep { !$by{$g}{$_} || _fields( $by{$g}{$_} )->{place} } @named;
+                    my $t = $callees->($vn) or return 0;
+                    return !grep { !$args_read_only->($_) } @$t;
+                  }
                 : sub ($vn) { $quiet->( $g, $vn, $s ) } );
             return "read before $why, which may store it" if defined $why;
         }
@@ -226,7 +238,11 @@ sub private_checker ($wire) {
         }
         return undef;
     };
-    return ( $private, $args_read_only );
+    # (SoN::Promote hands each node it makes to the checker as it makes it:
+    # a call's input it rewrote must name a node the checker knows -- one it
+    # did not know read as nothing, and the pass and V14 answered differently)
+    my $add = sub ( $g, $n ) { $by{$g}{ $n->{id} } = $n };
+    return ( $private, $args_read_only, $add );
 }
 
 # all_graphs($wire) -> { name => graph }: the subs, and the BEGIN and END
