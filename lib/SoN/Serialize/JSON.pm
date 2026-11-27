@@ -687,7 +687,8 @@ sub _serialize_graph ($graph) {
         # A PLACE: storage an alias is bound to (aliases-as-places).
         if ( $node isa SoN::IR::Node::Access && $node->place ) {
             $fields = { ( $fields // {} )->%*, place => JSON::PP::true,
-                ( $node->vivify ? ( vivify => JSON::PP::true ) : () ) };
+                ( $node->vivify ? ( vivify => JSON::PP::true ) : () ),
+                ( $node isa SoN::IR::Node::PadAccess && $node->fresh_each_pass ? ( fresh_each_pass => JSON::PP::true ) : () ) };
         }
 
         my %entry = (

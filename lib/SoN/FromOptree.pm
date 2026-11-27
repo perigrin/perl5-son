@@ -6144,23 +6144,6 @@ class SoN::FromOptree 0.01 {
         return \@out;
     }
     sub _handle_entersub ($cv, $op, $sim, $factory, $ctx) {
-        # A `my` MADE ANEW EACH PASS, handed to a sub that may return or keep
-        # `\$_[0]`: perl's reference is to that pass's scalar, the wire's to
-        # the one slot every pass shares (`3,3,3` for `1,2,3`; probes x/xm24,
-        # xm25). Where no Ref says it is fresh each pass, chalk keeps one.
-        # shortcut: only a callee B::SoN can name (a method or a code ref is
-        # not asked -- every one in a loop was refused); upgrade with the MOD
-        # sets' method resolution when one is seen keeping `\$_[0]`.
-        if ( _entersub_callee_cv( $cv, $op ) && !_callee_holds_no_alias( $cv, $op )
-            && ( _entersub_callee_gv( $cv, $op ) || _value_may_be_kept( $op, $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT ) ) ) {
-            for my $a ( _entersub_args_and_invocant($op) ) {
-                my $t = _strip_null($a);
-                next unless $$t && $t->name eq 'padsv' && $t->targ && !( $t->private & B::OPpLVAL_INTRO() );
-                die "GAP: a `my` made anew each pass, handed to a sub that may return or keep a reference to it, is not yet lowered"
-                  . " -- every pass's would be one variable\n"
-                    if _renewed_per_pass( $cv, $op, 0, { name => _padname( $cv, $t->targ ), outer_idx => $t->targ } );
-            }
-        }
         # AN ARGUMENT THAT IS AN ASSIGNMENT passes the variable it stores,
         # and a sub that writes $_[N] writes that variable:
         # the wire passes the value, so the write would be lost (final audit
@@ -6287,6 +6270,17 @@ class SoN::FromOptree 0.01 {
                 $args->[$i] = ( $t ? _target_place( $cv, $t, $factory ) : undef )
                     // _alias_place( $args->[$i], $factory ) // $args->[$i];
                 $read_at{ refaddr $args->[$i] } = $read_at if refaddr( $args->[$i] ) != refaddr($was) && !$t && blessed($read_at);
+                # (A `my` MADE ANEW EACH PASS of a loop the call is in: the
+                # callee may keep `\$_[N]`, a reference to that pass's scalar.
+                # Said on the place, as a Ref says it -- one slot for every
+                # pass gave `3,3,3` for perl's `1,2,3`: probes x/xm24-xm31.)
+                my $pa = $args->[$i];
+                if ( @ops == $n && $pa isa SoN::IR::Node::PadAccess && $pa->place && !$pa->fresh_each_pass
+                    && ( my $po = _strip_null( $ops[$i] ) )->name eq 'padsv' ) {
+                    $args->[$i] = $factory->make('PadAccess', targ => $pa->targ, sigil => $pa->sigil, symbol => $pa->symbol,
+                        ( $pa->shared ? ( shared => 1 ) : () ), place => 1, fresh_each_pass => 1)
+                        if _renewed_per_pass( $cv, $op, 0, { name => _padname( $cv, $po->targ ), outer_idx => $po->targ } );
+                }
             }
         }
 
