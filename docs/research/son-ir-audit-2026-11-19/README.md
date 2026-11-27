@@ -48,6 +48,15 @@
   probes chalk's `BASELINE.tsv` leaves out, `_verify.log` SoN::Verify over the
   new wires. The 8 in `unverified/` break a verifier rule (1) or the pre-scan
   agreement test (7). Not in chalk's `t/data/audit-probes` yet.
+  `probes/v/`: the 2576 probes of the 2026-11-27 fifth final audit
+  (../2026-11-27-memory-model-final-audit-5.md, section 4); `_run1.log` is their
+  sweep at producer 396aae40, chalk a2fe984d (301 WRONG), `_classes.tsv` the
+  class (Q1-Q18) of each wrong one, `_nopromote.log` the 301 run again with
+  `SON_NO_PROMOTE=1` (23 SAME), `_y_left_out.log` the 16 audit-3 probes still
+  out of chalk's gate, `_verify.log` SoN::Verify, the pre-scan instruments and
+  the clause 3 scan over the new wires. The 27 in `unverified/` break a
+  verifier rule (17) or the pre-scan agreement test (10). Not in chalk's
+  `t/data/audit-probes` yet.
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),

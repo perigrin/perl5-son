@@ -1,0 +1,51 @@
+V vd84 main::__PROGRAM__#18 Assign record: a record of package-var
+V ve46 main::f#3 Subscript read-unversioned:args: Subscript of ArgsSource
+V vf217 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vi161 main::ed#2 EntryDef read-unversioned:package: EntryDef $s
+V vk59 main::__PROGRAM__#27 Subscript alias-not-private: the per-pass item of elem:agg:@a is used by EntryWrite#38 after Assign#44 may store it
+V vo41 main::__PROGRAM__#19 Assign record: a record of package-var
+V vo42 main::__PROGRAM__#19 Assign record: a record of package-var
+V vo43 main::__PROGRAM__#19 Assign record: a record of package-var
+V vq111 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vq112 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vq113 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vq114 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vq115 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vq116 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vq117 main::__PROGRAM__#2 EntryDef read-unversioned:package: EntryDef $t
+V vq130 main::__PROGRAM__#4 Subscript read-unversioned:my-aggregate: Subscript of PadAccess @t
+V vq139 main::__PROGRAM__#7 Call effect-floating: the builtin pos on no control chain
+# pre-scan agreement (ScanAgree) and walked-once (WalkCount) on each probe: the disagreements
+va44 ITER ? $main::_ scan=1 walk=0
+va45 ITER ? $main::_ scan=1 walk=0
+vb13 SLOTS ? missed=- extra=2
+vb78 SLOTS ? missed=- extra=2
+vk61 SLOTS ? missed=- extra=7
+vm101 ITER ? 6 scan=1 walk=0
+vn22 SLOTS ? missed=- extra=2
+vn30 SLOTS ? missed=- extra=2
+vs32 SLOTS ? missed=- extra=1
+vs35 SLOTS ? missed=- extra=1
+# clause 3 scan (struct): wires 2576 graphs 3563 nowire 0, faults 0
+  Assign record 142
+  Assign store 2019
+  Call sub 1358
+  CellWrite 47
+  Delete 62
+  EntryWrite 1925
+  Exc 171
+  Loop 728
+  MemStart 3563
+  Phi memory 1213
+  Return 3563
+  Unwind 151
+  fresh_each_pass 130
+  place 468
+  promoted 109
+  rule alias-not-private 1
+  rule effect-floating 1
+  rule read-unversioned:args 1
+  rule read-unversioned:my-aggregate 1
+  rule read-unversioned:package 9
+  rule record 4
+  version=2 2576

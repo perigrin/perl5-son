@@ -1,0 +1,16 @@
+ya57                           WRONG    got=[21 2 ] want=[2 2 ]
+yb41                           REFUSED  load: from_json failed: GAP: wire invariant L11: main::__PROGRAM__: Subscript#25 is the per-pass item of elem:my:@a, carried as a value, and Subscript#28 uses it afte
+yc160                          SAME     
+ye49                           REFUSED  load: from_json failed: GAP: wire invariant L11: main::__PROGRAM__: Call#10 hands argument 1 ($main::g) as a value, and main::f reads it after EntryWrite#6 may store
+ye53                           REFUSED  GAP: T2: out of its slices (a reference to what is not an array)
+yn26                           REFUSED  load: from_json failed: GAP: wire invariant L4: main::__PROGRAM__: EntryWrite#28 is a memory version no Return or Unwind reaches backwards
+yo15                           REFUSED  GAP: T2: out of its slices (main::sum is XS: there is no Perl source to compile)
+yo17                           REFUSED  load: from_json failed: GAP: Data::Dumper::Dumpperl, which the program calls, is refused in its module: GAP: a `local` inside a block or loop nested in a loop body is
+yo22                           SAME     
+yo23                           REFUSED  load: from_json failed: GAP: a followed module's file-level code (Config: die) runs before the main line and is not on the wire -- not yet lowered
+yo27                           REFUSED  load: from_json failed: GAP: a followed module's file-level code beyond plain `our` data (Carp: padsv) runs before the main line and is not on the wire -- not yet low
+yo30                           REFUSED  load: from_json failed: GAP: wire invariant L4: Benchmark::import: EntryWrite#57 is a memory version no Return or Unwind reaches backwards
+yo33                           REFUSED  load: from_json failed: GAP: Text::Balanced::extract_bracketed, which the program calls, is refused in its module: GAP: a consumed ternary arm stores an element and y
+yp13                           SAME     
+yp158                          REFUSED  GAP: T2: out of its slices (a package scalar read of no one version)
+yp18                           REFUSED  load: from_json failed: GAP: wire invariant L11: main::__PROGRAM__: Subscript#28 is the per-pass item of elem:agg:@a, carried as a value, and Phi#5 uses it after Assi
