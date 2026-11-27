@@ -6148,7 +6148,10 @@ class SoN::FromOptree 0.01 {
         # `\$_[0]`: perl's reference is to that pass's scalar, the wire's to
         # the one slot every pass shares (`3,3,3` for `1,2,3`; probes x/xm24,
         # xm25). Where no Ref says it is fresh each pass, chalk keeps one.
-        if ( !_callee_holds_no_alias( $cv, $op )
+        # shortcut: only a callee B::SoN can name (a method or a code ref is
+        # not asked -- every one in a loop was refused); upgrade with the MOD
+        # sets' method resolution when one is seen keeping `\$_[0]`.
+        if ( _entersub_callee_cv( $cv, $op ) && !_callee_holds_no_alias( $cv, $op )
             && ( _entersub_callee_gv( $cv, $op ) || _value_may_be_kept( $op, $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT ) ) ) {
             for my $a ( _entersub_args_and_invocant($op) ) {
                 my $t = _strip_null($a);
