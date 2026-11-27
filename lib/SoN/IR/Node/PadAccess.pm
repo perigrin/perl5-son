@@ -28,6 +28,10 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
     # made anew each call. Set once the graph is built (FromOptree).
     field $file :reader = 0;
     method set_file($v) { $file = $v ? 1 : 0; return }
+    # A `my` MADE ANEW EACH PASS of a loop, as a place handed to a call (wire
+    # `fields.fresh_each_pass`, as a Ref says it): a consumer gives each pass
+    # its own scalar, which the callee's `\$_[N]` may outlive.
+    field $fresh_each_pass :param :reader = 0;
 
     # BOTH REQUIRED, and the sigil is the load-bearing half. This node is
     # hash-consed by content, so two PadAccess nodes with the same symbol and
@@ -68,6 +72,6 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
         # diagnostics / round-trip only (no consumer reads it behaviorally;
         # PadAccess resolves to its VarDecl via inputs[0]).
         return join('|', 'PadAccess', "sigil=$sigil", "symbol=$symbol",
-            ($shared ? 'shared' : ()), $self->_serialize_inputs());
+            ($shared ? 'shared' : ()), ($fresh_each_pass ? 'fresh' : ()), $self->_serialize_inputs());
     }
 }
