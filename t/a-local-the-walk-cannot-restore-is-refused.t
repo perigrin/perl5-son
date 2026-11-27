@@ -26,6 +26,14 @@ for my $case (
     [ 'our $g=1; sub p { $g } sub t { $_[0] and local $g = 5; p() } print t(1), t(0), "\n";', $cond ],
     [ 'our $g=1; sub t { local $g = $_[0] ? 5 : 6 unless $_[1]; $g } print t(1, 0), "\n";', $cond ],
     [ 'our %h=(a=>1); sub t { my $v = delete local $h{a}; $v } print t(), $h{a}, "\n";', qr/GAP: `delete local` is not yet lowered/ ],
+    # (fourth final audit, X3: `local` on a slice had no save, no restore and no refusal)
+    map( { [ $_, qr/GAP: `local` on an array or hash slice is not yet lowered/ ] }
+        'our @g = (1,2,3); { local @g[0,1] = (8,9); } print "@g\n";',
+        'our @g = (1,2,3); { local @g[0,1]; } print "@g\n";',
+        'our %g = (a=>1); { local @g{"a"} = (8); } print "$g{a}\n";',
+        'my @a = (1,2,3); { local @a[0,1] = (8,9); } print "@a\n";',
+        'my $r = {a=>1}; { local @$r{qw(a b)} = (8,9); } print "$r->{a}\n";',
+        'our @g = (1,2,3); my @i = (0,2); sub f { local @g[@i] = (8,9); "@g" } print f(), "@g\n";' ),
 ) {
     like compile( $case->[0] ), $case->[1], "refused: $case->[0]";
 }

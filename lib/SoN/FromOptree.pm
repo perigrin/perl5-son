@@ -20401,6 +20401,9 @@ class SoN::FromOptree 0.01 {
         # (`local` of a package variable; a `my` is a pad op)
         return if $n =~ /\Arv2[ash]v\z/ && !( ( $op->flags & B::OPf_KIDS() ) && ${ $op->first } && $op->first->name =~ /\A(?:gv|rv2gv|padsv|null)\z/ );
         die "GAP: `delete local` is not yet lowered -- the element would not be put back\n" if $n eq 'delete';
+        # (fourth final audit, X3: no handler saves or restores a slice's elements)
+        die "GAP: `local` on an array or hash slice is not yet lowered -- its elements would not be put back\n"
+            if $n =~ /\A[ah]slice\z/;
         for ( my $p = eval { $op->parent }; $p && $$p; $p = eval { $p->parent } ) {
             my $pn = $p->name;
             last if $pn =~ /\A(?:lineseq|leave|leavesub|leaveloop|scope|leavetry|leaveeval|leavesublv)\z/;
