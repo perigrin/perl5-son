@@ -47,8 +47,14 @@ name where a later operand's effects conflict with their place.
   each consumer's kids, not with Concise.
 - **A neighbour probe finds the next hole.** X1's fix exposed a chalk
   fresh_cell bug (an inner loop referring to the outer pass's `my`: `,,,`),
-  older than X1. Still open, found here: a body `my` handed to a sub that
-  returns `\$_[0]` keeps one slot for every pass (`3,3,3` for `1,2,3`).
+  older than X1. And a body `my` handed to a sub that returns or keeps
+  `\$_[0]` kept one slot for every pass (`3,3,3` for `1,2,3`): refused by
+  name now (xm24, xm25) -- for a callee B::SoN can name; asked of every
+  method, it refused 11 deparse files and 4 corpus graphs. Its neighbour `for my $x (@a) { f($x) }` with f
+  storing `$a[0]` before reading `$_[0]` printed 1 for 5 (xm27): chalk made
+  f take its argument by value because the iterator aliased by reference is
+  no place --  as aliases now, but not for a foreach over @_ (a caller's
+  literal there stops an alias at run time: two chalk tests caught it).
 - **A literal bound by a glob is read-only.** Binding `*x = \42` to a plain
   cell made `$x++` succeed where perl dies; and in an eval the run-time die
   only sets a flag the wire gives no branch for -- refuse, do not lower.
