@@ -48,9 +48,12 @@ name where a later operand's effects conflict with their place.
 - **A neighbour probe finds the next hole.** X1's fix exposed a chalk
   fresh_cell bug (an inner loop referring to the outer pass's `my`: `,,,`),
   older than X1. And a body `my` handed to a sub that returns or keeps
-  `\$_[0]` kept one slot for every pass (`3,3,3` for `1,2,3`): refused by
-  name now (xm24, xm25) -- for a callee B::SoN can name; asked of every
-  method, it refused 11 deparse files and 4 corpus graphs. Its neighbour `for my $x (@a) { f($x) }` with f
+  `\$_[0]` kept one slot for every pass (`3,3,3` for `1,2,3`): lowered on
+  branch loop-my-fresh: a place argument of a pad scalar renewed on a cycle
+  through the call carries fresh_each_pass (as a Ref does), and chalk gives
+  it a cell per pass -- named sub, method, code ref (xm24-xm33 SAME). The
+  refusal it replaced, asked of every method, had cost 11 deparse files and
+  4 corpus graphs; the lowering cost none. Its neighbour `for my $x (@a) { f($x) }` with f
   storing `$a[0]` before reading `$_[0]` printed 1 for 5 (xm27): chalk made
   f take its argument by value because the iterator aliased by reference is
   no place --  as aliases now, but not for a foreach over @_ (a caller's
