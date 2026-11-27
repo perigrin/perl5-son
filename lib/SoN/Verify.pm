@@ -479,7 +479,7 @@ sub _graph_v2 ( $name, $g, $res ) {
                          || $_->[0]{op} eq 'Coerce' && $in_arm->( $_->[0], $d + 1 ) } ( $cons{ $n->{id} } // [] )->@*;
     };
     # (V13) A STORE IS INTO A PLACE. An Assign's target is a variable, an
-    # element, a field, a cell, a slice, an aggregate, a dereference, a ?: of
+    # element, a field, a cell (a MakeCell, or a closure's CellParam), a slice, an aggregate, a dereference, a ?: of
     # places, a call (an :lvalue sub, pos) or undef (a list assign's skip): never a value.
     # A store whose target is a value was one the walk had no rule for -- the
     # store dropped, the wire still well formed (audit 3, N6: `($x = $y) = 7`
@@ -487,7 +487,7 @@ sub _graph_v2 ( $name, $g, $res ) {
     for my $n ( grep { $_->{op} eq 'Assign' } @nodes ) {
         for my $t ( grep { defined && !ref } ( $n->{inputs} // [] )->@[ 0 .. ( _fields($n)->{targets} // 1 ) - 1 ] ) {
             my $x = $by{$t} or next;
-            next if $x->{op} =~ /\A(?:PadAccess|EntryDef|FieldAccess|MakeCell|CellRead|Subscript|Slice|ArrayLiteral|HashLiteral|ArgsSource|PostfixDeref|Call|TernaryExpr|Phi|Coerce)\z/;
+            next if $x->{op} =~ /\A(?:PadAccess|EntryDef|FieldAccess|MakeCell|CellParam|CellRead|Subscript|Slice|ArrayLiteral|HashLiteral|ArgsSource|PostfixDeref|Call|TernaryExpr|Phi|Coerce)\z/;
             next if $x->{op} eq 'Constant' && ( _fields($x)->{const_type} // '' ) eq 'undef';
             $bad->( $n, 'store-into-value', "its target is a $x->{op}" );
         }

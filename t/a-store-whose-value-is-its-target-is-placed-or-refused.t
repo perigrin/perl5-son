@@ -74,5 +74,11 @@ for my $src (
     $a->{inputs}[0] = $c->{id};
     ok( ( grep { $_->{rule} eq 'store-into-value' } SoN::Verify::verify($w)->{violations}->@* ), 'a store into a Constant is store-into-value' );
 }
+# ...and a closure's captured scalar is a place: its CellParam is the cell, as
+# the maker's MakeCell is (audit 4, xt24: `sub { ($x,$y) = ($y,$x) }`).
+{
+    my $w = decode_json( scalar qx($^X -Ilib -MO=-q,SoN,json -e 'my (\$x,\$y) = (1,2); my \$c = sub { (\$x,\$y) = (\$y,\$x); 0 }; \$c->();' 2>/dev/null) );
+    is [ grep { $_->{rule} eq 'store-into-value' } SoN::Verify::verify($w)->{violations}->@* ], [], 'a list assign into captured scalars is into places';
+}
 
 done_testing;
