@@ -6,6 +6,7 @@ use JSON::PP;
 use File::Temp qw(tempdir);
 use lib 'lib';
 use SoN::Verify;
+use SoN::AliasProof ();    # (loaded, so that the cases below can make it say "private")
 
 # THE DEFECT: 12 hand-made breakages, and the verifier caught 0 of them. It
 # trusted mem_out, derived `record`, had no rule for the eval's exceptional
@@ -257,6 +258,35 @@ for my $case (
     my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
     promote( $a, $g->{mem_in} );
     rejected( 'M26 a promoted argument read before a later argument\'s call that stores it', $w, qr/\Apromoted-not-private\z/ );
+}
+# V14 DOES NOT ASK THE PASS'S PROOF (audit 4, X5): SoN::AliasProof called a
+# captured or referenced `my` private, and V14, asking the same module, passed
+# all 16. Each wire here is the pass's, its argument promoted by hand, and
+# checked with SoN::AliasProof answering "private" to every question: V14
+# must still reject it by its own check.
+for my $case (
+    [ 'M27 a promoted argument a closure handed in stores', 'sub f { $_[1]->(); $_[0] } my $x = 1; print f($x, sub { $x = 5 }), "\n";' ],
+    [ 'M28 a promoted `my` argument a callee stores through a file-level reference', 'my $x = 1; my $r = \\$x; sub f { $$r = 5; $_[0] } print f($x), "\n";' ],
+    [ 'M29 a promoted `my` argument stored through a reference held in an array', 'my $x = 1; my @r = (\\$x); sub f { my $o = $_[0]; ${$_[1][0]} = 5; "$o$_[0]" } print f($x, \\@r), "\n";' ],
+    [ 'M30 a promoted `my` argument stored through a reference held in a hash', 'my $x = 1; my %o = (r => \\$x); sub f { my $o = $_[0]; ${$_[1]{r}} = 5; "$o$_[0]" } print f($x, \\%o), "\n";' ],
+    [ 'M31 a promoted element a callee stores through a reference to it', 'our @a = (1); my $r = \\$a[0]; sub f { $$r = 5; $_[0] } print f($a[0]), "\n";' ],
+    [ 'M32 a promoted @_ element of the caller, its variable stored by name', 'our $x = 1; sub f { $x = 2; $_[0] } sub h { f($_[0]) } print h($x), "\n";', 'main::h' ],
+    [ 'M33 a promoted element a callee stores at an index not known', 'our @a = (1, 2); sub f { $a[$_[1]] = 9; $_[0] } print f($a[0], 0), "\n";' ],
+    [ 'M34 a promoted element whose array a callee assigns whole', 'our @a = (1); sub f { @a = (7); $_[0] } print f($a[0]), "\n";' ],
+    [ 'M35 a promoted argument a callee stores by name after a `local` of another', 'our ($x, $y) = (1, 1); sub f { local $y = 3; $x = 2; $_[0] } print f($x), "\n";' ],
+) {
+    my ( $what, $src, $g ) = @$case;
+    my $w = wire($src);
+    my ($c) = grep { $_->{op} eq 'Call' && fname($_) eq 'main::f' } $w->{methods}{ $g // 'main::__PROGRAM__' }{nodes}->@*;
+    my ($a) = grep { $_->{id} == $c->{inputs}[0] } $w->{methods}{ $g // 'main::__PROGRAM__' }{nodes}->@*;
+    ok( $a->{fields}{place}, "$what: the pass left it a place" );
+    promote( $a, $c->{mem_in} );
+    no warnings 'redefine';
+    local *SoN::AliasProof::conflict       = sub { 0 };
+    local *SoN::AliasProof::arg_private    = sub { undef };
+    local *SoN::AliasProof::stored_between = sub { undef };
+    local *SoN::AliasProof::args_escape    = sub { 0 };
+    rejected( "$what (the pass's proof says private)", $w, qr/\Apromoted-not-private\z/ );
 }
 # P2: a promoted parameter record, in a sub a call then hands a place.
 {   my $w = wire( 'my $x=1; sub f { my ($p) = @_; $p } print f($x), "\n";' );
