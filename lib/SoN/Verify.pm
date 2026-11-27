@@ -235,44 +235,39 @@ sub _alias_private ( $wire, $res ) {
 }
 
 # (V14) A PROMOTED NODE IS PRIVATE (design B, docs/plans/2026-11-25-places-everywhere.md):
-# SoN::Promote made it from a place or a late read, and the proof it made it
-# by is asked again here, of the wire as it left -- the pass is not trusted.
-# P1: a call's argument is private (SoN::AliasProof::arg_private).
+# checked by SoN::PromotedPrivate, a rule of its own that shares nothing with
+# the pass's proof (SoN::AliasProof) -- audit 4, X5. See there.
 sub _promoted_private ( $wire, $res ) {
-    require SoN::AliasProof;
-    my $p = SoN::AliasProof->new($wire);
-    for my $g ( $p->graphs ) {
-        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
+    require SoN::PromotedPrivate;
+    my $m = SoN::PromotedPrivate::all_graphs($wire);
+    my ( $private, $args_read_only ) = SoN::PromotedPrivate::private_checker($wire);
+    my $sub_call = sub ($n) { $n->{op} eq 'Call' && ( _fields($n)->{dispatch_kind} // '' ) ne 'builtin' };
+    my %by = map { my $g = $_; ( $g => { map { ( $_->{id} => $_ ) } ( $m->{$g}{nodes} // [] )->@* } ) } keys $m->%*;
+    for my $g ( sort keys $m->%* ) {
+        for my $c ( sort { $a->{id} <=> $b->{id} } grep { $sub_call->($_) } values $by{$g}->%* ) {
             for my $i ( 0 .. $#{ $c->{inputs} // [] } ) {
-                my $a = $p->node( $g, $c->{inputs}[$i] ) or next;
-                next unless ( $a->{fields} // {} )->{promoted};
-                # (read at the call's version, or at one before it -- where
-                # perl pushed it -- with nothing on the chain between that may
-                # store what it reads)
-                my $why = !defined $a->{mem_in} || !defined $c->{mem_in} ? "read at no version"
-                    : $a->{mem_in} == $c->{mem_in} ? undef
-                    : !$p->reaches( $g, $c->{mem_in}, $a->{mem_in} ) ? "read at a version its call's does not follow"
-                    : do { my $w = $p->stored_between( $g, $c->{mem_in}, $a->{mem_in}, $p->src( $g, $a ) // '' ); defined $w ? "read before $w" : undef };
-                $why //= $p->arg_private( $g, $c, $i );
+                my $a = $by{$g}{ $c->{inputs}[$i] // '' } or next;
+                next unless _fields($a)->{promoted};
+                my $why = $private->( $g, $c, $i );
                 push $res->{violations}->@*, { graph => $g, node => $c->{id}, op => 'Call', rule => 'promoted-not-private',
                     detail => "argument $i: $why" } if defined $why;
             }
         }
     }
     # P2: a promoted parameter record binds a sub's arguments as passed: no
-    # call the wire holds may hand that sub a place, and the sub neither hands
-    # @_ on nor stores through it.
+    # call the wire holds may hand that sub a place (a method call: any sub of
+    # its name), and the sub's @_ is only read.
     my %placed;
-    for my $g ( $p->graphs ) {
-        for my $c ( grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g) ) {
-            next unless grep { my $a = $p->node( $g, $_ ); $a && ( $a->{fields} // {} )->{place} } ( $c->{inputs} // [] )->@*;
-            my $t = $p->callees( $g, $c ) or next;
-            $placed{$_} = "$g Call#$c->{id}" for @$t;
+    for my $g ( sort keys $m->%* ) {
+        for my $c ( grep { $sub_call->($_) } values $by{$g}->%* ) {
+            next unless grep { my $a = $by{$g}{$_}; $a && _fields($a)->{place} } grep { defined && !ref } ( $c->{inputs} // [] )->@*;
+            my ( $k, $name ) = ( _fields($c)->{dispatch_kind} // '', _fields($c)->{name} // '' );
+            $placed{$_} = "$g Call#$c->{id}" for grep { $k eq 'direct' ? $_ eq $name : $k eq 'method' && /::\Q$name\E\z/ } keys $m->%*;
         }
     }
-    for my $h ( $p->graphs ) {
-        for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} && ( $_->{fields} // {} )->{promoted} } $p->nodes($h) ) {
-            my $why = $placed{$h} ? "$placed{$h} hands it a place" : $p->args_escape($h) ? 'it hands @_ on or stores through it' : undef;
+    for my $h ( sort keys $m->%* ) {
+        for my $as ( grep { $_->{op} eq 'Assign' && _fields($_)->{record} && _fields($_)->{promoted} } values $by{$h}->%* ) {
+            my $why = $placed{$h} ? "$placed{$h} hands it a place" : $args_read_only->($h) ? undef : 'it hands @_ on or stores through it';
             push $res->{violations}->@*, { graph => $h, node => $as->{id}, op => 'Assign', rule => 'promoted-not-private',
                 detail => "a parameter record: $why" } if defined $why;
         }
@@ -388,7 +383,8 @@ sub _describe ( $n, $by ) {
 #   store-into-value     V13 (audit 3): an Assign whose target is a value, not
 #                        a place: a store the walk had no rule for, dropped.
 #   promoted-not-private V14 (design B): a node SoN::Promote marked `promoted`
-#                        that SoN::AliasProof does not prove private again.
+#                        that V14's own rule (SoN::PromotedPrivate, not the pass's
+#                        SoN::AliasProof) does not show private.
 #   effect-floating      V2b: an effect on no control chain -- a Print, a
 #                        builtin the EffectTable pins, a division that may
 #                        fault, and (audit 3) a sub call, a store's target too.

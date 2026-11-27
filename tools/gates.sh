@@ -57,7 +57,7 @@ producer-suite  every t/**/*.t under prove -l: 0 failing files
 chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files, and $CHALK_MUST_RUN ran its tests (not skipped)
 census          tools/corpus-llvm-roundtrip.pl: ROUNDTRIP >= $ROUNDTRIP_MIN, DIFFERS 0, LLI_FAIL 0
 corpus-gate     chalk t/bootstrap/corpus/son-corpus-wide.t: passes, gate-green >= $GATE_GREEN_MIN, paad/worklist.json untouched
-probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else
+probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else; and t/probes-with-promotion-off-are-not-wrong.t (the same sweep with SON_NO_PROMOTE=1): WRONG 0, TIMEOUT 0
 ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib: no rule broken but by the violations held by name, no fewer wires or graphs than t/data/wire-verify-baseline.tsv, no wire dropped; tools/corpus-roundtrip.pl (the deparser's round trip, through SoN::Wire::as_v1): ROUNDTRIP >= $DEPARSE_MIN, EMITS_INVALID_PERL 0
 EOF
 }
@@ -155,7 +155,13 @@ probes_line() {
     printf '%-15s %s  %s; WRONG %s, SAME lost %s, changed %s%s\n' \
         probes $v "${counts:-no counts}" "${wrong:-0}" "$lost" "$(grep -c '(was ' "$f")" "$(secs probes)"
     [ $v = PASS ] || grep '(was SAME)\|^[a-z0-9]* *WRONG\|^[a-z0-9]* *TIMEOUT' "$f" | head -12 | sed 's/^/                  /'
-    [ $v = PASS ]
+    # (the promotion differential, audit 4: the same sweep with the pass off)
+    local o=$OUT/probes-nopromote.out ov=PASS
+    if [ ! -f "$o" ]; then printf '%-15s PEND  (promotion off)\n' ''; return 1; fi
+    [ "$(cat "$OUT/probes-nopromote.rc")" -eq 0 ] || ov=MISS
+    printf '%-15s %s  (promotion off) %s\n' '' $ov "$(grep -o 'promotion off: [A-Z].*' "$o" | tail -1)"
+    [ $ov = PASS ] || grep '^not ok\|^# *[a-z0-9]* *\(WRONG\|TIMEOUT\)' "$o" | head -12 | sed 's/^/                  /'
+    [ $v = PASS ] && [ $ov = PASS ]
 }
 
 ratchet_line() {
@@ -285,6 +291,16 @@ probes() {
     grep -Eq '^[A-Z]+=[0-9]+' "$OUT/probes.tmp" && mv "$OUT/probes.tmp" "$OUT/probes.out"
 }
 
+# The promotion differential (audit 4, X5): the probes again, SON_NO_PROMOTE=1.
+probes_nopromote() {
+    [ -f "$OUT/probes-nopromote.out" ] && return 0
+    ( cd "$P" && SON_PROMOTE_DIFF=1 SON_CHALK=$C SON_PROBE_JOBS=$1 prove -lv t/probes-with-promotion-off-are-not-wrong.t ) > "$OUT/probes-nopromote.tmp" 2>&1
+    local rc=$?
+    grep -q 'promotion off: [A-Z]' "$OUT/probes-nopromote.tmp" || return 0
+    echo $rc > "$OUT/probes-nopromote.rc"
+    mv "$OUT/probes-nopromote.tmp" "$OUT/probes-nopromote.out"
+}
+
 # The wires are kept under $OUT/wires, so a second run verifies without
 # compiling again. They are this snapshot's, so the cache cannot go stale.
 ratchet() {
@@ -320,10 +336,11 @@ bg=""
 if wanted corpus-gate; then timed corpus-gate corpus_gate & bg="$bg $!"; fi
 if wanted ratchet;     then { timed ratchet ratchet 2; timed deparse deparse; } & bg="$bg $!"; fi
 sj=$JOBS
-wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/wire-verify-ratchet\.t$'
+wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/(wire-verify-ratchet|probes-with-promotion-off-are-not-wrong)\.t$'
 wanted chalk-suite    && timed chalk-suite suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
 wanted census         && timed census census "$sj"
 wanted probes         && timed probes probes "$sj"
+wanted probes         && timed probes probes_nopromote "$sj"
 [ -z "$bg" ] || wait $bg
 
 summary

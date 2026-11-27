@@ -34,6 +34,8 @@ sub promote ($data) {
         }
     }
     return $data if $ENV{SON_NO_PROMOTE};
+    require SoN::PromotedPrivate;
+    my ( $v14, $v14_args_read_only ) = SoN::PromotedPrivate::private_checker($data);
     # (each read of a variable already on the wire, by what it reads and where)
     my $sig = sub ( $op, $f, $in, $mem ) {
         my %f = %$f; delete @f{qw(place vivify promoted)};
@@ -57,7 +59,6 @@ sub promote ($data) {
             for my $i (@pl) {
                 # P1: a place a call is handed -> its source read at the call's version
                 if ( !defined $c->{mem_in} || defined $p->arg_private( $g, $c, $i ) ) { $all = 0; $STATS{'arg-place'}++; next }
-                $STATS{'arg-value'}++;
                 my $a = $p->node( $g, $c->{inputs}[$i] );
                 my %f = ( $a->{fields} // {} )->%*;
                 delete @f{qw(place vivify)};
@@ -66,7 +67,12 @@ sub promote ($data) {
                 my $at = $c->{mem_in};
                 my $h = ( $hint{$g}{ $c->{id} } // [] )->[$i];
                 $at = $h if defined $h && $p->reaches( $g, $c->{mem_in}, $h )
-                    && !defined $p->stored_between( $g, $c->{mem_in}, $h, $p->src( $g, $a ) );
+                    && !defined $p->stored_between( $g, $c->{mem_in}, $h, $p->src( $g, $a ) )
+                    && !defined $v14->( $g, $c, $i, $h );
+                # (AND BY V14'S OWN RULE, which shares nothing with the proof
+                # above: a promotion the verifier would reject is not made)
+                if ( defined $v14->( $g, $c, $i, $at ) ) { $all = 0; $STATS{'arg-place'}++; next }
+                $STATS{'arg-value'}++;
                 # (THE READ THE WALK MADE, where it is still on the wire -- the
                 # same node, as before the place: marked, not made again)
                 my $key = $sig->( $a->{op}, \%f, $a->{inputs}, $at );
@@ -105,7 +111,7 @@ sub promote ($data) {
     }
     my %repl;    # graph -> { read id => target id }
     for my $h ( grep { $p->{g}{$_} && exists $CALLED_UNKNOWN{$_} } $p->graphs ) {
-        my $blocked = $CALLED_UNKNOWN{$h} || $placed{$h} || $p->args_escape($h);
+        my $blocked = $CALLED_UNKNOWN{$h} || $placed{$h} || $p->args_escape($h) || !$v14_args_read_only->($h);
         my ($start) = grep { $_->{op} eq 'MemStart' } $p->nodes($h);
         for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} } $p->nodes($h) ) {
             $STATS{'record-place'}++, next if $blocked;

@@ -1,15 +1,16 @@
 # ABOUTME: Whether an alias may be carried as a value, decided over the whole wire: what each
-# ABOUTME: node and each sub (through its calls) may store. Shared by SoN::Promote and SoN::Verify.
+# ABOUTME: node and each sub (through its calls) may store. The proof SoN::Promote promotes by.
 package SoN::AliasProof;
 use v5.42.0;
 use B::SoN::EffectTable ();
 
-# WHY ONE MODULE. The promotion pass (SoN::Promote) rewrites a place into a
-# value where this says the alias is private, and the verifier (SoN::Verify,
-# V13) asks the same question of every node the pass marked `promoted`. The
-# proof is over the wire alone -- every graph of the program is there -- and
-# never over how a store is spelled in the optree (audit 3, risk 1: `tr`
-# where `=` was listed). A store is what the wire says writes memory: a node
+# THE PASS'S PROOF. The promotion pass (SoN::Promote) rewrites a place into a
+# value where this says the alias is private. The verifier's V14 does NOT ask
+# it again (audit 4, X5: asking the same predicate, it passed the 16 wrong
+# answers this made); it checks by SoN::PromotedPrivate, a rule of its own,
+# which the pass asks too. The proof is over the wire alone -- every graph
+# of the program is there -- and never over how a store is spelled in the
+# optree (audit 3, risk 1: `tr` where `=` was listed). A store is what the wire says writes memory: a node
 # with `mem_out`, by its targets; a sub call, by what its subs store, closed
 # over the wire; a call of no sub the wire holds, everything.
 #
@@ -101,16 +102,26 @@ sub _container ( $s, $g, $c, $kind ) {
     return defined $k && $k =~ /\Aagg:/ ? $k : "R:$kind";
 }
 
-# referenced($g, $source) -> a reference may reach this source: a package or
-# field one always; a `my` one where the wire takes a Ref of it, or a cell.
+# referenced($g, $source) -> a reference or a closure may reach this source: a
+# package or field one always; a `my` one where the wire takes a Ref of it or
+# a closure captures it. (A captured `my` is still a PadAccess in its maker's
+# graph, beside the MakeCell: no Ref names it -- audit 4, X5.)
 sub referenced ( $s, $source ) {
     return 1 unless $source =~ /\|/;    # (a package, field or shared one: any reference)
     $s->{refd} //= do {
         my %r;
         for my $g ( $s->graphs ) {
-            for my $n ( grep { $_->{op} eq 'Ref' } values $s->{by}{$g}->%* ) {
-                my $k = $s->src( $g, $s->node( $g, $n->{inputs}[0] ) );
-                $r{$k} = 1 if defined $k;
+            for my $n ( values $s->{by}{$g}->%* ) {
+                if ( $n->{op} eq 'Ref' ) {
+                    # (a reference to an element reaches its container's
+                    # elements: the key is the container, as it is looked up)
+                    my $k = $s->src( $g, $s->node( $g, $n->{inputs}[0] ) );
+                    $r{ $k =~ s/\Aelem://r =~ s/#.*\z//r } = 1 if defined $k;
+                }
+                for my $c ( $n->{op} eq 'MakeCell' ? _f($n)->{cell_name} : $n->{op} eq 'AnonSub' ? ( _f($n)->{captures} // [] )->@* : () ) {
+                    next unless defined $c && $c =~ /\A([\$\@%])(.+)\z/;
+                    $r{ $1 eq '$' ? "my|$g|\$$2" : "agg:$1|$g|$2" } = 1;
+                }
             }
         }
         \%r;
@@ -213,12 +224,16 @@ sub writes ( $s, $h, $seen = {} ) {
     return $s->{writes}{$h} = \%w;
 }
 
-# conflict($source, $effect) -> may a store to $effect reach $source?
+# conflict($source, $effect) -> may a store to $effect reach $source? FAIL
+# CLOSED: "no" only for a pair listed below as two different storages; any
+# pair the table does not list may conflict (audit 4, X5: it ended "no").
 sub conflict ( $s, $src, $e ) {
-    # (a `my` no reference reaches and no closure captures -- it would be a
-    # cell -- is stored only by name: code the wire cannot see cannot name it)
+    # (a `my` no reference reaches and no closure captures is stored only by
+    # name: code the wire cannot see cannot name it)
     return 0 if $e eq 'any' && $src =~ /\Amy\|/ && !$s->referenced($src);
-    return 1 if $e eq 'any' || $e eq $src || $e eq 'P';
+    # (an element of the caller's own @_ is an alias of a variable this
+    # graph cannot name: any store may be to it)
+    return 1 if $e eq 'any' || $e eq $src || $e eq 'P' || $src eq 'P';
     # (two elements of one container at different constant indices)
     if ( $src =~ /\Aelem:(.*)#(.*)\z/ ) {
         my ( $c, $i ) = ( $1, $2 );
@@ -230,10 +245,14 @@ sub conflict ( $s, $src, $e ) {
     return 1 if $e eq $src;
     return 1 if $src =~ /\Acell:/;    # (a captured cell: any store we cannot name)
     my $kind = sub ($k) {
-        return 'scalar' if $k =~ /\A(?:\$|my:|cell:|F:\$|R:scalar)/ || $k =~ /\Aelem:/;
+        return 'scalar' if $k =~ /\A(?:\$|my[:|]|cell:|F:\$|R:scalar)/ || $k =~ /\Aelem:/;
         return $1 if $k =~ /\AR:(\w+)/;
         return $k =~ /\Aagg:\@/ ? 'array' : $k =~ /\Aagg:%/ ? 'hash' : '?';
     };
+    # (a scalar through a reference: any scalar a reference reaches, an
+    # element too; an aggregate as a whole holds such elements)
+    if ( $e eq 'R:scalar' ) { return $s->referenced($src) }
+    if ( $src eq 'R:scalar' ) { return $e =~ /\A(?:\$|my[:|]|F:\$|elem:)/ ? $s->referenced($e) : 1 }
     # an element: its container stored as a whole, or one through a reference of its kind
     if ( $src =~ /\Aelem:(.*)\z/ ) {
         my $c = $1;
@@ -241,17 +260,46 @@ sub conflict ( $s, $src, $e ) {
         # beside it, where the store reaches them: the name alone is a reshape
         # that leaves them -- a push)
         return 0 if $e eq $c;
-        return 1 if $c =~ /\AR:(\w+)/ && ( $e =~ /\AR:\Q$1\E/ || $e =~ /\Aelem:/ || $e =~ /\Aagg:/ );
         if ( $e =~ /\AR:(array|hash)\z/ ) {
             my $want = $1;
+            return 1 unless $c =~ /\Aagg:/;
             return 0 unless ( $c =~ /\Aagg:\@/ ? 'array' : 'hash' ) eq $want;
             return $s->referenced($src);
         }
-        return 0;
+        # (a captured variable's cell: this container, where a closure captures it)
+        return $c =~ /\Aagg:[\@%]\|/ ? $s->referenced($src) : 0 if $e =~ /\Acell:/;
+        # (a named scalar, another named container or an element of one:
+        # other storage than an element of this one)
+        return 0 if $c =~ /\Aagg:/ && $e =~ /\A(?:\$|my[:|]|F:\$|agg:|elem:agg:)/;
+        return 1;
     }
-    if ( $e eq 'R:scalar' ) { return $kind->($src) eq 'scalar' ? $s->referenced($src) : 0 }
-    if ( $src eq 'R:scalar' ) { return $kind->($e) eq 'scalar' && $e !~ /\Aelem:/ ? $s->referenced($e) : 0 }
-    return 0;
+    # (a captured variable's cell, by its handle: a `my` some closure captures)
+    if ( $e =~ /\Acell:/ ) {
+        return $s->referenced($src) if $src =~ /\A(?:my\||agg:[\@%]\|)/;
+        return 0 if $src =~ /\A(?:\$|F:)/ || $src =~ /\Aagg:[\@%][^|]/;
+        return 1;
+    }
+    # (an aggregate as a whole: an element store reaches it; one through a
+    # reference of its kind where a reference reaches it)
+    if ( $src =~ /\Aagg:/ ) {
+        return 1 if $e =~ /\Aelem:\Q$src\E(?:#|\z)/;
+        return $kind->($e) eq $kind->($src) ? $s->referenced($src) : 0 if $e =~ /\AR:/;
+    }
+    if ( $src =~ /\AR:(array|hash)\z/ ) {
+        my $want = $1;
+        return 0 if $e =~ /\A(?:\$|my[:|]|F:\$)/;    # (a named scalar is no element)
+        return $kind->($e) eq $want ? $s->referenced($e) : 0 if $e =~ /\Aagg:/;
+        return 1;
+    }
+    # TWO DIFFERENT NAMED STORAGES: a package, `my` or field scalar or an
+    # aggregate, each by its own name (equal names returned above), and one
+    # beside an element of a named container (its own returned above).
+    my $named = qr/\A(?:\$|my[:|]|F:|agg:)/;
+    return 0 if $src =~ $named && ( $e =~ $named || $e =~ /\Aelem:agg:/ );
+    # (a store through an array or hash reference is to an aggregate or an
+    # element: a named scalar is neither)
+    return 0 if $src =~ /\A(?:\$|my[:|]|F:\$)/ && $e =~ /\AR:(?:array|hash)\z/;
+    return 1;
 }
 
 # args_escape($h) -> the sub hands @_ on, takes a reference into it, or stores
