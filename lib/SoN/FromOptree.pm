@@ -26262,11 +26262,20 @@ class SoN::FromOptree 0.01 {
             }
             return 0;
         };
+        # (an op that pushes an SV perl may still read by alias: a noted one, a
+        # pass-through, an :lvalue sub's call -- a plain call's value is a copy)
+        my $hands_sv = sub ($o) {
+            $ALIAS_OPERAND{$$o} || $o->name =~ /\A(?:scalar|scope|or|dor|and|cond_expr)\z/
+                || $o->name eq 'entersub' && do { my $s = eval { _entersub_callee_cv( $cv, $o ) };
+                       $s && $$s && $s->isa('B::CV') && ( $s->CvFLAGS & B::CVf_LVALUE ) };
+        };
         if ( $n =~ /\A(?:or|dor|and)\z/ ) {
             my $in = _strip_null( $p->first );
             my $d = $ALIAS_OPERAND{$$in} // _alias_passed_through( $cv, $in, $sim, $factory, $ctx, $k ) or return undef;
             my $mem = $sim->memory;
-            return undef unless defined $mem && ( !blessed( $d->{mem} ) || _stored_since( $mem, $d->{mem} ) );
+            # (a store in its own right arm is no matter: that arm ran only where
+            # the value is the arm's -- a later operand's store is)
+            return undef unless defined $mem && $later_stores->($in);
             my $top = $d->{depth} < $sim->stack_depth ? $sim->node_at( $d->{depth} ) : undef;
             my $kind = { or => 'Or', dor => 'DefinedOr', and => 'And' }->{$n};
             my $old = $d->{node};
@@ -26283,7 +26292,7 @@ class SoN::FromOptree 0.01 {
             return undef;
         }
         if ( $n eq q{cond_expr} && ( $p->flags & B::OPf_KIDS ) ) {
-            my @arms = grep { $ALIAS_OPERAND{$$_} || $_->name =~ /\A(?:scalar|scope|or|dor|and|cond_expr|entersub)\z/ }
+            my @arms = grep { $hands_sv->($_) }
                 map { _strip_null($_) } ( _operand_kids($p) )[ 1, 2 ];
             die "GAP: an SV operand handed on by ?: is read when its consumer runs, after a later operand may store it"
               . " -- not yet lowered\n"
@@ -26291,7 +26300,7 @@ class SoN::FromOptree 0.01 {
             return undef;
         }
         if ( $n =~ /\A(?:sort|reverse|grepwhile)\z/ ) {
-            my @items = grep { my $s = _strip_null($_); $ALIAS_OPERAND{$$s} || $s->name =~ /\A(?:scalar|scope|leave|or|dor|and|entersub)\z/ }
+            my @items = grep { $hands_sv->( _strip_null($_) ) }
                 $n =~ /while\z/ ? map { _operand_kids($_) } grep { $_->name =~ /start\z/ } _operand_kids($p) : _operand_kids($p);
             die "GAP: a list perl aliases item by item (sort, grep, reverse) holds a scalar a later operand may store,"
               . " read when the list is used -- not yet lowered\n"
