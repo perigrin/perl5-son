@@ -35,7 +35,7 @@ sub promote ($data) {
     }
     return $data if $ENV{SON_NO_PROMOTE};
     require SoN::PromotedPrivate;
-    my ( $v14, $v14_args_read_only ) = SoN::PromotedPrivate::private_checker($data);
+    my ( $v14, $v14_args_read_only, $v14_add ) = SoN::PromotedPrivate::private_checker($data);
     # (each read of a variable already on the wire, by what it reads and where)
     my $sig = sub ( $op, $f, $in, $mem ) {
         my %f = %$f; delete @f{qw(place vivify promoted)};
@@ -87,6 +87,7 @@ sub promote ($data) {
                           mem_in => $at, mem_operand => JSON::PP::true(),
                           ( defined $a->{stamp} ? ( stamp => $a->{stamp} ) : () ) };
                 push $new{$g}->@*, [ $c->{id}, $r ];
+                $v14_add->( $g, $r );    # (V14 is asked of the wire as it is now)
                 $reads{$g}{$key} = $r;
                 $c->{inputs}[$i] = $r->{id};
                 $dead{$g}{ $a->{id} } = 1;

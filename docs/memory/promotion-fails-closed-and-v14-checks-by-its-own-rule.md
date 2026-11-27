@@ -63,6 +63,18 @@ a caller's own `$_[N]` handed on (`P`) conflicted only with `P`.
   promotion's (P handed on, `\$a[0]` of a package and a `my` array, a
   callee's copy of a reference); one, `for my $x (@a) { f($x) }` with f
   storing `$a[0]`, is WRONG with promotion off too (construction, not X5).
+- **"The pass asks the verifier's rule" holds only if both see one wire.**
+  combo2's ratchet (SON_RATCHET=1, chalk's lib -- not run on x5-promote)
+  found 18 graphs V14 rejected, all `$self->m($self->n(...))`: the outer
+  `$self` read where perl pushed it, before n(). The pass had already
+  rewritten n()'s argument to a node the checker's map did not hold (read
+  as nothing: harmless); V14 then saw it and took any input naming `$self`
+  for a store (a false positive: it is a promoted value, a copy). Fixed on
+  combo2-v14: the pass hands each node it makes to the checker (`$add`), and
+  a call stores a caller's `my` only through a place it is handed to a
+  callee that may store @_ (t15 clean, M37). All 18 were sound.
+- **Run the ratchet with chalk's lib (SON_RATCHET=1) before calling a
+  verifier change done.** Corpus and probes held 0; chalk's lib held 18.
 
 Related: [[places-everywhere]], [[the-fourth-final-audit-s-wrong-answers]],
 [[a-verifier-that-reads-a-derived-flag-checks-itself]].
