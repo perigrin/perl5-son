@@ -2853,7 +2853,8 @@ class SoN::FromOptree 0.01 {
 
     # _renewed_per_pass($cv, $op, $with_iter, @captures): as above; a foreach
     # variable counts only with $with_iter (a reference to one is to the
-    # element it aliases, not to a fresh variable).
+    # element it aliases, not to a fresh variable) -- or over a range, which
+    # aliases no element: perl makes its iterator anew each pass (audit 4, X1).
     sub _renewed_per_pass ($cv, $op, $with_iter, @captures) {
         return () unless @captures;
         my $reach = sub ($from) {
@@ -2873,7 +2874,10 @@ class SoN::FromOptree 0.01 {
         my @q = ($root);
         while (my $o = shift @q) {
             next unless ref($o) && $$o;
-            if ($o->name eq 'enteriter') { push $renews{ $o->targ }->@*, $o->next if $with_iter }
+            if ($o->name eq 'enteriter') {
+                push $renews{ $o->targ }->@*, $o->next
+                    if $with_iter || ( ( $o->flags & B::OPf_STACKED() ) && _foreach_list_items($o) == 2 );
+            }
             elsif ($o->name eq 'padrange' && ($o->private & 0x80)) {
                 push $renews{$_}->@*, $o for $o->targ .. $o->targ + ($o->private & 0x7f) - 1;
             }
@@ -17093,6 +17097,13 @@ class SoN::FromOptree 0.01 {
         delete local $CELLS->{cells}{$i_targ} if $own && $CELLS;
         delete local $CELLS->{cell_params}{$i_targ} if $own && $CELLS;
         if (!$own && $i_targ =~ /\A\d+\z/ && $ADDR_TAKEN && $ADDR_TAKEN->{$i_targ}) {
+            # (A CALL CAN HAND BACK `\$_[0]`, a reference to this pass's scalar,
+            # made where no Ref says it is fresh each pass: the one slot held
+            # every pass's -- `3,3,3` for perl's `1,2,3`, audit 4, X1)
+            die "GAP: a call's value that may alias a foreach iterator is not"
+              . " yet lowered -- over a range the iterator is a fresh scalar"
+              . " each pass, and the callee can return or keep a reference to it\n"
+                if _iterator_call_values($cv, $enteriter->parent, $i_targ);
             my $slot = $factory->make('PadAccess', targ => $i_targ,
                 do { my ($sg, $sy) = _padparts($cv, $i_targ);
                      (sigil => $sg, symbol => $sy) },

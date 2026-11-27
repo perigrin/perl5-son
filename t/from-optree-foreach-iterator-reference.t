@@ -76,6 +76,15 @@ round_trips(<<'SRC', 'references to a range iterator');
 my @r; for my $i (1..3) { push @r, \$i } print join(",", map { $$_ } @r), "\n";
 SRC
 
+# EACH PASS'S IS A FRESH SCALAR, as a `my` in the body is (fourth final audit,
+# X1: one slot for every pass, `3,3,3` for perl's `1,2,3`): the Ref says so.
+for my $src ('my @r; for my $i (1..3) { push @r, \$i } print join(",", map { $$_ } @r), "\n";',
+             'my $n = 3; my $r; for my $i (1..$n) { $r //= \$i } print $$r, "\n";') {
+    my ($data) = produce($src);
+    my @refs = grep { $_->{op} eq 'Ref' } $data->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+    ok @refs && !grep( { !$_->{fields}{fresh_each_pass} } @refs ), "a range iterator's reference is fresh each pass: $src";
+}
+
 # Passing the iterator itself, not a reference, keeps its write-back.
 round_trips(<<'SRC', 'an iterator passed to a sub that writes it');
 sub bump { $_[0]++ } my @a = (1,2); for my $x (@a) { bump($x) } print "@a\n";
@@ -126,6 +135,13 @@ for ( [ 'carried out', 'my $r; for my $x (@a) { $r = k($x) } $$r = 5;' ],
     round_trips(
         "sub k { return \\\$_[0] } sub f { my \@a = (1,2); $_->[1] return \"\@a\" } print f(), \"\\n\";\n",
         "a call's value $_->[0]");
+}
+# (over a range the iterator is a fresh scalar each pass, and the one slot
+# the lowering stores held them all: `3,3,3` for perl's `1,2,3`)
+for ( 'sub k { \$_[0] } my @r; for my $i (1..3) { push @r, k($i) } print join(",", map { $$_ } @r), "\n";',
+      'sub k { \$_[0] } my $r; my $n = 2; for my $i (1..$n) { $r //= k($i) } print $$r, "\n";' ) {
+    my (undef, $err) = produce($_);
+    like $err, $CALL, "a call's value over a range iterator: refused by name";
 }
 
 # A REFERENCE USED ONLY WITHIN THE PASS writes the copy, and the write-back
