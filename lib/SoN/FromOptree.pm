@@ -7063,6 +7063,27 @@ class SoN::FromOptree 0.01 {
         return 0 if $name eq q{split} && _flag_on( $op, q{OPpSPLIT_LEX} );
         return _flag_on( $op, 'OPpLVAL_INTRO' );
     }
+    # _boolean_index($op, $sim, $factory, $top): perl folds `index(...) >= 0`
+    # (`> -1`, `!= -1`) into the index op as OPpTRUEBOOL, and `== -1` as
+    # OPpTRUEBOOL with OPpINDEX_BOOLNEG; the comparison op is gone, so the
+    # flags are the test. The handler pushed the position; this makes it the
+    # comparison perl removed. A flagged op whose handler left anything but
+    # its own Call on top ($top: the top before it ran) is refused by name.
+    sub _boolean_index ($op, $sim, $factory, $top) {
+        return unless $op->name eq 'index' || $op->name eq 'rindex';
+        my $bool = _flag_on( $op, 'OPpTRUEBOOL' );
+        my $neg  = _flag_on( $op, 'OPpINDEX_BOOLNEG' );
+        return unless $bool || $neg;
+        die "GAP: " . $op->name . " carries OPpINDEX_BOOLNEG without OPpTRUEBOOL, which is not yet lowered\n" unless $bool;
+        die "GAP: a boolean " . $op->name . " (OPpTRUEBOOL) whose handler pushed no one value is not yet lowered\n"
+            unless do { my $t = $sim->peek_node; $t && ( !$top || $t != $top ) && $t->isa(q{SoN::IR::Node::Call}) && $t->name eq $op->name };
+        my $pos  = $sim->pop_node;
+        my $none = $factory->make( 'Constant', value => -1, const_type => 'integer',
+            stamp => SoN::IR::Stamp->new( type => 'Int' ) );
+        $sim->push_node( $factory->make( $neg ? 'NumEq' : 'NumNe', inputs => [ $pos, $none ],
+            stamp => SoN::IR::Stamp->new( type => 'Boolean' ) ) );
+        return;
+    }
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
         _local_shape_gap($op) if $op->private & B::OPpLVAL_INTRO();
         # A FUSED ELEMENT OF A PACKAGE ARRAY is the peephole's, in code perl
@@ -7096,8 +7117,10 @@ class SoN::FromOptree 0.01 {
         my $targmy = _stores_its_targ($op) && $op->targ
             ? [ $sim->defined_count( $op->targ ), Scalar::Util::refaddr( $sim->memory ) // 0 ] : undef;
         my $target = _alias_result_target($op, $sim);
+        my $top    = $sim->peek_node;
         my @r = _step_op($cv, $op, $sim, $factory, $opmap, $ctx);
         return @r unless ( $r[1] // '' ) eq 'handled';
+        _boolean_index( $op, $sim, $factory, $top );
         die "GAP: `local` on " . $op->name . " (a symbolic name, a dereference, a glob expression) is not yet lowered -- no"
           . " handler saves and restores it\n"
             if $local && scalar( ( $ctx->{local_saves} // [] )->@* ) < $local;
