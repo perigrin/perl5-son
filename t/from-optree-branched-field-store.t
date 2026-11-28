@@ -20,7 +20,10 @@ use SoN::Render::Text;
 # reached the backend with no repr before the fix.
 class Counter {
     field $n :param = 0;
-    method bump { if ($n < 100) { $n = $n + 5 } else { $n = $n + 1 } }
+    # (it returns nothing: a sub ending in an if/else is the arm's value, which
+    # the walk keeps none of -- refused by name where its code is taken, as
+    # here, since branch fail-closed)
+    method bump { if ($n < 100) { $n = $n + 5 } else { $n = $n + 1 } return }
     method val  { $n }
     # The ternary VALUE is consumed (`my $x = ...; $x`), so the arm residuals are
     # observed -- the consumed value-context field-store shape that must GAP.

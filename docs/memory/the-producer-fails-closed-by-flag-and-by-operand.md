@@ -50,3 +50,22 @@ the default was the silent answer.
 - The deparser renders a pre-store read of a `my` after a later store
   (`f(--$x, $x--)`) though the wire is right: check with chalk too.
 - A test helper that greps `^GAP` misses `B::SoN: skipped ...: GAP:`.
+- A refusal can show an old silent wrong answer the deparser hid: `$1`
+  after s///ge, after a lone capture replacement, and a sub ending in `?:`
+  of element stores all printed perl's answer through the deparser (which
+  re-runs perl) and a wrong one through chalk. Run the old lib through
+  chalk before calling a new GAP a regression (`PERL5_SON_LIB=<base>/lib`).
+- `valueless` on a Return means "the empty list" to chalk; the producer set
+  it wherever nothing was left on the stack. Set it only where the sub ends
+  in `()`, an empty body or a loop; refuse a choice whose value was kept by
+  no arm.
+- The ratchet's `#graphs` falls when a followed module's sub is newly
+  refused (POSIX::SigRt::CLEAR, a range delete slice): find the sub by
+  diffing the cached wires' method lists, check the old answer, and lower
+  the baseline with the reason.
+
+Gates at af72394a (chalk a2fe984d): gated probes promotion on WRONG 0 (SAME
+4063, REFUSED 1335, LOUD 37), off WRONG 0 (SAME 4063, REFUSED 1336, LOUD
+36); one SAME -> REFUSED (xxb20). v/: producer classes all SAME or REFUSED;
+15 SAME -> REFUSED (vc47 vf213 vn48 vo15 vo75 vq130 vq139 vr03 vr09 vr24
+vr26 vr27 vr28 vs99 vs100). Ratchet with chalk's lib: PASS.

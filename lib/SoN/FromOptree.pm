@@ -5062,6 +5062,49 @@ class SoN::FromOptree 0.01 {
             _operand_kids_of_list($body);
         return @st && $st[-1]->name eq 'stub' ? 1 : 0;
     }
+    # _sub_value_used($cv) -> false only where every call the program makes
+    # of $cv, by its name, is in void context: a value no caller reads may be
+    # wrong. An anonymous sub, or one whose code is taken, is called by no
+    # name the scan sees: used.
+    my %VALUE_USED;
+    sub _sub_value_used ($cv) {
+        return 1 unless $cv && $$cv && $cv->isa('B::CV');
+        return 1 if $cv->CvFLAGS & B::CVf_ANON;
+        my $name = eval { $cv->GV->NAME } // return 1;
+        # (perl calls these itself: tie, AUTOLOAD, overloading by name)
+        return 1 if $name =~ /\A[A-Z_]+\z/;
+        my $pkg = eval { $cv->GV->STASH->NAME } // 'main';
+        return 1 if eval { require overload; overload::Overloaded($pkg) };
+        return $VALUE_USED{$$cv} //= do {
+            my $used = 0;
+            # (each root with its own CV: a gv op names its glob by that CV's pad)
+            my @roots = ( [ B::main_cv(), B::main_root() ], map { my $c = $_; [ $c, eval { $c->ROOT } ] } map { @$_ } values SoN::FromOptree::ModSets::_user_subs()->%* );
+            ROOT: for my $rc ( grep { $_->[1] && ${ $_->[1] } } @roots ) {
+                my ( $owner, $r ) = @$rc;
+                for my $o ( _subtree_ops($r) ) {
+                    my $n = $o->name;
+                    # (its code taken, `\&f`, `goto &f`: called where the scan cannot see)
+                    if ( $n eq 'gv' ) {
+                        my $gv = eval { _op_gv( $owner, $o ) };
+                        my $p = eval { $o->parent };
+                        $used = 1, last ROOT if $gv && $gv->NAME eq $name && $p && $$p && $p->name eq 'rv2cv'
+                            && ( $p->parent->name ne 'entersub' && !( $p->parent->name eq 'null' && $p->parent->parent->name eq 'entersub' ) );
+                    }
+                    # (a sort comparator by name)
+                    $used = 1, last ROOT if $n eq 'sort' && grep { $_->name eq 'const' && ( eval { $_->sv->PV } // '' ) eq $name } _subtree_ops($o);
+                    next unless $n eq 'entersub';
+                    next if ( $o->flags & 3 ) == 1;
+                    my @k = _subtree_ops($o);
+                    my ($m) = grep { $_->name eq 'method_named' } @k;
+                    my $callee = $m ? ( eval { $m->meth_sv->PV } // eval { ${ $m->meth_sv->object_2svref } } // '' )
+                        : do { my ($g) = grep { $_->name eq 'gv' } reverse @k; $g ? eval { _op_gv( $owner, $g )->NAME } // '' : '' };
+                    # (a call by a name made at run time may be of any sub)
+                    $used = 1, last ROOT if !$m && !length $callee || $callee eq $name || grep { $_->name eq 'method' } @k;
+                }
+            }
+            $used;
+        };
+    }
     # _sub_ends_in_a_choice($leavesub) -> true when the body's last statement
     # is a ?:, an if/else or a && || // (its value is an arm's)
     sub _sub_ends_in_a_choice ($exit) {
@@ -5210,7 +5253,7 @@ class SoN::FromOptree 0.01 {
         # (chalk printed ` 8` for perl's `78 8`, silently, at a2fe984d).
         # Refused by name.
         die "GAP: a sub whose last statement chooses a value (?:, if/else, && ||) the walk did not keep is not yet lowered\n"
-            if $valueless && $kind eq 'leavesub' && $exit_op && _sub_ends_in_a_choice($exit_op);
+            if $valueless && $kind eq 'leavesub' && $exit_op && _sub_ends_in_a_choice($exit_op) && _sub_value_used($OPS_CV);
         $value //= $factory->make('Constant',
             value      => undef,
             const_type => 'undef',
