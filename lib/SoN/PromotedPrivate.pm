@@ -256,16 +256,96 @@ sub private_checker ($wire) {
     # alias; a store by the sub may reach one before the `my` is read. True
     # only where the sub stores nothing but its own `my` scalars, and calls
     # no sub and no builtin that is a version.
+    # (a named scalar as an argument: a store of the sub reaches it only
+    # through a reference or a closure, or, a package one, by its name --
+    # V14's own reading of the whole wire)
+    my %reachable;
+    my $named_reachable = sub ($a) {
+        my $f = _fields($a);
+        return 1 if ( $f->{sigil} // '' ) ne '$' || $f->{shared};
+        my $sym = $f->{symbol} // return 1;
+        my $pkg = $a->{op} eq 'EntryDef' ? ( $f->{package} // 'main' ) : undef;
+        return $reachable{ ( $pkg // 'my' ) . "\0$sym" } //= do {
+            my $hit = 0;
+            for my $g ( keys %by ) {
+                for my $n ( values $by{$g}->%* ) {
+                    if ( $n->{op} eq 'MakeCell' ) { $hit = 1 if ( _fields($n)->{cell_name} // '' ) =~ /\Q$sym\E\z/; next }
+                    next unless $n->{op} eq 'Ref' || defined $pkg && $n->{op} =~ /\A(?:EntryWrite|Assign)\z/;
+                    my $t = $by{$g}{ $n->{inputs}[0] // '' } or next;
+                    $hit = 1 if ( _fields($t)->{symbol} // '' ) eq $sym && ( $n->{op} eq 'Ref' || $t->{op} eq 'EntryDef' );
+                }
+                last if $hit;
+            }
+            $hit;
+        };
+    };
+    # (a sub's body stores: anything but its own `my` scalars, a call to a
+    # sub whose body stores, or to code the wire cannot see; a cycle is
+    # taken as storing nothing more than its members do)
+    my %quiet_body;
+    my $quiet_body;
+    # (only an answer asked first is kept: one made inside a cycle assumed
+    # its members quiet -- M36)
+    $quiet_body = sub ( $h, $seen = undef ) {
+        my $top = !$seen;
+        $seen //= {};
+        return $quiet_body{$h} if $top && defined $quiet_body{$h};
+        return 1 if $seen->{$h}++;
+        my $q = 1;
+        for my $n ( values $by{$h}->%* ) {
+            my $t = $n->{op} eq 'Assign' ? $by{$h}{ $n->{inputs}[0] // '' } : undef;
+            next if $n->{op} eq 'Assign' && _fields($n)->{record};
+            if ( $sub_call->($n) ) {
+                my $t = $callees->($n);
+                $q = 0, last unless $t && @$t && !grep { !$m->{$_} || !$quiet_body->( $_, $seen ) } @$t;
+                next;
+            }
+            $q = 0, last
+                if $n->{op} eq 'Assign' && !( $t && $t->{op} eq 'PadAccess' && ( _fields($t)->{sigil} // '' ) eq '$'
+                                              && !_fields($t)->{place} && !_fields($t)->{shared} )
+                || $n->{op} =~ $STORE_OP || $n->{op} eq 'Call' && $n->{mem_out};
+        }
+        return $top ? ( $quiet_body{$h} = $q ) : $q;
+    };
+    # (an element of a `my` aggregate of the caller's: reached by another
+    # sub only through a reference to the aggregate or to an element, or a
+    # closure -- an element of anything else may be)
+    my $elem_reachable = sub ( $g, $a ) {
+        my $c = $by{$g}{ $a->{inputs}[0] // '' } or return 1;
+        my $f = _fields($c);
+        return 1 unless $c->{op} =~ /\A(?:PadAccess|ArrayLiteral|HashLiteral)\z/ && defined $f->{symbol} && $f->{symbol} !~ /::/ && !$f->{shared};
+        my $sym = $f->{symbol} =~ s/\A[\@%]//r;
+        for my $h ( keys %by ) {
+            for my $n ( values $by{$h}->%* ) {
+                return 1 if $n->{op} eq 'MakeCell' && ( _fields($n)->{cell_name} // '' ) =~ /\Q$sym\E\z/;
+                next unless $n->{op} eq 'Ref' || _fields($n)->{place};
+                my $t = $n->{op} eq 'Ref' ? $by{$h}{ $n->{inputs}[0] // '' } : $n;
+                $t = $by{$h}{ $t->{inputs}[0] // '' } if $t && $t->{op} =~ /\A(?:Subscript|Slice)\z/ && $n->{op} eq 'Ref';
+                next unless $t;
+                $t = $by{$h}{ $t->{inputs}[0] // '' } if $t->{op} eq 'Subscript';
+                return 1 if $t && ( ( _fields($t)->{symbol} // '' ) =~ s/\A[\@%]//r ) eq $sym && $t->{op} =~ /\A(?:PadAccess|ArrayLiteral|HashLiteral)\z/;
+            }
+        }
+        return 0;
+    };
     my %stores_nothing;
     my $stores_nothing = sub ($h) {
-        return $stores_nothing{$h} //= ( grep {
-            my $n = $_;
-            my $t = $n->{op} eq 'Assign' ? $by{$h}{ $n->{inputs}[0] // '' } : undef;
-            !( $n->{op} eq 'Assign' && _fields($n)->{record} )
-                && ( $n->{op} eq 'Assign' && !( $t && $t->{op} eq 'PadAccess' && ( _fields($t)->{sigil} // '' ) eq '$'
-                                                 && !_fields($t)->{place} && !_fields($t)->{shared} )
-                     || $n->{op} =~ $STORE_OP || $sub_call->($n) || $n->{op} eq 'Call' && $n->{mem_out} )
-        } values $by{$h}->%* ) ? 0 : 1;
+        return $stores_nothing{$h} //= $quiet_body->($h)
+            # (OR NO CALL HANDS IT AN ALIAS: every argument a value made at
+            # the call -- a literal, a reference, arithmetic -- or a named
+            # scalar nothing refers to, not an element, a dereference or a
+            # choice among them)
+            || ( !grep {
+                my $g = $_;
+                grep {
+                    my $c = $_;
+                    ( grep { $_ eq $h } ( $callees->($c) // [] )->@* )
+                        && grep { my $a = $by{$g}{$_}; !$a || $a->{op} =~ /\A(?:PostfixDeref|TernaryExpr|Phi|CellRead|FieldAccess|Slice|ArgsSource)\z/
+                               || $a->{op} =~ /\A(?:PadAccess|EntryDef)\z/ && $named_reachable->($a)
+                               || $a->{op} eq 'Subscript' && $elem_reachable->( $g, $a ) }
+                           grep { defined && !ref } ( $c->{inputs} // [] )->@*
+                } grep { $sub_call->($_) } values $by{$g}->%*
+            } keys %by ) ? 1 : 0;
     };
     return ( $private, $args_read_only, $add, $stores_nothing );
 }

@@ -24,7 +24,7 @@ ok $w->{methods}{'Data::Dumper::Dumper'} && $w->{methods}{'Data::Dumper::_quote'
 ok( ( grep { $_->{name} eq 'Data::Dumper' } @{ $w->{modules} // [] } ), 'and Data::Dumper is followed' );
 
 # POSIX loads its XS bare: no fallback, so it loads and a call to it says xs.
-( $w, $err ) = compile_src(qq{use POSIX ();\nprint POSIX::floor(\$ENV{X} // 1.5), "\\n";\n});
+( $w, $err ) = compile_src(qq{use POSIX ();\nmy \$x = \$ENV{X} // 1.5;\nprint POSIX::floor(\$x), "\\n";\n});   # (`f(\$h{k} // 1)` hands the element on: refused where an unknown call may store it)
 my ($floor) = grep { $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'POSIX::floor' }
     @{ $w->{methods}{'main::__PROGRAM__'}{nodes} // [] };
 ok $floor && $floor->{fields}{xs}, 'a module with no fallback still loads; its XS call says so'

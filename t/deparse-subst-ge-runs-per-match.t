@@ -181,8 +181,11 @@ round_trips(q{my $s = "a1b2"; $s =~ s/(\d)/$1*2/gen; print "[$s]\n";},
     'a body under /n');
 
 # A PRECEDING MATCH leaves pos and captures that the /ge does not read.
-round_trips(q{my $s = "a1b2"; $s =~ /(\d)/; $s =~ s/(\d)/$1*2/ge; print "$1 $s\n";},
-    'after a match that set $1');
+# (`$1` AFTER it is the substitution's last match, `2`: the wire read the
+# earlier match's, and chalk printed `1 a2b4` -- refused by name since
+# branch fail-closed, fifth final audit Q5)
+refuses(q{my $s = "a1b2"; $s =~ /(\d)/; $s =~ s/(\d)/$1*2/ge; print "$1 $s\n";},
+    qr{GAP: a capture variable read after a s///}, 'after a match that set $1');
 round_trips(q{my $s = "a1b2"; $s =~ /\d/g; $s =~ s/(\d)/$1*2/ge; print pos($s) // "u", " $s\n";},
     'after a /g match that set pos');
 round_trips(q{my $s = "a1b2"; my @r = ($s =~ s/(\d)/$1*2/ge); print "@r $s\n";},

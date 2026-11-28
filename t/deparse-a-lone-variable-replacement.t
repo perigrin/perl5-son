@@ -57,8 +57,13 @@ round_trips(q{sub f { my ($y) = @_; my $u = "abab"; $u =~ s/a/$y/g; return $u } 
 # EmitHelpers::_emit_return_stmt, `s/^sv_2mortal\((.+)\)$/$1/`).
 round_trips(q{sub f { my $v = "sv_2mortal(x)"; $v =~ s/^sv_2mortal\((.+)\)$/$1/; return $v } print f(), "\n";},
     'a lone capture replacement');
-round_trips(q{sub f { my $t = "QQ"; $t =~ /(Q)/; my $u = "ayb"; $u =~ s/(y)/$1/; return "$u $1" } print f(), "\n";},
-    'a lone capture replacement after an earlier match');
+# (`$1` after the s/// is its match's, `y`: the wire read the earlier
+# match's, chalk printed `ayb Q` -- refused by name since branch fail-closed)
+{
+    my $src = q{sub f { my $t = "QQ"; $t =~ /(Q)/; my $u = "ayb"; $u =~ s/(y)/$1/; return "$u $1" } print f(), "\n";};
+    graph_of($src);
+    like producer_stderr(), qr{GAP: a capture variable read after a s///}, 'a lone capture replacement after an earlier match, `$1` read after it: refused by name';
+}
 round_trips(q{sub f { my $u = "ab"; my $n = ($u =~ s/(c)/$1/); return "$u|$n" } print f(), "\n";},
     'a lone capture replacement that does not match');
 

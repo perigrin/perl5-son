@@ -117,7 +117,21 @@ sub promote ($data) {
         # one before the `my` it was copied into is read -- fifth final
         # audit, vt59: `my ($v, $s) = @_; $s->{l}[0] = 0; $v`. Fails closed: any
         # store but into its own `my`s.)
-        $blocked ||= keys $p->writes($h)->%*;
+        # (ONLY WHERE A CALL HANDS IT AN ALIAS a store of the sub may reach:
+        # an argument the proof names as storage that conflicts with what the
+        # sub writes, or a choice among reads. A literal or a new reference
+        # no store of the sub reaches.)
+        $blocked ||= keys $p->writes($h)->%* && grep {
+            my $g = $_;
+            grep {
+                my $c = $_;
+                ( grep { $_ eq $h } ( $p->callees( $g, $c ) // [] )->@* )
+                    && grep { my $id = $_; my $a = $p->node( $g, $id ) // ( map { $_->[1] } grep { $_->[1]{id} == $id } ( $new{$g} // [] )->@* )[0];
+                             my $src = $a ? $p->src( $g, $a ) : undef;
+                             !$a || $a->{op} =~ /\A(?:TernaryExpr|Phi)\z/ || defined $src && grep { $p->conflict( $src, $_ ) } keys $p->writes($h)->%* }
+                       grep { defined && !ref } ( $c->{inputs} // [] )->@*
+            } grep { SoN::AliasProof::is_sub_call($_) } $p->nodes($g)
+        } $p->graphs;
         my ($start) = grep { $_->{op} eq 'MemStart' } $p->nodes($h);
         for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} } $p->nodes($h) ) {
             $STATS{'record-place'}++, next if $blocked;

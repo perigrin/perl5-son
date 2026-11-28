@@ -32,9 +32,8 @@ if (\$@) { print "ERROR: \$@"; exit 0; }
 my \@nodes = \$g->nodes->\@*;
 my \$ops = "";
 my \$i = 0;
-while (\$i < scalar(\@nodes)) {
-    \$ops = \$ops . \$nodes[\$i]->operation . ",";
-    \$i = \$i + 1;
+for my \$n (\@nodes) {   # (not `\$nodes[\$i]->m`: with the peephole on, a multideref with OPpLVAL_DEFER, refused by name)
+    \$ops = \$ops . \$n->operation . ",";
 }
 print "OPS: \$ops\\n";
 print "HAS_START: ", (\$g->start ? "yes" : "no"), "\\n";

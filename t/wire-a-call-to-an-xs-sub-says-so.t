@@ -22,7 +22,8 @@ my $c = calls(qq{use List::Util qw(sum);\nmy \$i = \$ENV{X} // 2;\nprint sum(\$i
 ok($c->{'main::sum'}, 'the XS call is there');
 ok($c->{'main::sum'}{xs}, 'and says it is XS');
 
-$c = calls(qq{use Text::Wrap qw(wrap);\nprint wrap('', '', \$ENV{X} // 'a b'), "\\n";\n});
+# (`f($h{k} // 1)` hands the element on: refused where the callee may store it)
+$c = calls(qq{use Text::Wrap qw(wrap);\nmy \$t = \$ENV{X} // 'a b';\nprint wrap('', '', \$t), "\\n";\n});
 # A PURE-PERL MODULE IS FOLLOWED: its sub is on the wire, so the imported
 # call names the sub's home (wire-a-used-module-s-subs-are-included.t).
 ok($c->{'Text::Wrap::wrap'}, 'the pure-Perl call is there, by its home name');

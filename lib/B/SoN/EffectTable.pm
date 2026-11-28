@@ -255,7 +255,8 @@ my %NEW_VALUE = map { $_ => 1 } qw(
     left_shift right_shift defined ref refaddr reftype blessed exists is_bool is_weak ceil floor
     srefgen refgen anonlist anonhash anoncode emptyavhv postinc postdec i_postinc i_postdec
     time localtime gmtime rand srand wantarray caller pack unpack match qr split readline
-    schomp schop chomp chop trans transr range flop keys mapwhile push unshift subst gv rv2gv av2arylen
+    schomp schop chomp chop trans transr range flop keys mapwhile push unshift subst gv rv2gv av2arylen stub
+    entereval require dofile backtick readpipe
 );
 sub pushes_new_value ($op) {
     require B;
@@ -265,6 +266,13 @@ sub pushes_new_value ($op) {
     # (`keys %h = N` is one; in a list keys are new strings)
     return 0 if ( $n =~ /\A(?:substr|vec|pos|av2arylen)\z/ || $n eq q{keys} && $want != 3 ) && ( $op->flags & B::OPf_MOD() );
     return 1 if $NEW_VALUE{$n};
+    # (bless hands on its first operand: a new reference where that one is new)
+    if ( $n eq q{bless} && ( $op->flags & B::OPf_KIDS() ) ) {
+        my $k = $op->first;
+        $k = $k->sibling while $$k && ( $k->name eq q{pushmark} || $k->name eq q{null} && !( $k->flags & B::OPf_KIDS() ) );
+        $k = $k->first while $$k && $k->name eq q{null} && ( $k->flags & B::OPf_KIDS() ) && !${ $k->first->sibling };
+        return $$k ? pushes_new_value($k) : 0;
+    }
     # (a string `x` is a new string; a list `x` repeats the SVs: OPpREPEAT_DOLIST)
     return 1 if $n eq 'repeat' && !( $op->private & 64 );
     # (in scalar context: a new string, a count)

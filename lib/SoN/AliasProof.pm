@@ -217,6 +217,10 @@ sub writes ( $s, $h, $seen = {} ) {
     my %w;
     for my $n ( values $s->{by}{$h}->%* ) {
         if ( is_sub_call($n) ) {
+            # (UNIVERSAL's can, isa, DOES and VERSION store nothing, where no
+            # sub of the program has the name)
+            next if ( _f($n)->{dispatch_kind} // '' ) eq 'method' && ( _f($n)->{name} // '' ) =~ /\A(?:can|isa|DOES|VERSION)\z/
+                && !$s->callees( $h, $n );
             my $t = $s->callees( $h, $n ) or return $s->{writes}{$h} = { any => 1 };
             for my $c (@$t) { my $cw = $s->writes( $c, $seen ); return $s->{writes}{$h} = { any => 1 } if $cw->{any}; %w = ( %w, $cw->%* ) }
             next;

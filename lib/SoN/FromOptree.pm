@@ -15454,11 +15454,15 @@ class SoN::FromOptree 0.01 {
     sub _array_elements_referenced ($cv, $targ) {
         my $root = $$cv == ${ B::main_cv() } ? B::main_root() : eval { $cv->ROOT };
         return 1 unless $root && $$root;
-        my $names = sub ($o) { grep { $_->name eq 'padav' && $_->targ == $targ } _subtree_ops($o) };
+        my $mine  = sub ($o) { $o = _strip_null($o); $o->name eq 'padav' && $o->targ == $targ };
+        # (an element or a slice of it, or the array flattened: each element)
+        my $elems = sub ($o) { grep { $_->name =~ /\A(?:aelem|aslice)\z/ && ( $_->flags & B::OPf_KIDS ) && grep( { $mine->($_) } _operand_kids_of_list($_) )
+                                      || $mine->($_) && ( $_->flags & B::OPf_PARENS() ) } _subtree_ops($o) };
         for my $op ( _subtree_ops($root) ) {
             my $n = $op->name;
             next unless $n =~ /\A(?:srefgen|refgen|entersub)\z/ && ( $op->flags & B::OPf_KIDS );
-            return 1 if $names->($op);
+            # (`\@a` is the array, which an assignment refills: not an element)
+            return 1 if $elems->($op) || $n eq 'entersub' && grep { $mine->($_) } _subtree_ops($op);
         }
         return 0;
     }
@@ -26679,11 +26683,19 @@ class SoN::FromOptree 0.01 {
     # @effects may be into the SV $op pushes ($matches: a match or a call
     # comes, which sets a capture variable again)
     sub _sv_may_be_stored ( $cv, $p, $eff, $matches ) {
+        # (`$h{a} //= 1` hands on its target)
+        return _sv_may_be_stored( $cv, _strip_null( $p->first ), $eff, $matches )
+            if $p->name =~ /\A(?:or|and|dor)assign\z/ && ( $p->flags & B::OPf_KIDS );
         my $n = $p->name;
         return $matches ? 1 : 0 if _capture_var( $cv, $p );
         return 0 unless @$eff;
         # (an SV taken out of its container is reached only through a reference)
-        return scalar grep { $_->{loc} =~ /\A(?:R:scalar|U)\z/ } @$eff if $n =~ /\A(?:shift|pop|splice|delete)\z/;
+        # (an unknown call reaches it only where the sub took a reference)
+        if ( $n =~ /\A(?:shift|pop|splice|delete)\z/ ) {
+            my $root = $$cv == ${ B::main_cv() } ? B::main_root() : eval { $cv->ROOT };
+            my $refs = !$root || grep { $_->name =~ /\A(?:s?refgen)\z/ } _subtree_ops($root);
+            return scalar grep { $_->{loc} eq 'R:scalar' || $_->{loc} eq 'P' || $refs && $_->{loc} eq 'U' } @$eff;
+        }
         my $loc;
         if ( $n eq 'padsv' ) { ($loc) = SoN::FromOptree::ModSets::_lex( $cv, $p->targ ) }
         elsif ( my $g = _scalar_gv_op($p) ) { my $gv = _op_gv( $cv, $g ); $loc = $gv ? 'N:$' . $gv->STASH->NAME . '::' . $gv->NAME : undef }
@@ -26700,7 +26712,7 @@ class SoN::FromOptree 0.01 {
         my $n = $o->name;
         return ($o) unless $o->flags & B::OPf_KIDS;
         return map { _handed_on_leaves($_) } $o->first, $o->first->sibling if $n =~ /\A(?:and|or|dor)\z/;
-        return map { _handed_on_leaves($_) } ( _operand_kids($o) )[ 1, 2 ] if $n eq 'cond_expr';
+        return map { _handed_on_leaves($_) } ( _operand_kids_of_list($o) )[ 1, 2 ] if $n eq 'cond_expr';
         return _handed_on_leaves( $o->first ) if $n eq 'scalar';
         # (a `do` of statements: its last statement's value, copied at the block's
         # end -- after the items before it in that statement are read)
@@ -26742,14 +26754,21 @@ class SoN::FromOptree 0.01 {
     # refused by name (fifth final audit, Q4, Q5).
     sub _refuse_args_handed_on ( $cv, $call ) {
         my @a = _entersub_args_and_invocant($call);
-        # (a variable or an element the call passes as its place is read by the callee: not checked)
-        _refuse_list_stored_later( $cv, \@a, { map { ( ${ _strip_null($_) } => 1 ) } grep { ( _strip_null($_)->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|sassign|padsv_store)\z/ || defined _arg_place_target($_) ) && !_capture_var( $cv, _strip_null($_) ) } @a } );
+        # (a variable or an element the call passes as its place is read by the
+        # callee: not checked -- an arm of a ?: of them too, the walk's
+        # place through a ternary)
+        my $placed = sub ($o) { $o = _strip_null($o); ( $o->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|sassign|padsv_store)\z/ || defined _arg_place_target($o) ) && !_capture_var( $cv, $o ) };
+        my $var_arms = sub ($o) { $o = _strip_null($o); $o->name eq 'cond_expr'
+            && !grep { !( $placed->($_) || $_->name =~ /\A(?:const|stub|pad[ah]v|rv2[ah]v)\z/ ) } _handed_on_leaves($o) };
+        _refuse_list_stored_later( $cv, \@a, { map { ( ${ _strip_null($_) } => 1 ) } ( grep { $placed->($_) } @a ),
+            map { _handed_on_leaves($_) } grep { $var_arms->($_) } @a } );
         my $eff = [];
         for my $j ( 0 .. $#a ) {
             my $top = _strip_null( $a[$j] );
             # (a place the walk passes: a variable, an element, an assignment's target)
             next if !_capture_var( $cv, $top ) && ( $top->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|padsv_store|sassign|(?:i_)?pre(?:inc|dec)|method_named|method|rv2cv|gv)\z/
                 || defined _arg_place_target( $a[$j] ) );
+            next if $var_arms->($top);
             for my $o ( _handed_on_leaves($top) ) {
                 next if B::SoN::EffectTable::pushes_new_value($o);
                 next if $o->name eq 'entersub' && !do { my $s = eval { _entersub_callee_cv( $cv, $o ) }; $s && $$s && $s->isa('B::CV') && ( $s->CvFLAGS & B::CVf_LVALUE ) };
