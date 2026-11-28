@@ -5052,6 +5052,16 @@ class SoN::FromOptree 0.01 {
         return ($list, $mark->[1]);
     }
 
+    # _sub_ends_in_empty_list($leavesub) -> true when the body's last
+    # statement is `()`, a stub
+    sub _sub_ends_in_empty_list ($exit) {
+        return 0 unless $exit->name =~ /\Aleavesub(?:lv)?\z/ && ( $exit->flags & B::OPf_KIDS );
+        my $body = $exit->first;
+        return 0 unless $$body && $body->name eq 'lineseq' && ( $body->flags & B::OPf_KIDS );
+        my @st = grep { $_->name !~ /\A(?:nextstate|dbstate)\z/ && !( $_->name eq 'null' && !( $_->flags & B::OPf_KIDS ) ) }
+            _operand_kids_of_list($body);
+        return @st && $st[-1]->name eq 'stub' ? 1 : 0;
+    }
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
         my $value;
         # The scalar reading of a multi-value return, when there is one. It
@@ -5072,6 +5082,12 @@ class SoN::FromOptree 0.01 {
         #                                               with TWO values left
         # Drop the residue and fall through to the Undef below.
         if ($is_program) {
+            $sim->pop_node while $sim->stack_depth > 0;
+        }
+        # A SUB ENDING IN `()` returns the empty list: the `stub` pushes
+        # nothing, and what is on the stack is an earlier statement's residue
+        # (`sub g { $x++; () }` returned the increment -- chalk probe xxt05).
+        elsif ( $kind eq 'leavesub' && $exit_op && _sub_ends_in_empty_list($exit_op) ) {
             $sim->pop_node while $sim->stack_depth > 0;
         }
         elsif ($kind eq 'return') {

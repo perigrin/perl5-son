@@ -7366,6 +7366,9 @@ class SoN::Deparse 0.01 {
             # the source returned. A sub's implicit undef is the source's
             # unless the producer says it supplied it (`valueless`): `sub {
             # $c++; undef }` returns undef, not $c.
+            # (A SUB THAT RETURNS NOTHING -- `sub { $x++; () }` -- says so:
+            # fallen off its end it returned its last statement's value)
+            return "return;\n" if ( $n->{fields} // {} )->{implicit} && ( $n->{fields} // {} )->{valueless} && defined $current_sub;
             return '' if $v && $v->{op} eq 'Constant'
                       && (($v->{fields} // {})->{const_type} // '') eq 'undef'
                       && !(($n->{fields} // {})->{implicit}
