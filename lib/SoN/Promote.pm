@@ -35,7 +35,7 @@ sub promote ($data) {
     }
     return $data if $ENV{SON_NO_PROMOTE};
     require SoN::PromotedPrivate;
-    my ( $v14, $v14_args_read_only, $v14_add ) = SoN::PromotedPrivate::private_checker($data);
+    my ( $v14, $v14_args_read_only, $v14_add, $v14_stores_nothing ) = SoN::PromotedPrivate::private_checker($data);
     # (each read of a variable already on the wire, by what it reads and where)
     my $sig = sub ( $op, $f, $in, $mem ) {
         my %f = %$f; delete @f{qw(place vivify promoted)};
@@ -112,7 +112,12 @@ sub promote ($data) {
     }
     my %repl;    # graph -> { read id => target id }
     for my $h ( grep { $p->{g}{$_} && exists $CALLED_UNKNOWN{$_} } $p->graphs ) {
-        my $blocked = $CALLED_UNKNOWN{$h} || $placed{$h} || $p->args_escape($h) || !$v14_args_read_only->($h);
+        my $blocked = $CALLED_UNKNOWN{$h} || $placed{$h} || $p->args_escape($h) || !$v14_args_read_only->($h) || !$v14_stores_nothing->($h);
+        # (A SUB THAT STORES: an argument is an alias, and its store may reach
+        # one before the `my` it was copied into is read -- fifth final
+        # audit, vt59: `my ($v, $s) = @_; $s->{l}[0] = 0; $v`. Fails closed: any
+        # store but into its own `my`s.)
+        $blocked ||= keys $p->writes($h)->%*;
         my ($start) = grep { $_->{op} eq 'MemStart' } $p->nodes($h);
         for my $as ( grep { $_->{op} eq 'Assign' && ( $_->{fields} // {} )->{record} } $p->nodes($h) ) {
             $STATS{'record-place'}++, next if $blocked;

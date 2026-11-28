@@ -40,11 +40,12 @@ my %QUIET_OP = map { ( $_ => 1 ) } qw(Subscript PostfixDeref PadAccess EntryDef 
 my %QUIET_BUILTIN = map { ( $_ => 1 ) } qw(print say prtf warn);
 my $STORE_OP = qr/\A(?:EntryWrite|CellWrite|Delete|ElemRestore|LocalAlias|Unwind)\z/;
 
-# private_checker($wire) -> ( $private, $args_read_only, $add ):
+# private_checker($wire) -> ( $private, $args_read_only, $add, $stores_nothing ):
 #   $private->($g, $call, $i): undef where the call's input $i, a value, is
 #     private by V14's rule, else why not;
 #   $args_read_only->($sub): the sub's @_ is only read;
 #   $add->($g, $node): a node made after the checker was (SoN::Promote's).
+#   $stores_nothing->($sub): the sub stores nothing but its own `my` scalars.
 sub private_checker ($wire) {
     my $m = all_graphs($wire);
     my %by = map { my $g = $_; ( $g => { map { ( $_->{id} => $_ ) } ( $m->{$g}{nodes} // [] )->@* } ) } keys $m->%*;
@@ -73,7 +74,15 @@ sub private_checker ($wire) {
             my $c = $name_of->( $g, $by{$g}{ $n->{inputs}[0] // '' } ) // return undef;
             return undef unless $c =~ /\A(?:my)?[\@%]/;
             my $ix = $by{$g}{ $n->{inputs}[1] // '' };
-            return "$c#" . ( $ix && $ix->{op} eq 'Constant' && defined _fields($ix)->{value} ? _fields($ix)->{value} : '*' );
+            # (V14's own rule, Q10: an array index names an element only as
+            # an Int literal >= 0, written as perl writes it -- `-2`, `0.5`,
+            # `"0"` and `!1` may be element 0 -- a hash key only as a Str)
+            my $v = $ix && $ix->{op} eq 'Constant' ? _fields($ix)->{value} : undef;
+            my $st = $ix ? $ix->{stamp} // '' : '';
+            my $named = !defined $v ? 0
+                : $c =~ /\A(?:my)?%/ ? $st eq 'Str'
+                : $st eq 'Int' && $v =~ /\A(?:0|[1-9][0-9]*)\z/;
+            return "$c#" . ( $named ? $v : '*' );
         }
         return undef unless defined $sym && $sig =~ /\A[\$\@%]\z/;
         return $sig . ( $f->{package} // 'main' ) . "::$sym" if $op eq 'EntryDef';
@@ -242,7 +251,23 @@ sub private_checker ($wire) {
     # a call's input it rewrote must name a node the checker knows -- one it
     # did not know read as nothing, and the pass and V14 answered differently)
     my $add = sub ( $g, $n ) { $by{$g}{ $n->{id} } = $n };
-    return ( $private, $args_read_only, $add );
+    # $stores_nothing->($sub): V14'S RULE FOR A PARAMETER RECORD (fifth final
+    # audit, vt59). The record binds each `my` to the argument as passed, an
+    # alias; a store by the sub may reach one before the `my` is read. True
+    # only where the sub stores nothing but its own `my` scalars, and calls
+    # no sub and no builtin that is a version.
+    my %stores_nothing;
+    my $stores_nothing = sub ($h) {
+        return $stores_nothing{$h} //= ( grep {
+            my $n = $_;
+            my $t = $n->{op} eq 'Assign' ? $by{$h}{ $n->{inputs}[0] // '' } : undef;
+            !( $n->{op} eq 'Assign' && _fields($n)->{record} )
+                && ( $n->{op} eq 'Assign' && !( $t && $t->{op} eq 'PadAccess' && ( _fields($t)->{sigil} // '' ) eq '$'
+                                                 && !_fields($t)->{place} && !_fields($t)->{shared} )
+                     || $n->{op} =~ $STORE_OP || $sub_call->($n) || $n->{op} eq 'Call' && $n->{mem_out} )
+        } values $by{$h}->%* ) ? 0 : 1;
+    };
+    return ( $private, $args_read_only, $add, $stores_nothing );
 }
 
 # all_graphs($wire) -> { name => graph }: the subs, and the BEGIN and END

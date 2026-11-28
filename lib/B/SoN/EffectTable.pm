@@ -240,6 +240,39 @@ sub bound_target ($op) {
     return $up->first;
 }
 
+# pushes_new_value($op) -> true when what the op pushes is a value of its own
+# -- its TARG, a new reference, an immortal yes/no/undef, a constant -- and
+# not an SV of the program that a later operand could store (fifth final
+# audit, Q2-Q5). THE DEFAULT IS "HANDS ON": an op with no row may push a
+# variable, an element, a magical value (`$1`, an lvalue substr, `$#a`), or a
+# list of them (`x`, `reverse`, a `do` block), read when its consumer runs.
+my %NEW_VALUE = map { $_ => 1 } qw(
+    const undef add subtract multiply divide modulo pow negate abs int sqrt sin cos exp log atan2 hex oct
+    i_add i_subtract i_multiply i_divide i_modulo i_negate
+    concat stringify length index rindex ord chr lc uc lcfirst ucfirst fc quotemeta sprintf join crypt
+    lt gt le ge eq ne ncmp slt sgt sle sge seq sne scmp i_lt i_gt i_le i_ge i_eq i_ne i_ncmp not
+    bit_and bit_or bit_xor nbit_and nbit_or nbit_xor sbit_and sbit_or sbit_xor complement ncomplement scomplement
+    left_shift right_shift defined ref refaddr reftype blessed exists is_bool is_weak ceil floor
+    srefgen refgen anonlist anonhash anoncode emptyavhv postinc postdec i_postinc i_postdec
+    time localtime gmtime rand srand wantarray caller pack unpack match qr split readline
+    schomp schop chomp chop trans transr range flop keys mapwhile push unshift subst gv rv2gv av2arylen
+);
+sub pushes_new_value ($op) {
+    require B;
+    my $n = $op->name;
+    my $want = $op->flags & 3;
+    # (in an lvalue's place substr, vec, pos and keys push a proxy of their operand)
+    # (`keys %h = N` is one; in a list keys are new strings)
+    return 0 if ( $n =~ /\A(?:substr|vec|pos|av2arylen)\z/ || $n eq q{keys} && $want != 3 ) && ( $op->flags & B::OPf_MOD() );
+    return 1 if $NEW_VALUE{$n};
+    # (a string `x` is a new string; a list `x` repeats the SVs: OPpREPEAT_DOLIST)
+    return 1 if $n eq 'repeat' && !( $op->private & 64 );
+    # (in scalar context: a new string, a count)
+    return 1 if $want == 2 && $n =~ /\A(?:reverse|substr|values|vec|pos|pad[ah]v|rv2[ah]v)\z/;
+    return 1 if $n eq 'multiconcat' && !( $op->flags & B::OPf_STACKED() ) && !( $op->private & 16 );
+    return 0;
+}
+
 # names() -> every builtin with a row, sorted (for the tests).
 sub names () { return sort keys %ROW }
 

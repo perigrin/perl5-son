@@ -76,9 +76,17 @@ sub src ( $s, $g, $n ) {
         return 'P' if $c && $c->{op} eq 'ArgsSource';
         my $cs = $s->_container( $g, $c, $f->{kind} // 'array' );
         return $cs if $cs =~ /\AR:/;
-        # (an element at a constant index names it: `$a[1] = 9` is not `$a[0]`)
-        my $ix = $s->node( $g, $n->{inputs}[1] );
-        return $ix && $ix->{op} eq 'Constant' && defined _f($ix)->{value} ? "elem:$cs#" . _f($ix)->{value} : "elem:$cs";
+        # (an element at a constant index names it: `$a[1] = 9` is not `$a[0]`.
+        # An array's index is a number that wraps: named only as a
+        # non-negative integer literal -- `$a[-2]`, `$a[0.5]`, `$a["0"]` and
+        # `$a[!1]` may be `$a[0]` (fifth final audit, Q10). A hash's key only
+        # as a string.)
+        my $ix  = $s->node( $g, $n->{inputs}[1] );
+        my $ixf = $ix && $ix->{op} eq 'Constant' ? _f($ix) : {};
+        my $known = ( $f->{kind} // 'array' ) eq 'hash'
+            ? ( $ixf->{const_type} // '' ) eq 'string' && defined $ixf->{value}
+            : ( $ixf->{const_type} // '' ) eq 'integer' && ( $ixf->{value} // '' ) =~ /\A(?:0|[1-9][0-9]*)\z/;
+        return $known ? "elem:$cs#$ixf->{value}" : "elem:$cs";
     }
     if ( $op eq 'PostfixDeref' ) {
         my $r = $s->node( $g, $n->{inputs}[0] );

@@ -240,7 +240,7 @@ sub _alias_private ( $wire, $res ) {
 sub _promoted_private ( $wire, $res ) {
     require SoN::PromotedPrivate;
     my $m = SoN::PromotedPrivate::all_graphs($wire);
-    my ( $private, $args_read_only ) = SoN::PromotedPrivate::private_checker($wire);
+    my ( $private, $args_read_only, undef, $stores_nothing ) = SoN::PromotedPrivate::private_checker($wire);
     my $sub_call = sub ($n) { $n->{op} eq 'Call' && ( _fields($n)->{dispatch_kind} // '' ) ne 'builtin' };
     my %by = map { my $g = $_; ( $g => { map { ( $_->{id} => $_ ) } ( $m->{$g}{nodes} // [] )->@* } ) } keys $m->%*;
     for my $g ( sort keys $m->%* ) {
@@ -267,7 +267,8 @@ sub _promoted_private ( $wire, $res ) {
     }
     for my $h ( sort keys $m->%* ) {
         for my $as ( grep { $_->{op} eq 'Assign' && _fields($_)->{record} && _fields($_)->{promoted} } values $by{$h}->%* ) {
-            my $why = $placed{$h} ? "$placed{$h} hands it a place" : $args_read_only->($h) ? undef : 'it hands @_ on or stores through it';
+            my $why = $placed{$h} ? "$placed{$h} hands it a place" : !$args_read_only->($h) ? 'it hands @_ on or stores through it'
+                : !$stores_nothing->($h) ? 'it stores, and an argument is an alias the store may reach' : undef;
             push $res->{violations}->@*, { graph => $h, node => $as->{id}, op => 'Assign', rule => 'promoted-not-private',
                 detail => "a parameter record: $why" } if defined $why;
         }

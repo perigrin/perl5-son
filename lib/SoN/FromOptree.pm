@@ -771,6 +771,10 @@ class SoN::FromOptree 0.01 {
     # op= whose target is that op= (design 3). Local to each CV's walk.
     our %ASSIGN_LVALUE;
     our %ALIAS_OPERAND;   # (see _note_alias_operand)
+    # THE LAST MATCH AFTER A s///: perl's captures are the substitution's
+    # where it matched, which no RegexCapture reads (its input is a match):
+    # a capture read after one is refused by name (fifth final audit, Q5).
+    our $SUBST_MATCH = bless {}, 'SoN::FromOptree::SubstMatch';
     # Call refaddr -> [ per input: the memory its place's variable was read
     # at where perl pushed it, or undef ] (for SoN::Promote: the version a
     # promoted argument is read at, where nothing between stores it).
@@ -6098,8 +6102,31 @@ class SoN::FromOptree 0.01 {
             if grep { _strip_null($_)->name =~ /\A(?:substr|av2arylen)\z/ } _alias_list_item_ops($op);
         my @body = $op->name eq 'enteriter' ? grep { $$_ } $op->sibling : do { my $b = $op->first->sibling; $b && $$b ? ($b) : () };
         return unless @body;
+        # (a variable, an element or an assignment item is aliased as its
+        # place: read where the body reads it)
+        my @items = _alias_list_item_ops($op);
+        _refuse_list_stored_later( $cv, \@items, { map { ( ${ _strip_null($_) } => 1 ) }
+            grep { _strip_null($_)->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|sassign|padsv_store|aassign)\z/
+                   && !_capture_var( $cv, _strip_null($_) ) } @items } );
+        _refuse_list_stored_later( $cv, [$_] ) for $op->name eq 'mapstart' ? @body : ();
         my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @body;
         return unless @eff;
+        # (AN ITEM WITH NO PLACE THE WALK KNOWS -- a list assignment's
+        # targets, a `do` block's list, `x` -- hands on SVs the body may store:
+        # refused by name, fifth final audit, Q6: `map { $x = 0; $_ } (($x,
+        # $y) = (7, 8))` is `0 8`)
+        for my $k ( _alias_list_item_ops($op) ) {
+            my $p = _strip_null($k);
+            next if $p->name eq 'pushmark' || $p->name eq 'null' && !( $p->flags & B::OPf_KIDS );
+            next if B::SoN::EffectTable::pushes_new_value($p) || $p->name eq 'entersub';
+            next if $p->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|values|avalues|reverse|sort|grepwhile|cond_expr|padsv_store|sassign|(?:i_)?pre(?:inc|dec)|mapwhile|substr|av2arylen)\z/;
+            next if $p->name ne 'aassign' && _returns_its_target($p);
+            next if $p->name eq q{aassign} && _assigns_one_array($p);    # (that array, aliased by the walk)
+            # (to elements and slices only: each its place, _assignment_item_place)
+            next if $p->name eq q{aassign} && !grep { _strip_null($_)->name !~ /\A(?:aelem|helem|[ah]slice|pushmark)\z/ } _list_kids( $p->last );
+            die "GAP: a foreach, map or grep over an item that hands on SVs the walk has no place for (" . $p->name . "),"
+              . " whose body may store, is not yet lowered\n";
+        }
         for my $k ( _alias_list_item_ops($op) ) {
             # (`values %h` is the hash's own scalars, aliased each by the
             # consumer -- chalk's alias_list; an array's values are not yet)
@@ -6231,6 +6258,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _handle_entersub_call ($cv, $op, $sim, $factory, $ctx) {
+        _refuse_args_handed_on( $cv, $op );
         my $args = $sim->pop_to_mark;
         # (the arguments, not the code a direct or indirect call names last)
         my %read_at;   # place refaddr -> the memory its variable was read at
@@ -6893,6 +6921,70 @@ class SoN::FromOptree 0.01 {
 
     # _step: one op, and, if it pushes an SV, how its consumer reads it again
     # (_note_alias_operand: an SV operand is read when its consumer runs).
+    # WHICH HANDLER READS WHICH FLAG (fifth final audit, Q1 and Q8). An op
+    # carrying a flag that changes what it stores, and that no handler reads,
+    # is refused by name: the default is the refusal, not a list of the
+    # shapes known to be bad. Two flags are read by what the handler did:
+    #   OPpTARGET_MY   the op stores its value into the `my` its targ names:
+    #                  the handler rebound that slot or stored to memory
+    #   OPpLVAL_INTRO  on an op that is not a `my` (a `local`): the handler
+    #                  recorded a save for the scope's restore
+    # The rest by table: the ops whose handler reads the flag.
+    my %FLAG_READERS = (
+        # (a reference made where an undef one is dereferenced for a store)
+        # (rv2gv: a handle op's `my $fh` is vivified to a glob by its handler)
+        OPpDEREF       => { map { $_ => 1 } qw(padsv gvsv rv2sv aelem helem entersub rv2gv) },
+        # (an element handed to a call: made only if the call stores it)
+        OPpLVAL_DEFER  => { map { $_ => 1 } qw(aelem helem) },
+        # (an :lvalue sub's value is the place, not its value)
+        OPpMAYBE_LVSUB => {},
+    );
+    # _flag_on($op, $flag) -> true when $op's private bits say $flag, by
+    # B::Op_private's name for the bit on this op (a bit means other things
+    # on other ops)
+    sub _flag_on ($op, $flag) {
+        require B::Op_private;
+        my $bits = $B::Op_private::bits{ $op->name } or return 0;
+        for my $b ( keys %$bits ) {
+            my $d = $bits->{$b};
+            if ( ref $d ) {
+                return ( $op->private & $d->{bitmask} ) ? 1 : 0 if ( $d->{mask_def} // '' ) eq $flag;
+                next;
+            }
+            return ( $op->private & ( 1 << $b ) ) ? 1 : 0 if $d eq $flag;
+        }
+        return 0;
+    }
+    # _store_into_targ($cv, $op, $sim, $factory, $ctx, $node): the store of an
+    # OPpTARGET_MY op's value into the `my` its targ names, as the generic
+    # TARGMY path makes it: a captured slot's CellWrite, a demoted slot's
+    # Assign, a field's Assign, or the slot rebound (declared where `my`).
+    sub _store_into_targ ($cv, $op, $sim, $factory, $ctx, $node) {
+        my $targ = $op->targ;
+        if ( my $param = $ctx->{cell_params}{$targ} ) {
+            return _place( $sim, $factory->make( 'CellWrite', inputs => [ $param, $node ], mem => $sim->memory ) );
+        }
+        if ( $ctx->{addr_taken}{$targ} ) {
+            my ( $sg, $sy ) = _padparts( $cv, $targ );
+            my $loc = $factory->make( 'PadAccess', targ => $targ, sigil => $sg, symbol => $sy,
+                ( $ctx->{shared_lexicals}{$targ} ? ( shared => 1 ) : () ), mem => $sim->memory );
+            return _place( $sim, $factory->make( 'Assign', inputs => [ $loc, $node ] ) );
+        }
+        my $lv = _make_pad_or_field( $cv, $targ, $factory );
+        return _place( $sim, $factory->make( 'Assign', inputs => [ $lv, $node ] ) ) if $lv->isa('SoN::IR::Node::FieldAccess');
+        _declare( $factory, $lv, $node ) if ( $ctx->{mode} // '' ) eq 'main' && ( $op->private & B::OPpLVAL_INTRO() );
+        $sim->define( $targ, $node );
+        return;
+    }
+    # _is_a_local($op) -> true when $op carries the OPpLVAL_INTRO of a
+    # `local` (_subtree_localises' rule, for one op)
+    sub _is_a_local ($op) {
+        my $name = $op->name;
+        return 0 if $name eq 'pushmark' || $name eq 'entersub' || _declares_lexical($op) || _stores_its_targ($op);
+        # (`my @a = split`: split stores into the `my` array it names, OPpSPLIT_LEX)
+        return 0 if $name eq q{split} && _flag_on( $op, q{OPpSPLIT_LEX} );
+        return _flag_on( $op, 'OPpLVAL_INTRO' );
+    }
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
         _local_shape_gap($op) if $op->private & B::OPpLVAL_INTRO();
         # A FUSED ELEMENT OF A PACKAGE ARRAY is the peephole's, in code perl
@@ -6901,9 +6993,40 @@ class SoN::FromOptree 0.01 {
         # assign beside it lost its list (audit 2026-11-22: the held record).
         die "GAP: an aelemfast of a package array (compiled with the peephole optimizer on, before B::SoN) is not translated\n"
             if $op->name eq 'aelemfast';
+        # (A FOREACH ALIASES A CAPTURE VARIABLE, `for my $e ($1)`: what $e
+        # reads is the last match when it is read, and the body may match
+        # again -- fifth final audit, Q5)
+        die "GAP: a foreach over a capture variable whose body may match again is not yet lowered -- the alias reads the"
+          . " last match when it is read\n"
+            if $op->name eq 'enteriter' && grep( { _capture_var( $cv, _strip_null($_) ) } _alias_list_item_ops($op) )
+            && grep { $_->name =~ /\A(?:match|subst|split|entersub|entereval|dofile|require)\z/ } _subtree_ops( $op->parent );
+        for my $flag ( sort keys %FLAG_READERS ) {
+            die "GAP: " . $op->name . " carries $flag, which no handler reads, so what it stores is not yet lowered\n"
+                if !$FLAG_READERS{$flag}{ $op->name } && _flag_on( $op, $flag );
+        }
+        # (a sub's value vivified for a store is a copy, but an :lvalue sub's
+        # is its scalar: a known one, or any where the program has one)
+        die "GAP: entersub carries OPpDEREF for an :lvalue sub, whose value it vivifies, which is not yet lowered\n"
+            if $op->name eq q{entersub} && _flag_on( $op, q{OPpDEREF} )
+            && do { my $s = eval { _entersub_callee_cv( $cv, $op ) };
+                    $s && $$s && $s->isa(q{B::CV}) ? $s->CvFLAGS & B::CVf_LVALUE
+                        : grep { $_->CvFLAGS & B::CVf_LVALUE } map { @$_ } values SoN::FromOptree::ModSets::_user_subs()->%* };
+        # (a `local` of an element at program scope is a plain store: the
+        # aelem/helem handler reads that, _restored_at_program_end)
+        my $local = _is_a_local($op) && !( $op->name =~ /\A[ah]elem\z/ && _restored_at_program_end( $cv, $op ) )
+            ? scalar( ( $ctx->{local_saves} // [] )->@* ) + 1 : 0;
+        my $targmy = _stores_its_targ($op) && $op->targ
+            ? [ $sim->defined_count( $op->targ ), Scalar::Util::refaddr( $sim->memory ) // 0 ] : undef;
         my $target = _alias_result_target($op, $sim);
         my @r = _step_op($cv, $op, $sim, $factory, $opmap, $ctx);
-        _note_alias_operand($cv, $op, $sim, $target, $factory) if ( $r[1] // '' ) eq 'handled';
+        return @r unless ( $r[1] // '' ) eq 'handled';
+        die "GAP: `local` on " . $op->name . " (a symbolic name, a dereference, a glob expression) is not yet lowered -- no"
+          . " handler saves and restores it\n"
+            if $local && scalar( ( $ctx->{local_saves} // [] )->@* ) < $local;
+        die "GAP: " . $op->name . " stores into a `my` (OPpTARGET_MY) and its handler made no store, so it is not yet lowered\n"
+            if $targmy && $targmy->[0] == $sim->defined_count( $op->targ )
+            && $targmy->[1] == ( Scalar::Util::refaddr( $sim->memory ) // 0 );
+        _note_alias_operand($cv, $op, $sim, $target, $factory);
         return @r;
     }
 
@@ -7901,6 +8024,17 @@ class SoN::FromOptree 0.01 {
         # reference to each ELEMENT, not to the array. The op says so with
         # OPf_PARENS (8, asked of B) on the padav/padhv, which `\(@a, $b)`'s
         # does not carry -- there the array is referenced whole.
+        # A REFERENCE TO AN ASSIGNMENT is to its target, perl's lvalue:
+        # `\(my $v = 1)` is `\$v` (fifth final audit, Q18). The value on the
+        # stack is not that place: refused by name.
+        if ( ( $name eq 'srefgen' || $name eq 'refgen' ) && ( $op->flags & B::OPf_KIDS ) ) {
+            my $k = $op->first;
+            $k = $k->first while $$k && $k->name eq 'null' && ( $k->flags & B::OPf_KIDS ) && ${ $k->first } && !${ $k->first->sibling };
+            my @k = $$k && $k->name eq 'null' && ( $k->flags & B::OPf_KIDS ) ? _operand_kids_of_list($k) : ($k);
+            die "GAP: a reference to an assignment (`\\(\$v = ...)`) is to its target, which is not yet lowered\n"
+                if grep { $$_ && $_->name !~ /\A(?:pushmark|null)\z/ && _returns_its_target($_)
+                          && grep { $_->name =~ /\A(?:padsv|padsv_store)\z/ && ( $_->private & B::OPpLVAL_INTRO() ) } _subtree_ops($_) } @k;
+        }
         if ($name eq 'refgen' && $sim->has_mark) {
             my @kids;
             for (my $k = $op->first->first; $k && $$k; $k = $k->sibling) {
@@ -9275,6 +9409,8 @@ class SoN::FromOptree 0.01 {
                      . " backedge is a sanctioned forward reference); outside"
                      . " a replacement, a capture with no preceding match in"
                      . " scope is not yet lowered\n";
+                die "GAP: a capture variable read after a s///, whose match sets it, is not yet lowered\n"
+                    if ref $match eq 'SoN::FromOptree::SubstMatch';
                 # A CAPTURE READ IN A LOOP OF A MATCH MADE BEFORE IT, where the
                 # loop itself matches: a later pass reads the match an earlier
                 # pass made (perl: `121`), which the wire carries no Phi of
@@ -10999,6 +11135,19 @@ class SoN::FromOptree 0.01 {
                 die "GAP: a `delete` slice with fewer than two operands is not"
                   . " yet lowered\n" unless $operands->@* >= 2;
                 my $container = pop $operands->@*;
+                # EACH OPERAND ONE KEY (fifth final audit, Q14): an operand that
+                # is a list -- `@$k`, a grep, a call, `@_` -- arrived as one
+                # node and was deleted as one key. A `my` array the walk knows
+                # as its literal's elements pushes each.
+                {
+                    my ($sl) = grep { $_->name =~ /\A(?:[ah]slice|null)\z/ && ( $_->flags & B::OPf_KIDS ) } $op->first;
+                    my @kops = $sl ? grep { $_->name ne 'pushmark' && !( $_->name eq 'null' && !( $_->flags & B::OPf_KIDS ) ) } _operand_kids($sl) : ();
+                    pop @kops;    # (the container)
+                    my $one = qr/\A(?:const|padsv|gvsv|rv2sv|aelem|helem|multideref|concat|stringify|multiconcat|join|sprintf|lc|uc|lcfirst|ucfirst|add|subtract|multiply|(?:i_)?(?:pre|post)(?:inc|dec))\z/;
+                    die "GAP: a `delete` slice whose keys are a list (an array, a call, a grep or map) is not yet lowered --"
+                      . " each key is its own removal\n"
+                        if !@kops || grep( { _strip_null($_)->name !~ $one && !( _strip_null($_)->name eq 'padav' && !grep { !$_->isa('SoN::IR::Node::Constant') } $operands->@* ) } @kops );
+                }
                 # A delete mutates the literal, as an element store does.
                 $MUTATED_LITERALS{ Scalar::Util::refaddr($container) } = $container
                     if $container->can('operation')
@@ -11013,7 +11162,12 @@ class SoN::FromOptree 0.01 {
                     push @removed, $d;
                 }
 
-                unless (($op->flags & 3) == 1) {   # not OPf_WANT_VOID
+                # (in scalar context the last value removed, as perl's slice
+                # yields its last item: `my $l = delete @h{@k}` -- Q14, vr119)
+                if ( ( $op->flags & 3 ) == 2 ) {
+                    $sim->push_node( $removed[-1] );
+                }
+                elsif (($op->flags & 3) != 1) {   # not OPf_WANT_VOID
                     $sim->push_node($factory->make('ArrayLiteral',
                         inputs => \@removed,
                         stamp  => SoN::IR::Stamp->new(type => 'List')));
@@ -11495,6 +11649,15 @@ class SoN::FromOptree 0.01 {
                 my $store = $factory->make('Assign', inputs => [$old, $new]);
                 _place($sim, $store);
                 $targ = undef;
+            }
+            # A SLOT IN MEMORY READ THROUGH A BINDING -- a range foreach's
+            # iterator a reference is taken of -- is stored too, and rebound
+            # below (fifth final audit, Q11: `$i++; push @r, \$i`).
+            elsif (defined $targ && $ctx->{addr_taken}{$targ} && !$ITER_ELEMENT{$targ}) {
+                my ( $sg, $sy ) = _padparts( $cv, $targ );
+                my $loc = $factory->make('PadAccess', targ => $targ, sigil => $sg, symbol => $sy,
+                    ( $ctx->{shared_lexicals}{$targ} ? ( shared => 1 ) : () ), mem => $sim->memory);
+                _place( $sim, $factory->make('Assign', inputs => [ $loc, $new ]) );
             }
             # A ?: OF TWO `my` SCALARS: each arm's variable incremented where
             # the ?: chose it (design 3).
@@ -12729,6 +12892,21 @@ class SoN::FromOptree 0.01 {
         # than a stray, dead Assign node. Real list-assigns with values on the
         # stack fall through to the generic dispatch below.
         if ($name eq 'aassign') {
+            # (A `my` ARRAY ASSIGNED FROM ITSELF -- `@a = reverse @a`, `@a =
+            # @a` -- while a reference to one of its elements may be live: perl
+            # reverses or sorts in place (its peephole pass, which B::SoN does
+            # not run), or copies; the wire's new aggregate does neither for
+            # the element the reference holds -- fifth final audit, Q12.)
+            {
+                my @l = grep { $_->name ne 'pushmark' } _list_kids( $op->last );
+                if ( @l == 1 && ( my $t = _strip_null( $l[0] ) )->name eq 'padav' && !( $l[0]->private & B::OPpLVAL_INTRO() ) ) {
+                    my $targ = $t->targ;
+                    die "GAP: a `my` array assigned whole from itself while a reference to one of its elements may be live is"
+                      . " not yet lowered -- perl keeps or copies the element the reference holds\n"
+                        if grep( { $_->name eq 'padav' && $_->targ == $targ } _subtree_ops( $op->first ) )
+                        && _array_elements_referenced( $cv, $targ );
+                }
+            }
             # (`my @r = @_` IS A COPY, and the wire binds @r to @_ itself: where
             # the sub then changes @_ -- a shift, pop, splice, push, unshift
             # or store into it -- @r would follow. Refused by name, audit 3
@@ -13497,8 +13675,17 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node(_list_count($factory, $sim, @rhs));
                 return ($op->next, 'handled');
             }
+            # (EACH TARGET IS HANDED ON, read when the consumer runs: a later
+            # item's store into one is seen -- fifth final audit, Q6:
+            # `((($x, $y) = (7,8)), $x = 9)` is `9 8 9`. A note for each.)
+            my @multi;
             if ($all_my_scalars && $want_ctx == 3) {
-                $sim->push_node($sim->lookup($_->targ) // $_) for @targets;
+                for my $t (@targets) {
+                    my $v = _pad_scalar_now( $cv, $t->targ, $sim, $factory, $ctx ) // $sim->lookup( $t->targ ) // $t;
+                    $sim->push_node($v);
+                    push @multi, { depth => $sim->stack_depth - 1, node => $v, mem => $sim->memory, how => 'target', targ => $t->targ };
+                }
+                $ALIAS_OPERAND{$$op} = { how => q{multi}, multi => \@multi };
                 return ($op->next, 'handled');
             }
             # IN A LIST, TO ELEMENTS OR SLICES: the elements as they are after
@@ -13518,9 +13705,13 @@ class SoN::FromOptree 0.01 {
                     die "GAP: the value of a list assignment in list context, to a slice whose indices are a"
                       . " list, is not yet lowered -- it is the targets as they are after it\n"
                         if grep { $unsized_v->($_) || _is_aggregate_node($_) || _flattens($_) } @in;
-                    $sim->push_node( $factory->make('Subscript', kind => $t->kind, inputs => [ $src, $_ ], mem => $sim->memory) )
-                        for @in;
+                    for (@in) {
+                        my $el = $factory->make('Subscript', kind => $t->kind, inputs => [ $src, $_ ], mem => $sim->memory);
+                        $sim->push_node($el);
+                        push @multi, { depth => $sim->stack_depth - 1, node => $el, mem => $sim->memory, how => 'target', lv => $el };
+                    }
                 }
+                $ALIAS_OPERAND{$$op} = { how => q{multi}, multi => \@multi };
                 return ($op->next, 'handled');
             }
             $sim->push_node($node);
@@ -13544,7 +13735,11 @@ class SoN::FromOptree 0.01 {
         # supply Coerce's from_repr/to_repr; it mapped to a Stringify node,
         # which is the same edge under a second name.
         if ($name eq 'stringify') {
-            $sim->push_node(_coerce_to_str($factory, $sim->pop_node));
+            my $node = _coerce_to_str($factory, $sim->pop_node);
+            # (`$t = "$a$b"` before the peephole pass: a stringify storing
+            # into $t, OPpTARGET_MY -- fifth final audit, Q1)
+            _store_into_targ( $cv, $op, $sim, $factory, $ctx, $node ) if _stores_its_targ($op) && $op->targ;
+            $sim->push_node($node);
             return ($op->next, 'handled');
         }
 
@@ -14646,6 +14841,11 @@ class SoN::FromOptree 0.01 {
                         || $ctx->{shared_lexicals}{$t} || $ctx->{cell_params}{$t}
                         || $ctx->{cells}{$t} || $ctx->{addr_taken}{$t}
                         || _reference_can_see_assign($t);
+                    # (in place, perl keeps the element scalars: a reference
+                    # to one follows it -- fifth final audit, Q12)
+                    die "GAP: an in-place $name of an array while a reference to one of its elements may be live is not"
+                      . " yet lowered -- perl moves the element the reference holds\n"
+                        if $name eq q{reverse} && _array_elements_referenced( $cv, $t );
                     # A CONTAINER, NOT THE LIST: bound to the sort itself, a
                     # later `push @a`, `$a[0] = 9` or `\@a` was spelled on
                     # `sort(...)`, a list value. The literal names @a, as the
@@ -14679,6 +14879,18 @@ class SoN::FromOptree 0.01 {
                     my $store = $factory->make('Assign',
                         inputs => [$inputs[0], $node]);
                     _place($sim, $store);
+                }
+                # A SLOT IN MEMORY READ THROUGH A BINDING -- a range foreach's
+                # iterator a reference is taken of, its pass's value a Phi --
+                # is stored too, and rebound: the store alone is what the
+                # reference sees (fifth final audit, Q11: `$i *= 2; push
+                # @r, \$i` kept the pass's first value).
+                elsif ($is_compound && $ctx->{addr_taken}{$lvalue_targ}) {
+                    my ( $sg, $sy ) = _padparts( $cv, $lvalue_targ );
+                    my $loc = $factory->make('PadAccess', targ => $lvalue_targ, sigil => $sg, symbol => $sy,
+                        ( $ctx->{shared_lexicals}{$lvalue_targ} ? ( shared => 1 ) : () ), mem => $sim->memory);
+                    _place( $sim, $factory->make('Assign', inputs => [ $loc, $node ]) );
+                    $sim->define($lvalue_targ, $node) if defined $sim->lookup($lvalue_targ);
                 }
                 elsif ($is_compound) {
                     $sim->define($lvalue_targ, $node);
@@ -15235,6 +15447,21 @@ class SoN::FromOptree 0.01 {
     # capturing it, never among a call's arguments (where @_ aliases its
     # elements), and no string eval in $cv. Read off the whole sub, so a
     # reference taken after the loop counts too.
+    # _array_elements_referenced($cv, $targ) -> true when the sub takes a
+    # reference to an element of the pad array $targ (`\$a[1]`, `\(@a)`, a
+    # slice) or hands one to a call (whose @_ aliases it, and which may
+    # return `\$_[0]`)
+    sub _array_elements_referenced ($cv, $targ) {
+        my $root = $$cv == ${ B::main_cv() } ? B::main_root() : eval { $cv->ROOT };
+        return 1 unless $root && $$root;
+        my $names = sub ($o) { grep { $_->name eq 'padav' && $_->targ == $targ } _subtree_ops($o) };
+        for my $op ( _subtree_ops($root) ) {
+            my $n = $op->name;
+            next unless $n =~ /\A(?:srefgen|refgen|entersub)\z/ && ( $op->flags & B::OPf_KIDS );
+            return 1 if $names->($op);
+        }
+        return 0;
+    }
     sub _list_is_private ($cv, $targ) {
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return 0;
         my $pn = $names->ARRAYelt($targ);
@@ -17644,7 +17871,12 @@ class SoN::FromOptree 0.01 {
     # _arg_place_target($op) -> the `$` variable an assignment argument stores
     # (a padsv or padsv_store, or a package scalar's op), or undef
     sub _arg_place_target ($o) {
-        my $t = _assign_target($o) // return undef;
+        # (a pre-increment's value is its variable too: `f(++$x, $x++)` hands
+        # f $x -- fifth final audit, Q3)
+        my $s = _strip_null($o);
+        my $t = _assign_target($o)
+            // ( $s->name =~ /\A(?:i_)?pre(?:inc|dec)\z/ && ( $s->flags & B::OPf_KIDS ) ? _strip_null( $s->first ) : undef )
+            // return undef;
         return $t if ( $t->name =~ /\A(?:padsv|padsv_store)\z/ || _stores_its_targ($t) ) && $t->targ || _scalar_gv_op($t);
         return undef;
     }
@@ -18030,6 +18262,21 @@ class SoN::FromOptree 0.01 {
         # NOT OVER A PRIVATE LIST THE BODY NEVER NAMES: no call can reach it,
         # and a push or shift elsewhere moves another array (chalk's
         # LLVM::_process_control_chain walks `$ctrl = $ctrl->control_in`).
+        # A SLICE IN THE LIST is its elements, aliased one by one; a slice of
+        # indices not constant reached the wire as a copy, and the body's
+        # store went into it (fifth final audit, Q15: `$_ *= 2 for
+        # @a[1..$#a]`). Refused by name where the body writes its alias.
+        die "GAP: a foreach whose body writes its alias, over a slice, is not yet lowered -- the alias is each element"
+          . " of the slice\n"
+            if $writes_iter && !$collect
+            && grep {
+                   my $sl = _strip_null($_);
+                   my @k  = grep { $$_ } _operand_kids_of_list($sl);
+                   pop @k;    # (the container)
+                   # (constant indices name each element: the wire's slice is of them)
+                   $sl->name =~ /\A(?:[ah]slice|kv[ah]slice)\z/
+                       && grep { $_->name !~ /\A(?:const|pushmark|null|list)\z/ } map { _subtree_ops($_) } @k
+               } _alias_list_item_ops($enteriter);
         if ($writes_iter && !$collect) {
             my %body = _loop_body_facts($cv, $enteriter, '');
             my $targ = $array->isa('SoN::IR::Node::PadAccess') ? $array->targ
@@ -20074,6 +20321,7 @@ class SoN::FromOptree 0.01 {
                     (defined $repl_body ? (replacement_body => $repl_body) : ()),
                     flags       => _pmflags_to_str($op->pmflags),
                     stamp       => SoN::IR::Stamp->new(type => 'Str'));
+                $sim->set_last_match($SUBST_MATCH);
                 # A PAD READ THAT IS NOT THE SLOT is the subject's value, as
                 # in the main walker: `(my $t = $s) =~ s///` pinned here was
                 # spelled `$s =~ s///`, writing $s.
@@ -23374,6 +23622,8 @@ class SoN::FromOptree 0.01 {
             && _capture_group_count($arm_match->pattern // '');
         if ($captures) {
             my $prev = $sim->last_match;
+            die "GAP: a capture variable read after a s///, whose match sets it, is not yet lowered\n"
+                if ref $prev eq 'SoN::FromOptree::SubstMatch';
             # THE MATCH FIRST: floating, it was spelled at the arm's end,
             # after the reads of its captures.
             if (!defined $arm_match->control_in) {
@@ -25685,6 +25935,7 @@ class SoN::FromOptree 0.01 {
                 # s/// yields the rewritten subject, always a Str.
                 stamp       => SoN::IR::Stamp->new(type => 'Str'),
             );
+            $sim->set_last_match($SUBST_MATCH);
             # PINNED TO ITS STATEMENT -- BUT ONLY FOR A PAD SUBJECT.
             #
             # A destructive s/// mutates, so it needs an ordering, and the
@@ -25936,7 +26187,7 @@ class SoN::FromOptree 0.01 {
         if ( $n =~ /\A(?:i_)?pre(?:inc|dec)\z/ && ( $op->flags & B::OPf_KIDS ) ) {
             return $pad->( $op->first ) // $node_at->( $sim->stack_depth - 1 );
         }
-        if ( $op->isa('B::BINOP') && ( $op->flags & B::OPf_STACKED ) && $n !~ /\A(?:sassign|sort)\z/ ) {
+        if ( $op->isa('B::BINOP') && ( $op->flags & B::OPf_STACKED ) && $n !~ /\A(?:sassign|sort|aassign)\z/ ) {
             return $pad->( $op->first ) // $node_at->( $sim->stack_depth - 2 );
         }
         # (a string op= or `= "..$x.."` perl folded into a multiconcat: its
@@ -26180,65 +26431,75 @@ class SoN::FromOptree 0.01 {
         my $stacked = ( $op->flags & B::OPf_STACKED ) && $op->name ne 'sassign';
         my @kids = _operand_kids($op);
         _reread_alias_lists( $cv, \@kids, $sim, $factory );
-        for my $i ( 0 .. $#kids ) {
-            my $k = $kids[$i];
-            next if ( $k->flags & 3 ) == 1;                       # (a statement, not an operand)
+        # (which kids are operands read when $op runs: not a statement, not
+        # the op's own target, which it stores when it runs)
+        my @operand = map {
+            my $k = $kids[$_];
+            !( ( $k->flags & 3 ) == 1                             # (a statement, not an operand)
             # (a store's own target -- but a variable perl marks OPf_MOD only
             # because its consumer may take it as an lvalue, sprintf's, is read)
-            next if ( $k->flags & B::OPf_MOD ) && !( _strip_null($k)->name =~ /\A(?:padsv|gvsv)\z/ && $op->name =~ /\A(?:sprintf|join|print|say|prtf|multiconcat)\z/ );
-            next if $i == 0 && $stacked;                          # (an op='s target)
-            next if $i == $#kids && $op->name eq 'sassign';
+            || ( $k->flags & B::OPf_MOD ) && !( _strip_null($k)->name =~ /\A(?:padsv|gvsv)\z/ && $op->name =~ /\A(?:sprintf|join|print|say|prtf|multiconcat)\z/ )
+            || $_ == 0 && $stacked                                # (an op='s target)
+            || $_ == $#kids && $op->name eq 'sassign'
             # (substr's string is its target where it stores: an lvalue, or a
             # replacement; its offset and length are values -- audit 4, X7)
-            next if $i == 0 && $op->name eq 'substr' && ( ( $op->flags & B::OPf_MOD ) || grep( { $_->name ne 'pushmark' } @kids ) > 3 );
+            || $_ == 0 && $op->name eq 'substr' && ( ( $op->flags & B::OPf_MOD ) || grep( { $_->name ne 'pushmark' } @kids ) > 3 ) )
+        } 0 .. $#kids;
+        for my $i ( 0 .. $#kids ) {
+            my $k = $kids[$i];
+            next unless $operand[$i];
             my $p = _strip_null($k);
             next if $p->name =~ /\A(?:i_)?post(?:inc|dec)\z/;     # (a copy)
-            my $d = $ALIAS_OPERAND{$$p} // _alias_passed_through( $cv, $p, $sim, $factory, $ctx, $k ) or next;
-            next unless $d->{depth} < $sim->stack_depth && refaddr( $sim->node_at( $d->{depth} ) ) == refaddr( $d->{node} );
-            my $old = $d->{node};
-            my $new;
-            next if $d->{how} eq 'element' && ( _elem_alias_refused( $cv, $k, $op ) // '' ) eq 'keep';
-            $mem = $sim->memory;   # (a read made again just now may have been pinned: a version)
-            if ( $d->{how} eq 'target' ) {
-                # (a variable in memory is read again only where something
-                # since may have stored: a binding, where it was rebound)
-                my $in_mem = defined $d->{targ} && ( $ITER_ELEMENT{ $d->{targ} } || $ITER_ALIAS_REF{ $d->{targ} }
-                    || $ctx->{addr_taken}{ $d->{targ} } || $ctx->{cells}{ $d->{targ} } || $ctx->{cell_params}{ $d->{targ} } );
-                if ( $in_mem && blessed( $d->{mem} ) && defined $mem && !_stored_since( $mem, $d->{mem} ) ) { }
-                elsif ( defined $d->{targ} ) { $new = _pad_scalar_now( $cv, $d->{targ}, $sim, $factory, $ctx ) }
-                elsif ( defined $mem && ( !blessed( $d->{mem} ) || _stored_since( $mem, $d->{mem} ) ) ) {
-                    $new = _at_memory( $factory, $d->{lv}, _before_local_of( $d->{lv}, $mem, $d->{mem} ) );
+            # (a note, or several: the items of a list handed on whole)
+            my @later = map { $kids[$_] } grep { $operand[$_] } $i + 1 .. $#kids;
+            my $dd = $ALIAS_OPERAND{$$p} // _alias_passed_through( $cv, $p, $sim, $factory, $ctx, $k, \@later ) or next;
+            for my $d ( $dd->{multi} ? $dd->{multi}->@* : $dd ) {
+                next unless $d->{depth} < $sim->stack_depth && refaddr( $sim->node_at( $d->{depth} ) ) == refaddr( $d->{node} );
+                my $old = $d->{node};
+                my $new;
+                next if $d->{how} eq 'element' && ( _elem_alias_refused( $cv, $d->{op} // $k, $op ) // '' ) eq 'keep';
+                $mem = $sim->memory;   # (a read made again just now may have been pinned: a version)
+                if ( $d->{how} eq 'target' ) {
+                    # (a variable in memory is read again only where something
+                    # since may have stored: a binding, where it was rebound)
+                    my $in_mem = defined $d->{targ} && ( $ITER_ELEMENT{ $d->{targ} } || $ITER_ALIAS_REF{ $d->{targ} }
+                        || $ctx->{addr_taken}{ $d->{targ} } || $ctx->{cells}{ $d->{targ} } || $ctx->{cell_params}{ $d->{targ} } );
+                    if ( $in_mem && blessed( $d->{mem} ) && defined $mem && !_stored_since( $mem, $d->{mem} ) ) { }
+                    elsif ( defined $d->{targ} ) { $new = _pad_scalar_now( $cv, $d->{targ}, $sim, $factory, $ctx ) }
+                    elsif ( defined $mem && ( !blessed( $d->{mem} ) || _stored_since( $mem, $d->{mem} ) ) ) {
+                        $new = _at_memory( $factory, $d->{lv}, _before_local_of( $d->{lv}, $mem, $d->{mem} ) );
+                    }
                 }
-            }
-            elsif ( defined( $mem = $sim->memory ) && refaddr( $old->mem_in ) != refaddr($mem) && _stored_since( $mem, $old->mem_in ) ) {
-                # (A `local` of it between: perl's operand is the scalar it
-                # pushed, the name's is a new one -- `print $g, local $g = 5`,
-                # audit 3 N8. The wire's read is by name: refused.)
-                # (A `local` OF IT BETWEEN binds the name to a new scalar: the
-                # one perl pushed is the old, read as it stood when the name was
-                # rebound -- `local ($a, $b) = ($b, $a)`; the earliest such)
-                my $at = _before_local_of( $old, $mem, $old->mem_in );
-                next if refaddr($at) == refaddr( $old->mem_in );
-                $new = _at_memory( $factory, $old, $at );
-                # (an element of a list made here -- a call's, a range, a literal list --
-                # exists for the index the walk reads it at: no guard)
-                my $c0 = $old->v1_inputs->[0];
-                my $temp = blessed($c0) && ( $c0->operation =~ /\A(?:Call|Range)\z/
-                    || $c0->operation eq 'ArrayLiteral' && !defined( eval { $c0->symbol } ) && ( $c0->stamp ? $c0->stamp->type : '' ) eq 'List' );
-                if ( $new && $d->{how} eq 'element' && !$temp ) {
-                    # (perl pushed the element only if it existed: else undef)
-                    # (made at the old version, not where this op stands: never pinned here)
-                    my $ex = $d->{existed} // do { local $SoN::IR::NodeFactory::ON_VALUE = undef;
-                        $factory->make('Exists', kind => $old->kind, inputs => [ $old->v1_inputs->@[ 0, 1 ] ],
-                        mem => $old->mem_in, stamp => SoN::IR::Stamp->new(type => 'Boolean')) };
-                    { local $PIN_OP = $p; _pin_tied_read( $sim, $new ) }
-                    # (not there, perl pushed undef: no read of it carried past the store)
-                    $new = _make_ternary( $factory, $ex, $new, $factory->make('Constant', value => undef, const_type => 'undef',
-                        stamp => SoN::IR::Stamp->new(type => 'Undef')) );
+                elsif ( defined( $mem = $sim->memory ) && refaddr( $old->mem_in ) != refaddr($mem) && _stored_since( $mem, $old->mem_in ) ) {
+                    # (A `local` of it between: perl's operand is the scalar it
+                    # pushed, the name's is a new one -- `print $g, local $g = 5`,
+                    # audit 3 N8. The wire's read is by name: refused.)
+                    # (A `local` OF IT BETWEEN binds the name to a new scalar: the
+                    # one perl pushed is the old, read as it stood when the name was
+                    # rebound -- `local ($a, $b) = ($b, $a)`; the earliest such)
+                    my $at = _before_local_of( $old, $mem, $old->mem_in );
+                    next if refaddr($at) == refaddr( $old->mem_in );
+                    $new = _at_memory( $factory, $old, $at );
+                    # (an element of a list made here -- a call's, a range, a literal list --
+                    # exists for the index the walk reads it at: no guard)
+                    my $c0 = $old->v1_inputs->[0];
+                    my $temp = blessed($c0) && ( $c0->operation =~ /\A(?:Call|Range)\z/
+                        || $c0->operation eq 'ArrayLiteral' && !defined( eval { $c0->symbol } ) && ( $c0->stamp ? $c0->stamp->type : '' ) eq 'List' );
+                    if ( $new && $d->{how} eq 'element' && !$temp ) {
+                        # (perl pushed the element only if it existed: else undef)
+                        # (made at the old version, not where this op stands: never pinned here)
+                        my $ex = $d->{existed} // do { local $SoN::IR::NodeFactory::ON_VALUE = undef;
+                            $factory->make('Exists', kind => $old->kind, inputs => [ $old->v1_inputs->@[ 0, 1 ] ],
+                            mem => $old->mem_in, stamp => SoN::IR::Stamp->new(type => 'Boolean')) };
+                        { local $PIN_OP = $p; _pin_tied_read( $sim, $new ) }
+                        # (not there, perl pushed undef: no read of it carried past the store)
+                        $new = _make_ternary( $factory, $ex, $new, $factory->make('Constant', value => undef, const_type => 'undef',
+                            stamp => SoN::IR::Stamp->new(type => 'Undef')) );
+                    }
                 }
+                next unless blessed($new) && refaddr($new) != refaddr($old);
+                $sim->replace_at( $d->{depth}, $new );
             }
-            next unless blessed($new) && refaddr($new) != refaddr($old);
-            $sim->replace_at( $d->{depth}, $new );
         }
         return;
     }
@@ -26251,20 +26512,46 @@ class SoN::FromOptree 0.01 {
     # 0`, `$x // 0`, `$x && 0` (the arm perl chose, by the value it read then;
     # the SV, read now), and a list of aliases (sort, grep, reverse: map copies) or an
     # :lvalue sub's value. Undef where there is nothing to read again.
-    sub _alias_passed_through ( $cv, $p, $sim, $factory, $ctx, $k ) {
+    sub _alias_passed_through ( $cv, $p, $sim, $factory, $ctx, $k, $later = undef ) {
+        $later //= [ _later_siblings($k) ];
         my $n = $p->name;
         my $last = sub ($o) { my $l = $o->first; $l = $l->sibling while ${ $l->sibling }; _strip_null($l) };
+        my $note_of = sub ( $o, $l = $later ) { $ALIAS_OPERAND{$$o} // _alias_passed_through( $cv, $o, $sim, $factory, $ctx, $k, $l ) };
         if ( $n eq 'scalar' && ( $p->flags & B::OPf_KIDS ) ) {
-            my $in = _strip_null( $p->first );
-            return $ALIAS_OPERAND{$$in} // _alias_passed_through( $cv, $in, $sim, $factory, $ctx, $k );
+            return $note_of->( _strip_null( $p->first ) );
         }
         if ( $n eq q{scope} && ( $p->flags & B::OPf_KIDS ) ) {   # (a `do` of more than one statement is a leave, which copies)
             my $in = $last->($p);
-            return $ALIAS_OPERAND{$$in} // _alias_passed_through( $cv, $in, $sim, $factory, $ctx, $k );
+            # (A LIST, the block's value: its items are handed on, each read
+            # when the consumer runs, a later item's store seen -- fifth final
+            # audit, Q2: `my @l = do { ($x, $x++) }` is `2 1`)
+            if ( ( $in->name eq 'list' || $in->name eq 'null' && $in->targ == B::opnumber(q{list}) ) && ( $in->flags & B::OPf_KIDS ) ) {
+                my @items = grep { $_->name ne q{pushmark} && !( $_->name eq q{null} && !( $_->flags & B::OPf_KIDS ) ) && ( $_->flags & 3 ) != 1 } _operand_kids($in);
+                my @multi;
+                for my $j ( 0 .. $#items ) {
+                    my $it = _strip_null( $items[$j] );
+                    # (an aggregate flattened is its elements, which a later item may store: refused)
+                    die "GAP: an aggregate in a `do` block's list is read when the list is used, after a later item may store"
+                      . " into it -- not yet lowered\n"
+                        if $it->name =~ /\A(?:pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|values)\z/
+                        && map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @items[ $j + 1 .. $#items ], @$later;
+                    next if $it->name =~ /\A(?:i_)?post(?:inc|dec)\z/;    # (a copy)
+                    my $d = $note_of->( $it, [ @items[ $j + 1 .. $#items ], @$later ] ) or next;
+                    push @multi, map { { %$_, op => $it } } $d->{multi} ? $d->{multi}->@* : $d;
+                }
+                return @multi ? { how => q{multi}, multi => \@multi } : undef;
+            }
+            return $note_of->($in);
+        }
+        # (A `do` OF STATEMENTS copies its value at its end: an item a later
+        # item in its last statement may store is read there -- refused)
+        if ( $n =~ /\Aleave(?:try)?\z/ && ( $p->flags & 3 ) != 1 ) {
+            _refuse_list_stored_later( $cv, [$p] );
+            return undef;
         }
         # (a later operand may store what @ops push: its effects against their place, or any effect where no place is known)
         my $later_stores = sub (@ops) {
-            my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } _later_siblings($k);
+            my @eff = map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @$later;
             return 0 unless @eff;
             return 1 unless @ops;
             for my $o (@ops) {
@@ -26281,33 +26568,58 @@ class SoN::FromOptree 0.01 {
                        $s && $$s && $s->isa('B::CV') && ( $s->CvFLAGS & B::CVf_LVALUE ) };
         };
         if ( $n =~ /\A(?:or|dor|and)\z/ ) {
+            # (EITHER OPERAND is the value: the left where perl chose it, the
+            # right where it went on -- fifth final audit, Q2: `($y && $x),
+            # c()` is c()'s $x. Each is read again where a later operand may
+            # store it.)
             my $in = _strip_null( $p->first );
-            my $d = $ALIAS_OPERAND{$$in} // _alias_passed_through( $cv, $in, $sim, $factory, $ctx, $k ) or return undef;
+            my $rt = _strip_null( $p->first->sibling );
+            my $d  = $note_of->($in);
+            my $rd = $ALIAS_OPERAND{$$rt};
+            $rd = undef if $rd && $rd->{multi};
+            # (a right operand no note says how to read again: what it hands on, refused
+            # where a later operand may store it)
+            if ( !$rd && ( my $x = $note_of->($rt) ) ) {
+                die "GAP: an SV operand handed on by ||, // or && is read when its consumer runs, after a later operand may"
+                  . " store it, and this shape (" . $rt->name . ") is not yet lowered\n" if $later_stores->();
+            }
             my $mem = $sim->memory;
             # (a store in its own right arm is no matter: that arm ran only where
             # the value is the arm's -- a later operand's store is)
-            return undef unless defined $mem && $later_stores->($in);
-            my $top = $d->{depth} < $sim->stack_depth ? $sim->node_at( $d->{depth} ) : undef;
+            my $ls = $d && !$d->{multi} && defined $mem && $later_stores->($in);
+            my $rs = $rd && defined $mem && $later_stores->($rt);
+            die "GAP: an SV operand handed on by ||, // or && is a list -- not yet lowered\n" if $d && $d->{multi} && $later_stores->();
+            return undef unless $ls || $rs;
             my $kind = { or => 'Or', dor => 'DefinedOr', and => 'And' }->{$n};
-            my $old = $d->{node};
+            # (where the left was pushed: the op's value took its place)
+            my $at  = $d ? $d->{depth} : $rd->{depth} - 1;
+            my $top = $at >= 0 && $sim->stack_depth > $at ? $sim->node_at($at) : undef;
+            my $now = sub ($x) {
+                return undef unless $x->{how} eq 'read' || $x->{how} eq 'target' && defined $x->{targ};
+                return $x->{how} eq 'target' ? _pad_scalar_now( $cv, $x->{targ}, $sim, $factory, $ctx )
+                    : _at_memory( $factory, $x->{node}, _before_local_of( $x->{node}, $mem, $x->{mem} ) );
+            };
+            # (the top of the stack is this op's value: its left and right as pushed)
+            my $ok = blessed($top) && $top->operation eq $kind
+                && ( !$d || refaddr( $top->v1_inputs->[0] ) == refaddr( $d->{node} ) )
+                && ( !$rd || refaddr( $top->v1_inputs->[1] ) == refaddr( $rd->{node} ) );
+            my $lnow = $ls ? $now->($d) : $ok ? $top->v1_inputs->[0] : undef;
+            my $rnow = $rs ? $now->($rd) : $ok ? $top->v1_inputs->[1] : undef;
             die "GAP: an SV operand handed on by ||, // or && is read when its consumer runs, after a later operand may"
               . " store it, and this shape (" . ( blessed($top) ? $top->operation : 'none' ) . ") is not yet lowered\n"
-                unless blessed($top) && $top->operation eq $kind && refaddr( $top->v1_inputs->[0] ) == refaddr($old)
-                && ( $d->{how} eq 'read' || $d->{how} eq 'target' && defined $d->{targ} );
-            my $now = $d->{how} eq 'target' ? _pad_scalar_now( $cv, $d->{targ}, $sim, $factory, $ctx )
-                : _at_memory( $factory, $old, _before_local_of( $old, $mem, $d->{mem} ) );
-            return undef unless blessed($now);
-            my $rhs = $top->v1_inputs->[1];
-            $sim->replace_at( $d->{depth}, $kind eq 'And' ? _make_ternary( $factory, $old, $rhs, $now )
-                : _make_ternary( $factory, $kind eq 'Or' ? $old : $factory->make('Defined', inputs => [$old]), $now, $rhs ) );
+                unless $ok && blessed($lnow) && blessed($rnow);
+            my $old = $top->v1_inputs->[0];
+            $sim->replace_at( $at, $kind eq 'And' ? _make_ternary( $factory, $old, $rnow, $lnow )
+                : _make_ternary( $factory, $kind eq 'Or' ? $old : $factory->make('Defined', inputs => [$old]), $lnow, $rnow ) );
             return undef;
         }
         if ( $n eq q{cond_expr} && ( $p->flags & B::OPf_KIDS ) ) {
-            my @arms = grep { $hands_sv->($_) }
-                map { _strip_null($_) } ( _operand_kids($p) )[ 1, 2 ];
+            my @kid = map { _strip_null($_) } ( _operand_kids($p) )[ 1, 2 ];
+            my @arms = grep { $hands_sv->($_) } @kid;
             die "GAP: an SV operand handed on by ?: is read when its consumer runs, after a later operand may store it"
               . " -- not yet lowered\n"
                 if @arms && $later_stores->(@arms);
+            $note_of->($_) for grep { !$hands_sv->($_) } @kid;
             return undef;
         }
         if ( $n =~ /\A(?:sort|reverse|grepwhile)\z/ ) {
@@ -26325,7 +26637,139 @@ class SoN::FromOptree 0.01 {
                 if $sub && $$sub && $sub->isa('B::CV') && ( $sub->CvFLAGS & B::CVf_LVALUE ) && $later_stores->();
             return undef;
         }
+        # (ANY OTHER OP may hand on an SV: refused by name where a later
+        # operand may store it, unless the effect table says it pushes a value
+        # of its own -- fifth final audit, Q2-Q5: the rule fails closed)
+        _refuse_unread_sv( $cv, $p, $later );
         return undef;
+    }
+
+    # _refuse_unread_sv($cv, $op, \@later): $op's value is an SV no note says
+    # how to read again (the default): refused where a later operand may store it.
+    sub _refuse_unread_sv ( $cv, $p, $later ) {
+        $p = _strip_null($p);
+        return if B::SoN::EffectTable::pushes_new_value($p);
+        # (a mark pushes nothing)
+        return if $p->name eq q{pushmark} || $p->name eq q{null} && !( $p->flags & B::OPf_KIDS );
+        # (an aggregate or a slice in a list is the lists rule's, _reread_alias_lists)
+        return if $p->name =~ /\A(?:pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|values|avalues)\z/;
+        return unless _later_may_store_sv( $cv, $p, $later );
+        die "GAP: an SV perl hands on (" . $p->name . ") is read when its consumer runs, after a later operand may"
+          . " store it -- not yet lowered\n";
+    }
+
+    # _later_may_store_sv($cv, $op, \@later) -> true when an op in @later may
+    # store the SV $op pushes: by its variable's name, through a reference, by
+    # a call nothing can be said of; any store, where its place is not known.
+    # A capture variable (`$1`, `$&`) is set by a later match or a call.
+    sub _later_may_store_sv ( $cv, $p, $later ) {
+        return 0 unless @$later;
+        my @ops = map { _subtree_ops($_) } @$later;
+        return _sv_may_be_stored( $cv, $p, [ map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @$later ],
+            scalar grep { $_->name =~ /\A(?:match|subst|split)\z/ } @ops );
+    }
+    # _capture_var($cv, $op) -> true for a read of `$1`, `$&` and the like:
+    # what the last match set, which a match, a call or an eval sets again
+    sub _capture_var ( $cv, $p ) {
+        my $g = _scalar_gv_op($p) or return 0;
+        my $name = eval { _op_gv( $cv, $g )->NAME } // '';
+        return $name =~ /\A(?:[1-9][0-9]*|&|`|'|\+|\x0E)\z/ ? 1 : 0;
+    }
+    # _sv_may_be_stored($cv, $op, \@effects, $matches) -> true when a store in
+    # @effects may be into the SV $op pushes ($matches: a match or a call
+    # comes, which sets a capture variable again)
+    sub _sv_may_be_stored ( $cv, $p, $eff, $matches ) {
+        my $n = $p->name;
+        return $matches ? 1 : 0 if _capture_var( $cv, $p );
+        return 0 unless @$eff;
+        # (an SV taken out of its container is reached only through a reference)
+        return scalar grep { $_->{loc} =~ /\A(?:R:scalar|U)\z/ } @$eff if $n =~ /\A(?:shift|pop|splice|delete)\z/;
+        my $loc;
+        if ( $n eq 'padsv' ) { ($loc) = SoN::FromOptree::ModSets::_lex( $cv, $p->targ ) }
+        elsif ( my $g = _scalar_gv_op($p) ) { my $gv = _op_gv( $cv, $g ); $loc = $gv ? 'N:$' . $gv->STASH->NAME . '::' . $gv->NAME : undef }
+        return scalar grep { $_->{loc} eq $loc || $_->{loc} =~ /\A(?:R:scalar|U|P)\z/ } @$eff if defined $loc;
+        my $pl = eval { SoN::FromOptree::ModSets::place( $cv, $p ) };
+        return defined SoN::FromOptree::ModSets::conflict( $pl, $eff ) ? 1 : 0 if $pl;
+        return 1;
+    }
+    # _handed_on_leaves($op) -> the ops whose SV $op's value may be: both
+    # operands of && || //, both arms of ?:, `scalar`'s operand, a one-statement
+    # `do`'s value (each item of a list)
+    sub _handed_on_leaves ($o) {
+        $o = _strip_null($o);
+        my $n = $o->name;
+        return ($o) unless $o->flags & B::OPf_KIDS;
+        return map { _handed_on_leaves($_) } $o->first, $o->first->sibling if $n =~ /\A(?:and|or|dor)\z/;
+        return map { _handed_on_leaves($_) } ( _operand_kids($o) )[ 1, 2 ] if $n eq 'cond_expr';
+        return _handed_on_leaves( $o->first ) if $n eq 'scalar';
+        # (a `do` of statements: its last statement's value, copied at the block's
+        # end -- after the items before it in that statement are read)
+        if ( $n eq 'leave' || $n eq 'leavetry' ) {
+            my @st = grep { $_->name !~ /\A(?:enter|nextstate|dbstate)\z/ && !( $_->name eq 'null' && !( $_->flags & B::OPf_KIDS ) ) } _operand_kids_of_list($o);
+            return @st ? _handed_on_leaves( $st[-1] ) : ();
+        }
+        if ( $n eq q{scope} ) {
+            my @st = grep { $_->name !~ /\A(?:nextstate|dbstate)\z/ && !( $_->name eq q{null} && !( $_->flags & B::OPf_KIDS ) ) } _operand_kids_of_list($o);
+            return @st ? _handed_on_leaves( $st[-1] ) : ();
+        }
+        if ( $n eq q{list} || $n eq q{null} && $o->targ == B::opnumber(q{list}) ) {
+            my @k = grep { $_->name ne q{pushmark} && !( $_->name eq q{null} && !( $_->flags & B::OPf_KIDS ) ) && ( $_->flags & 3 ) != 1 } _operand_kids($o);
+            return map { _handed_on_leaves($_) } @k;
+        }
+        return ($o);
+    }
+    # _refuse_list_stored_later($cv, \@ops): the SVs @ops hand on, in order
+    # (_handed_on_leaves: a `do` block's list item by item), where a later one
+    # may store an earlier one: refused by name (fifth final audit, Q2, Q6).
+    # The consumer of such a list reads its items when it runs: a foreach or
+    # map aliases them, a `do` copies them at its end, a call reads @_.
+    sub _refuse_list_stored_later ( $cv, $ops, $skip = {} ) {
+        my @l = map { _handed_on_leaves($_) } @$ops;
+        for my $t ( 0 .. $#l ) {
+            my $o = $l[$t];
+            next if $skip->{$$o};    # (read where its consumer reads it: a call's place)
+            next if B::SoN::EffectTable::pushes_new_value($o) || $o->name =~ /\A(?:pushmark|null|entersub|pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice)\z/;
+            die "GAP: a list item perl hands on as an SV (" . $o->name . ") is read when the list is used, after a later item"
+              . " may store it -- not yet lowered\n"
+                if _later_may_store_sv( $cv, $o, [ @l[ $t + 1 .. $#l ] ] );
+        }
+        return;
+    }
+    # _refuse_args_handed_on($cv, $call): a sub's arguments are aliases, read
+    # when the callee reads @_. One the call cannot pass as a place (an lvalue
+    # substr, `$#a`, `$1`, a list `reverse`, a `do` block's or a list
+    # assignment's value) and the callee or a later argument may store is
+    # refused by name (fifth final audit, Q4, Q5).
+    sub _refuse_args_handed_on ( $cv, $call ) {
+        my @a = _entersub_args_and_invocant($call);
+        # (a variable or an element the call passes as its place is read by the callee: not checked)
+        _refuse_list_stored_later( $cv, \@a, { map { ( ${ _strip_null($_) } => 1 ) } grep { ( _strip_null($_)->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|sassign|padsv_store)\z/ || defined _arg_place_target($_) ) && !_capture_var( $cv, _strip_null($_) ) } @a } );
+        my $eff = [];
+        for my $j ( 0 .. $#a ) {
+            my $top = _strip_null( $a[$j] );
+            # (a place the walk passes: a variable, an element, an assignment's target)
+            next if !_capture_var( $cv, $top ) && ( $top->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|padsv_store|sassign|(?:i_)?pre(?:inc|dec)|method_named|method|rv2cv|gv)\z/
+                || defined _arg_place_target( $a[$j] ) );
+            for my $o ( _handed_on_leaves($top) ) {
+                next if B::SoN::EffectTable::pushes_new_value($o);
+                next if $o->name eq 'entersub' && !do { my $s = eval { _entersub_callee_cv( $cv, $o ) }; $s && $$s && $s->isa('B::CV') && ( $s->CvFLAGS & B::CVf_LVALUE ) };
+                next if $o->name =~ /\A(?:pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|pushmark)\z/;
+                # (what the call -- and an argument in it -- and the later arguments may store; whether a match may run)
+                $eff->[$j] //= do {
+                    my @later = @a[ $j + 1 .. $#a ];
+                    my $sub = eval { _entersub_callee_cv( $cv, $call ) };
+                    my $re = qr/\A(?:match|subst|split|entersub|entereval|dofile|require)\z/;
+                    my $m = !( $sub && $$sub && $sub->isa('B::CV') && ${ $sub->ROOT } )
+                        || grep( { $_->name =~ $re } _subtree_ops( $sub->ROOT ) )
+                        || grep( { $_->name =~ $re } map { _subtree_ops($_) } @later );
+                    [ [ SoN::FromOptree::ModSets::op_effects( $cv, $call ), map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @later ], $m ? 1 : 0 ];
+                };
+                die "GAP: a call's argument perl hands on as an SV (" . $o->name . ") is read when the callee reads \@_, after"
+                  . " the call or a later argument may store it -- not yet lowered\n"
+                    if _sv_may_be_stored( $cv, $o, $eff->[$j][0], $eff->[$j][1] );
+            }
+        }
+        return;
     }
 
     # _before_local_of($entrydef, $mem, $since) -> $mem, or, where a `local`

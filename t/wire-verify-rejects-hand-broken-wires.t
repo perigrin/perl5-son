@@ -259,6 +259,17 @@ for my $case (
     promote( $a, $g->{mem_in} );
     rejected( 'M26 a promoted argument read before a later argument\'s call that stores it', $w, qr/\Apromoted-not-private\z/ );
 }
+# (fifth final audit, Q10: an index is a number that wraps, not a spelling:
+# two are two elements only as two non-negative integer literals, or two
+# string keys)
+my @Q10 = (
+    [ 'M38 a promoted element a callee stores at a negative constant index', 'my @a = (1,2); sub f { $a[-2] = 5; $_[0] } print f($a[0]), "\n";' ],
+    [ 'M39 a promoted element at a negative index, its positive one stored', 'our @a = (1,2); sub f { $a[0] = 5; $_[0] } print f($a[-2]), "\n";' ],
+    [ 'M40 a promoted element a callee stores at a fractional constant index', 'my @a = (1,2); sub f { $a[0.5] = 5; $_[0] } print f($a[0]), "\n";' ],
+    [ 'M41 a promoted element a callee stores at a string constant index', 'our @a = (1,2); sub f { $a["01"] = 5; $_[0] } print f($a[1]), "\n";' ],
+    [ 'M42 a promoted element a callee stores at a false constant index', 'my @a = (1,2); sub f { no warnings; $a[!1] = 5; $_[0] } print f($a[0]), "\n";' ],
+    [ 'M43 a promoted element a callee stores at a `use constant` index', 'my @a = (1,2); use constant L => -1; sub f { $a[L] = 5; $_[0] } print f($a[1]), "\n";' ],
+);
 # V14 DOES NOT ASK THE PASS'S PROOF (audit 4, X5): SoN::AliasProof called a
 # captured or referenced `my` private, and V14, asking the same module, passed
 # all 16. Each wire here is the pass's, its argument promoted by hand, and
@@ -274,6 +285,7 @@ for my $case (
     [ 'M33 a promoted element a callee stores at an index not known', 'our @a = (1, 2); sub f { $a[$_[1]] = 9; $_[0] } print f($a[0], 0), "\n";' ],
     [ 'M34 a promoted element whose array a callee assigns whole', 'our @a = (1); sub f { @a = (7); $_[0] } print f($a[0]), "\n";' ],
     [ 'M35 a promoted argument a callee stores by name after a `local` of another', 'our ($x, $y) = (1, 1); sub f { local $y = 3; $x = 2; $_[0] } print f($x), "\n";' ],
+    @Q10,
 ) {
     my ( $what, $src, $g ) = @$case;
     my $w = wire($src);
@@ -287,6 +299,24 @@ for my $case (
     local *SoN::AliasProof::stored_between = sub { undef };
     local *SoN::AliasProof::args_escape    = sub { 0 };
     rejected( "$what (the pass's proof says private)", $w, qr/\Apromoted-not-private\z/ );
+}
+# THE PASS'S PROOF ALONE (Q10): the pass asks V14 too, so the place it leaves
+# above is either's. Here V14 answers "private" to everything, the wire made
+# with no promotion is promoted in this process, and SoN::AliasProof must
+# still leave the argument a place.
+for my $case (@Q10) {
+    my ( $what, $src ) = @$case;
+    local $ENV{SON_NO_PROMOTE} = 1;
+    my $w = wire($src);
+    delete local $ENV{SON_NO_PROMOTE};
+    require SoN::Promote;
+    require SoN::PromotedPrivate;
+    no warnings 'redefine';
+    local *SoN::PromotedPrivate::private_checker = sub { ( sub { undef }, sub { undef }, sub { }, sub { 1 } ) };
+    SoN::Promote::promote($w);
+    my $c = find( $w, sub ($x) { $x->{op} eq 'Call' && fname($x) eq 'main::f' } );
+    my $a = find( $w, sub ($x) { $x->{id} == $c->{inputs}[0] } );
+    ok( $a->{fields}{place} && !$a->{fields}{promoted}, "$what: SoN::AliasProof alone (V14 says private) leaves it a place" );
 }
 # V14 ANSWERS THE SAME WHATEVER IT WAS ASKED FIRST (combo2 ratchet: chalk's
 # Earley::_complete, promoted by the pass, rejected by the verifier). Asked
@@ -332,6 +362,47 @@ for my $case (
     local *SoN::AliasProof::stored_between = sub { undef };
     local *SoN::AliasProof::args_escape    = sub { 0 };
     rejected( 'M37 a promoted `my` read before a call it is handed as a place, which stores @_', $w, qr/\Apromoted-not-private\z/ );
+}
+# M44 (fifth final audit, Q10's vt59): A PROMOTED PARAMETER RECORD OF A SUB
+# THAT STORES. The record binds each `my` to the argument as passed; an
+# argument is an alias, and the sub's own store through a reference reached
+# it before the `my` was read (`00` for perl's `10`). Each proof alone must
+# refuse it: the pass with V14 saying private, V14 with the pass's proof
+# saying private.
+{   my $src = 'my $o = {l=>[1,2]}; sub f { my ($v, $s) = @_; $s->{l}[0] = 0; "$v$_[0]" } my @t; for my $x (@{$o->{l}}) { push @t, f($x, $o) } print "@t\n";';
+    my $rec = sub ($w) { my ($r) = grep { $_->{op} eq 'Assign' && $_->{fields}{record} } $w->{methods}{'main::f'}{nodes}->@*; $r };
+    {   local $ENV{SON_NO_PROMOTE} = 1;
+        my $w = wire($src);
+        delete local $ENV{SON_NO_PROMOTE};
+        require SoN::Promote;
+        require SoN::PromotedPrivate;
+        no warnings 'redefine';
+        local *SoN::PromotedPrivate::private_checker = sub { ( sub { undef }, sub { 1 }, sub { }, sub { 1 } ) };
+        no warnings q{once};
+        local %SoN::Promote::CALLED_UNKNOWN = ( q{main::f} => 0 );    # (B::SoN's: f is called by no code the wire cannot see)
+        # (the arguments as P1 leaves them: values, no place -- what lets P2 run)
+        my ($c) = grep { $_->{op} eq 'Call' && fname($_) eq 'main::f' } nodes($w)->@*;
+        for my $a ( grep { my $i = $_->{id}; grep { $_ eq $i } $c->{inputs}->@* } nodes($w)->@* ) {
+            promote( $a, $c->{mem_in} ) if $a->{fields}{place};
+        }
+        SoN::Promote::promote($w);
+        ok( !$rec->($w)->{fields}{promoted}, 'M44: SoN::AliasProof alone (V14 says read-only) leaves the record of a sub that stores' );
+    }
+    my $w = wire($src);
+    my $r = $rec->($w);
+    unless ( $r->{fields}{promoted} ) {
+        my $k = $r->{fields}{targets};
+        my ($args) = grep { $_->{op} eq 'ArgsSource' } $w->{methods}{'main::f'}{nodes}->@*;
+        $r->{inputs} = [ $r->{inputs}->@[ 0 .. $k - 1 ], $args->{id} ];
+        $r->{fields}{promoted} = JSON::PP::true;
+    }
+    no warnings 'redefine';
+    local *SoN::AliasProof::conflict       = sub { 0 };
+    local *SoN::AliasProof::arg_private    = sub { undef };
+    local *SoN::AliasProof::stored_between = sub { undef };
+    local *SoN::AliasProof::args_escape    = sub { 0 };
+    local *SoN::AliasProof::writes         = sub { {} };
+    rejected( 'M44 a promoted parameter record of a sub that stores through a reference', $w, qr/\Apromoted-not-private\z/ );
 }
 # P2: a promoted parameter record, in a sub a call then hands a place.
 {   my $w = wire( 'my $x=1; sub f { my ($p) = @_; $p } print f($x), "\n";' );

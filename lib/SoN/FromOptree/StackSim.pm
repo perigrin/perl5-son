@@ -106,7 +106,13 @@ class SoN::FromOptree::StackSim 0.01 {
     our %ON_DEFINE;
 
     # Scope: immutable-style variable bindings
+    # (how many times a key was defined: a rebind to the node it had is one --
+    # FromOptree asks whether a TARGMY op's handler bound its target)
+    field %defined;
+    method defined_count ($targ) { return $defined{$targ} // 0 }
+
     method define ($targ, $node) {
+        $defined{$targ}++;
         my $old = $scope{$targ};
         $scope{$targ} = $node;
         $ON_DEFINE{$targ}->( $self, $node, $old ) if $ON_DEFINE{$targ};
