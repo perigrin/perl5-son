@@ -6196,7 +6196,7 @@ class SoN::FromOptree 0.01 {
         for my $k ( _alias_list_item_ops($op) ) {
             my $p = _strip_null($k);
             next if $p->name eq 'pushmark' || $p->name eq 'null' && !( $p->flags & B::OPf_KIDS );
-            next if B::SoN::EffectTable::pushes_new_value($p) || $p->name eq 'entersub';
+            next if B::SoN::EffectTable::pushes_new_value($p) || $p->name eq 'entersub' && !_call_may_return_alias( $cv, $p );
             next if $p->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|values|avalues|reverse|sort|grepwhile|cond_expr|padsv_store|sassign|(?:i_)?pre(?:inc|dec)|mapwhile|substr|av2arylen)\z/;
             next if $p->name ne 'aassign' && _returns_its_target($p);
             next if $p->name eq q{aassign} && _assigns_one_array($p);    # (that array, aliased by the walk)
@@ -26647,8 +26647,7 @@ class SoN::FromOptree 0.01 {
         # pass-through, an :lvalue sub's call -- a plain call's value is a copy)
         my $hands_sv = sub ($o) {
             $ALIAS_OPERAND{$$o} || $o->name =~ /\A(?:scalar|scope|or|dor|and|cond_expr)\z/
-                || $o->name eq 'entersub' && do { my $s = eval { _entersub_callee_cv( $cv, $o ) };
-                       $s && $$s && $s->isa('B::CV') && ( $s->CvFLAGS & B::CVf_LVALUE ) };
+                || $o->name eq 'entersub' && _call_may_return_alias( $cv, $o );
         };
         if ( $n =~ /\A(?:or|dor|and)\z/ ) {
             # (EITHER OPERAND is the value: the left where perl chose it, the
@@ -26714,10 +26713,9 @@ class SoN::FromOptree 0.01 {
             return undef;
         }
         if ( $n eq 'entersub' ) {
-            my $sub = eval { _entersub_callee_cv( $cv, $p ) };
-            die "GAP: an :lvalue sub's value is the scalar it returns, read when its consumer runs, after a later"
-              . " operand may store it -- not yet lowered\n"
-                if $sub && $$sub && $sub->isa('B::CV') && ( $sub->CvFLAGS & B::CVf_LVALUE ) && $later_stores->();
+            die "GAP: a call's value that may be the scalar an :lvalue sub returns (its callee one the walk cannot name, or"
+              . " :lvalue) is read when its consumer runs, after a later operand may store it -- not yet lowered\n"
+                if _call_may_return_alias( $cv, $p ) && $later_stores->();
             return undef;
         }
         # (ANY OTHER OP may hand on an SV: refused by name where a later
@@ -26829,7 +26827,8 @@ class SoN::FromOptree 0.01 {
         for my $t ( 0 .. $#l ) {
             my $o = $l[$t];
             next if $skip->{$$o};    # (read where its consumer reads it: a call's place)
-            next if B::SoN::EffectTable::pushes_new_value($o) || $o->name =~ /\A(?:pushmark|null|entersub|pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice)\z/;
+            next if B::SoN::EffectTable::pushes_new_value($o) || $o->name =~ /\A(?:pushmark|null|pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice)\z/
+                || $o->name eq 'entersub' && !_call_may_return_alias( $cv, $o );
             die "GAP: a list item perl hands on as an SV (" . $o->name . ") is read when the list is used, after a later item"
               . " may store it -- not yet lowered\n"
                 if _later_may_store_sv( $cv, $o, [ @l[ $t + 1 .. $#l ] ] );
@@ -26860,7 +26859,7 @@ class SoN::FromOptree 0.01 {
             next if $var_arms->($top);
             for my $o ( _handed_on_leaves($top) ) {
                 next if B::SoN::EffectTable::pushes_new_value($o);
-                next if $o->name eq 'entersub' && !do { my $s = eval { _entersub_callee_cv( $cv, $o ) }; $s && $$s && $s->isa('B::CV') && ( $s->CvFLAGS & B::CVf_LVALUE ) };
+                next if $o->name eq 'entersub' && !_call_may_return_alias( $cv, $o );
                 next if $o->name =~ /\A(?:pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|pushmark)\z/;
                 # (what the call -- and an argument in it -- and the later arguments may store; whether a match may run)
                 $eff->[$j] //= do {
@@ -27488,6 +27487,47 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _call_may_return_alias($cv, $entersub) -> true when the call's value
+    # may be the scalar an :lvalue sub returns, read when its consumer runs,
+    # not a copy. Only a callee the walk names, not :lvalue, returns a copy:
+    # a method by its name, where no sub of that name is :lvalue; a dynamic
+    # method or a code ref, where no sub of the program is.
+    my $LVALUE_SUBS;
+    sub _program_lvalue_subs () {
+        return $LVALUE_SUBS //= do {
+            my %by;
+            for my $c ( map { @$_ } values SoN::FromOptree::ModSets::_user_subs()->%* ) {
+                $by{ eval { $c->GV->NAME } // '' } = 1 if $c->CvFLAGS & B::CVf_LVALUE;
+            }
+            # (an anonymous :lvalue sub: its prototype CV in the maker's pad)
+            for my $owner ( B::main_cv(), map { @$_ } values SoN::FromOptree::ModSets::_user_subs()->%* ) {
+                my $root = $$owner == ${ B::main_cv() } ? B::main_root() : eval { $owner->ROOT };
+                next unless $root && $$root;
+                for my $o ( grep { $_->name eq 'anoncode' } _subtree_ops($root) ) {
+                    my $a = eval { _anoncode_cv( $owner, $o ) };
+                    $by{'*anon*'} = 1 if !$a || !$$a || ( $a->CvFLAGS & B::CVf_LVALUE );
+                }
+            }
+            \%by;
+        };
+    }
+    sub _call_may_return_alias ( $cv, $o ) {
+        my $s = eval { _entersub_callee_cv( $cv, $o ) };
+        return ( $s->CvFLAGS & B::CVf_LVALUE ) ? 1 : 0 if $s && $$s && $s->isa('B::CV');
+        my $lv = _program_lvalue_subs();
+        my $list = $o->first;
+        $list = $list->first if $$list && $list->name eq 'null' && ( $list->flags & B::OPf_KIDS );
+        my $callee;
+        for ( my $k = $list; $k && $$k; $k = $k->sibling ) { $callee = $k }
+        $callee = _strip_null($callee) if $callee;
+        if ( $callee && $$callee && $callee->name eq 'method_named' ) {
+            my $name = eval { $callee->meth_sv->PV } // eval { ${ $callee->meth_sv->object_2svref } };
+            return defined $name ? ( $lv->{$name} ? 1 : 0 ) : scalar keys %$lv;
+        }
+        # (a named sub the walk could not resolve: one of that name)
+        if ( my $gv = eval { _entersub_callee_gv( $cv, $o ) } ) { return $lv->{ $gv->NAME } ? 1 : 0 }
+        return keys %$lv ? 1 : 0;
+    }
     sub _entersub_callee_cv ($cv, $op) {
         if (my $gv = _entersub_callee_gv($cv, $op)) {
             my $sub = $gv->CV;

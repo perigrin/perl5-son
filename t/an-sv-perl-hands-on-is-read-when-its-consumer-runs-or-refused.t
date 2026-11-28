@@ -90,6 +90,19 @@ check( $_, 'either' ) for
 check( $_, 'refused' ) for
     'my @a; sub z { $a[0] = 9; 0 } my @l = ((@a = (7,8)), z()); print "@l\n";',
     'my @a; my @l = ((@a = (7,8)), shift @a); print "@l\n";';
+# A CALL WHOSE CALLEE THE WALK CANNOT NAME may be an :lvalue sub's: its value
+# is the scalar it returns, read when the consumer runs (a dynamic method, a
+# code ref; probes v/vu07-vu13). Where no :lvalue sub may be it, a copy.
+check( $_, 'refused' ) for
+    'my $x = 1; sub lv :lvalue { $x } my $m = "lv"; my @l = (main->$m(), ($x = 5)); print "@l\n";',
+    'my $x = 1; sub lv :lvalue { $x } my $m = "lv"; sub f { $x = 7; $_[0] } print main->$m() . f(main->$m()), "\n";',
+    'my $x = 1; sub lv :lvalue { $x } my $m = "lv"; sub f { $x = 7; print $_[0], "\n" } f(main->$m());',
+    'my $x = 1; sub lv :lvalue { $x } my $c = \&lv; my @l = ($c->(), ($x = 5)); print "@l\n";',
+    'package O; my $x = 1; sub new { bless {}, shift } sub lv :lvalue { $x } sub set { $x = $_[1]; 0 } package main; my $o = O->new; my @l = ($o->lv, $o->set(5)); print "@l\n";',
+    'my $x = 1; my $c = sub :lvalue { $x }; sub f { $x = 7; $_[0] } print f($c->()), "\n";';
+check( $_, 'same' ) for
+    'my $x = 1; sub lv :lvalue { $x } my $m = "lv"; print main->$m(), "\n"; $x = 5; print main->$m(), "\n";',
+    'package O; sub new { bless { n => 1 }, shift } sub n { $_[0]{n} } sub set { $_[0]{n} = $_[1]; 0 } package main; my $o = O->new; my $m = "n"; my @l = ($o->$m, $o->set(5)); print "@l ", $o->$m, "\n";';
 # Q11: a store to a range iterator a reference is taken of
 check( $_, 'same' ) for
     'my @r; for my $i (1..3) { $i *= 2; push @r, \$i } print join(",", map { $$_ } @r), "\n";',
