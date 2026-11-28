@@ -5062,6 +5062,18 @@ class SoN::FromOptree 0.01 {
             _operand_kids_of_list($body);
         return @st && $st[-1]->name eq 'stub' ? 1 : 0;
     }
+    # _sub_ends_in_a_choice($leavesub) -> true when the body's last statement
+    # is a ?:, an if/else or a && || // (its value is an arm's)
+    sub _sub_ends_in_a_choice ($exit) {
+        return 0 unless $exit->name =~ /\Aleavesub(?:lv)?\z/ && ( $exit->flags & B::OPf_KIDS );
+        my $body = $exit->first;
+        return 0 unless $$body && $body->name eq 'lineseq' && ( $body->flags & B::OPf_KIDS );
+        my @st = grep { $_->name !~ /\A(?:nextstate|dbstate)\z/ && !( $_->name eq 'null' && !( $_->flags & B::OPf_KIDS ) ) }
+            _operand_kids_of_list($body);
+        return 0 unless @st;
+        my $l = _strip_null( $st[-1] );
+        return $l->name =~ /\A(?:cond_expr|and|or|dor)\z/ ? 1 : 0;
+    }
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
         my $value;
         # The scalar reading of a multi-value return, when there is one. It
@@ -5192,6 +5204,13 @@ class SoN::FromOptree 0.01 {
         # returns one, and the two otherwise build the same graph. A
         # program returns nothing either way, so it is not marked.
         my $valueless = !defined $value && !$is_program;
+        # ...BUT A LAST STATEMENT THAT CHOOSES -- `$c ? ($a[0] = 7) : ...`,
+        # `if (C) { $h{k} = 7 } else { ... }` -- yields its arm's value, which
+        # the walk did not keep: marked valueless, the sub returned nothing
+        # (chalk printed ` 8` for perl's `78 8`, silently, at a2fe984d).
+        # Refused by name.
+        die "GAP: a sub whose last statement chooses a value (?:, if/else, && ||) the walk did not keep is not yet lowered\n"
+            if $valueless && $kind eq 'leavesub' && $exit_op && _sub_ends_in_a_choice($exit_op);
         $value //= $factory->make('Constant',
             value      => undef,
             const_type => 'undef',

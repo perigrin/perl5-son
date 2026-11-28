@@ -256,7 +256,7 @@ my %NEW_VALUE = map { $_ => 1 } qw(
     srefgen refgen anonlist anonhash anoncode emptyavhv postinc postdec i_postinc i_postdec
     time localtime gmtime rand srand wantarray caller pack unpack match qr split readline
     schomp schop chomp chop trans transr range flop keys mapwhile push unshift subst gv rv2gv av2arylen stub
-    entereval require dofile backtick readpipe
+    entereval require dofile backtick readpipe print say prtf
 );
 sub pushes_new_value ($op) {
     require B;

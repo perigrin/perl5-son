@@ -101,10 +101,14 @@ round_trips(q{my @a=(0); my $n=0; sub f { $_[0] ? ($a[0]=7) : ($n=8) } print f(1
     'an element store beside a scalar store, last statement');
 round_trips(q{my @a=(0); sub f { $_[0] ? ($a[0]=7) : ($a[1]=8) } my $s = f(1); my @l = f(0); print "$s @l @a\n"},
     'two element stores, last statement, scalar and list callers');
-round_trips(q{my @a = (5); sub f { $_[0] ? ($a[0] = 7) : ($a[0] = $a[0] + 1) } print f(1), f(0), " @a\n"},
-    'a stored expression as the last statement pushes nothing, as before');
-round_trips(q{my %h; sub f { $_[0] ? ($h{$_[1]} = $_[2]) : ($h{z} = 0) } print f(1, "a", 4), f(0), " ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n"},
-    'a stored argument as the last statement');
+# (refused since branch fail-closed: the sub's value is an arm's, the walk kept
+# none, and chalk printed the empty list -- a silent wrong answer at a2fe984d)
+refuses(q{my @a = (5); sub f { $_[0] ? ($a[0] = 7) : ($a[0] = $a[0] + 1) } print f(1), f(0), " @a\n"},
+    qr/GAP: a sub whose last statement chooses a value/, 'a stored expression as the last statement pushes nothing, as before');
+# (refused since branch fail-closed: the sub's value is an arm's, the walk kept
+# none, and chalk printed the empty list -- a silent wrong answer at a2fe984d)
+refuses(q{my %h; sub f { $_[0] ? ($h{$_[1]} = $_[2]) : ($h{z} = 0) } print f(1, "a", 4), f(0), " ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n"},
+    qr/GAP: a sub whose last statement chooses a value/, 'a stored argument as the last statement');
 round_trips(q{my @a=(0); sub f { $_[0] ? ($a[0]=7) : die "x\n" } print f(1), " @a\n";},
     'an element store beside a die, last statement');
 round_trips(q{my @a=(0); for my $c (1,0) { my $x = $c ? push(@a,3) : 0; print "$x @a\n" }},
@@ -158,8 +162,10 @@ refuses(q{my @a = (0,5); my @b = (1); for my $c (1,0) { my $x = $c ? ($a[$b[0]] 
 # WANT 0 pushes nothing, as for a stored value that is not a constant: an
 # if/else ending a sub (chalk's StructPromotion::_check_subscript_access,
 # keyed on `$i->value()`) still yields its value and translates, as at base.
-round_trips(q{my %h = (k=>'a'); sub f { if ($_[0]) { $h{$h{k}} = 7 } else { $h{z} = 8 } } print f(1), f(0), "\n";},
-    'an if/else ending a sub, a key that reads the hash');
+# (refused since branch fail-closed: the sub's value is an arm's, the walk kept
+# none, and chalk printed the empty list -- a silent wrong answer at a2fe984d)
+refuses(q{my %h = (k=>'a'); sub f { if ($_[0]) { $h{$h{k}} = 7 } else { $h{z} = 8 } } print f(1), f(0), "\n";},
+    qr/GAP: a sub whose last statement chooses a value/, 'an if/else ending a sub, a key that reads the hash');
 round_trips(q{package O { sub new { bless {v=>$_[1]}, $_[0] } sub value { $_[0]{v} } } my %s; sub f { my $i = shift; if ($i) { $s{k}{$i->value()} = 1 } else { $s{n} = 1 } } f(O->new("x")); f(0); print join(",", sort keys %s), " ", join(",", keys %{$s{k}}), "\n";},
     'an if/else ending a sub, a method call in the key');
 # A READ THROUGH AN AUTOVIVIFYING ELEMENT (`$u->[0]{k}`: `$u->[0]` is an
