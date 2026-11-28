@@ -80,6 +80,16 @@ check( $_, 'refused' ) for
     'my @a = (1,2,3); my $r = \$a[1]; @a = reverse @a; $$r = 9; print "@a\n";',
     'my @a = (1,2,3); my $r = \$a[1]; @a = @a; $$r = 9; print "@a\n";';
 check( 'my %h = (a=>1,b=>2,c=>3); my @k = qw(b c); my $l = delete @h{@k}; print "$l", scalar(keys %h), "\n";', 'same' );
+# what the narrowed rules keep lowered, and what they still refuse
+check( $_, 'same' ) for
+    'my @l = ((my @a = (7,8)), $a[0] = 9); print "@l\n";',
+    'my ($x, $y); my @l = (scalar(($x, $y) = (7,8)), $x = 9); print "@l\n";';
+# (chalk prints perl's answer for these; the deparser cannot spell them: v/vr88, v/vs82)
+check( $_, 'either' ) for
+    'my $a = [1,2,3]; $_ *= 2 for @$a[1..$#$a]; print "@$a\n";';
+check( $_, 'refused' ) for
+    'my @a; sub z { $a[0] = 9; 0 } my @l = ((@a = (7,8)), z()); print "@l\n";',
+    'my @a; my @l = ((@a = (7,8)), shift @a); print "@l\n";';
 # Q11: a store to a range iterator a reference is taken of
 check( $_, 'same' ) for
     'my @r; for my $i (1..3) { $i *= 2; push @r, \$i } print join(",", map { $$_ } @r), "\n";',

@@ -276,7 +276,7 @@ sub pushes_new_value ($op) {
     # (a string `x` is a new string; a list `x` repeats the SVs: OPpREPEAT_DOLIST)
     return 1 if $n eq 'repeat' && !( $op->private & 64 );
     # (in scalar context: a new string, a count)
-    return 1 if $want == 2 && $n =~ /\A(?:reverse|substr|values|vec|pos|pad[ah]v|rv2[ah]v)\z/;
+    return 1 if $want == 2 && $n =~ /\A(?:reverse|substr|values|vec|pos|pad[ah]v|rv2[ah]v|aassign)\z/;
     return 1 if $n eq 'multiconcat' && !( $op->flags & B::OPf_STACKED() ) && !( $op->private & 16 );
     return 0;
 }

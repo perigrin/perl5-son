@@ -18294,7 +18294,8 @@ class SoN::FromOptree 0.01 {
                    my @k  = grep { $$_ } _operand_kids_of_list($sl);
                    pop @k;    # (the container)
                    # (constant indices name each element: the wire's slice is of them)
-                   $sl->name =~ /\A(?:[ah]slice|kv[ah]slice)\z/
+                   # (of a `my` array: one through a reference, or a hash, is aliased)
+                   $sl->name =~ /\A(?:[ah]slice|kv[ah]slice)\z/ && @k && _strip_null( ( _operand_kids_of_list($sl) )[-1] )->name eq 'padav'
                        && grep { $_->name !~ /\A(?:const|pushmark|null|list)\z/ } map { _subtree_ops($_) } @k
                } _alias_list_item_ops($enteriter);
         if ($writes_iter && !$collect) {
@@ -26673,6 +26674,11 @@ class SoN::FromOptree 0.01 {
         return if $p->name eq q{pushmark} || $p->name eq q{null} && !( $p->flags & B::OPf_KIDS );
         # (an aggregate or a slice in a list is the lists rule's, _reread_alias_lists)
         return if $p->name =~ /\A(?:pad[ah]v|rv2[ah]v|[ah]slice|kv[ah]slice|values|avalues)\z/;
+        # (so is a list assign to one aggregate: its value is that aggregate)
+        # (where no later operand calls a sub or moves its elements: a
+        # call's store and a shift were not seen -- vo57, vo58)
+        return if $p->name eq 'aassign' && do { my @l = grep { $_->name ne 'pushmark' } _list_kids( $p->last ); @l == 1 && _strip_null( $l[0] )->name =~ /\A(?:pad|rv2)[ah]v\z/ }
+            && !grep { $_->name =~ /\A(?:entersub|entereval|shift|pop|splice|unshift|delete|aassign)\z/ } map { _subtree_ops($_) } @$later;
         return unless _later_may_store_sv( $cv, $p, $later );
         die "GAP: an SV perl hands on (" . $p->name . ") is read when its consumer runs, after a later operand may"
           . " store it -- not yet lowered\n";
@@ -26684,9 +26690,14 @@ class SoN::FromOptree 0.01 {
     # A capture variable (`$1`, `$&`) is set by a later match or a call.
     sub _later_may_store_sv ( $cv, $p, $later ) {
         return 0 unless @$later;
-        my @ops = map { _subtree_ops($_) } @$later;
+        # (a match in a block of its own is undone at the block's end)
+        my @ops;
+        my $walk; $walk = sub ($o) { return unless $o && $$o; push @ops, $o;
+            return if $o->name =~ /\A(?:leave|scope|leaveloop|leavetry|leavesub)\z/ || !( $o->flags & B::OPf_KIDS );
+            for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { $walk->($k) } };
+        $walk->($_) for @$later;
         return _sv_may_be_stored( $cv, $p, [ map { SoN::FromOptree::ModSets::subtree_effects( $cv, $_ ) } @$later ],
-            scalar grep { $_->name =~ /\A(?:match|subst|split)\z/ } @ops );
+            scalar grep { $_->name =~ /\A(?:match|subst)\z/ } @ops );
     }
     # _capture_var($cv, $op) -> true for a read of `$1`, `$&` and the like:
     # what the last match set, which a match, a call or an eval sets again
@@ -26773,7 +26784,7 @@ class SoN::FromOptree 0.01 {
         # (a variable or an element the call passes as its place is read by the
         # callee: not checked -- an arm of a ?: of them too, the walk's
         # place through a ternary)
-        my $placed = sub ($o) { $o = _strip_null($o); ( $o->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|sassign|padsv_store)\z/ || defined _arg_place_target($o) ) && !_capture_var( $cv, $o ) };
+        my $placed = sub ($o) { $o = _strip_null($o); ( $o->name =~ /\A(?:padsv|gvsv|rv2sv|aelem|helem|multideref|aelemfast(?:_lex)?|sassign|padsv_store|(?:i_)?pre(?:inc|dec))\z/ || defined _arg_place_target($o) ) && !_capture_var( $cv, $o ) };
         my $var_arms = sub ($o) { $o = _strip_null($o); $o->name eq 'cond_expr'
             && !grep { !( $placed->($_) || $_->name =~ /\A(?:const|stub|pad[ah]v|rv2[ah]v)\z/ ) } _handed_on_leaves($o) };
         _refuse_list_stored_later( $cv, \@a, { map { ( ${ _strip_null($_) } => 1 ) } ( grep { $placed->($_) } @a ),
